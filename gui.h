@@ -11,6 +11,7 @@
 #include <QGridLayout>
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QCoreApplication>
 
 #include "readexceldata.h"
 #include "connectnetwork.h"
@@ -33,6 +34,8 @@ private:
     //发送、接受命令显示窗口
     QListWidget *contentListWidge;
     QLabel *contentLabel;
+    QListWidget *sendListWidge;
+    QLabel *sendLabel;
     //LAN通讯设置
     QLabel *serverIPLabel;
     QLineEdit *serverIPLineEdit;

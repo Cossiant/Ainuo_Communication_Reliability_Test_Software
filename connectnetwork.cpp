@@ -21,11 +21,17 @@ void connectNetwork::NetworkSendData(QString msg){
         return;
     }
     tcpClient->write(msg.toLatin1(),msg.length());
-    ListWidge->addItem("["+QTime::currentTime().toString("hh:mm:ss.zzz")+"] "+msg);
+    contentListWidge->addItem("["+QTime::currentTime().toString("hh:mm:ss.zzz")+"] "+msg);
 }
 
 void connectNetwork::NetworkDataReceivedSlot(){
-
+    while(tcpClient->bytesAvailable()>0){
+        QByteArray dataprogram;
+        dataprogram.resize(tcpClient->bytesAvailable());
+        tcpClient->read(dataprogram.data(),dataprogram.size());
+        QString msg = dataprogram.data();
+        sendListWidge->addItem("["+QTime::currentTime().toString("hh:mm:ss.zzz")+"] "+msg.left(dataprogram.size()));
+    }
 }
 
 void connectNetwork::NetworkDisconnectedSlot(){

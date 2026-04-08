@@ -4,9 +4,8 @@
 #include <QString>
 #include <QList>
 #include <QStringList>
-
-class QTableWidget;
-class QWidget;
+#include <QTableWidget>
+#include <QWidget>
 
 class readExcelData
 {
@@ -16,7 +15,8 @@ public:
     //       table - 目标表格控件
     //       parent - 用于显示消息框的父窗口（可选，默认为 nullptr）
     // 返回值：成功返回 true，失败返回 false
-    static bool loadExcelToTable(const QString &filePath, QTableWidget *table, QWidget *parent = nullptr);
+    bool loadExcelToTable(const QString &filePath, QTableWidget *table, QWidget *parent = nullptr);
+    int ExceltotalRows;
 };
 
 #endif // READEXCELDATA_H
