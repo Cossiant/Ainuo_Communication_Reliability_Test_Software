@@ -2,6 +2,10 @@
 
 GUI::GUI(QWidget *parent,Qt::WindowFlags f): QDialog(parent,f)
 {
+    qRegisterMetaType<QHostAddress>("QHostAddress");
+    //创建线程对象
+    NetworkThread = new QThread;
+
     setWindowTitle(tr("Ainuo通用通讯可靠性测试软件"));
     resize(1000,600);
     mainLayout = new QGridLayout(this);
@@ -104,11 +108,25 @@ void GUI::openExcelClickedSlot(){
 //链接服务器
 void GUI::contentServerSlot(){
     qDebug()<< "debug:contentServerSlot已经触发";
-    Network = new connectNetwork(portLineEdit->text().toInt(),QHostAddress(serverIPLineEdit->text()));
+    //创建工作对象
+    Network = new connectNetwork();
+    //告诉Network接受和发送的数据在什么地方
     Network->contentListWidge = contentListWidge;
     Network->sendListWidge = sendListWidge;
+    //移动到子线程当中
+    Network->moveToThread(NetworkThread);
+    //链接信号函数，从GUI到connectNetwork
+    connect(this,&GUI::StartConnectNetwork,Network,&connectNetwork::NetworkConnectedSlot);
+    connect(this,&GUI::NetworkSendDataSignals,Network,&connectNetwork::NetworkSendData);
+    //链接信号函数，从NetWork到GUI
+    connect(Network, &connectNetwork::DisplaSendData, this, &GUI::GUIDisplaSendData);
+    connect(Network, &connectNetwork::DisplaConnectData, this, &GUI::GUIDisplaConnectData);
 
-    Network->NetworkSendData("Hello world!");
+    //传递信号，启动Network
+    emit StartConnectNetwork(portLineEdit->text().toInt(),QHostAddress(serverIPLineEdit->text()));
+
+    //子线程启动
+    NetworkThread->start();
 
     stopButton->setEnabled(true);
     contentButton->setEnabled(false);
@@ -116,53 +134,49 @@ void GUI::contentServerSlot(){
     serverIPLineEdit->setEnabled(false);
 }
 
+//停止链接到电源
 void GUI::stopServerSlot(){
     qDebug()<< "debug:stopServerSlot已经触发";
     if(Network){
-        delete Network;
+        // 请求Network断开连接并清理，然后删除自身
+        // 可以添加一个信号槽，让Network自己删除
+        // 或者调用Network->deleteLater()，并退出线程
+        Network->deleteLater();
         Network = nullptr;
-        qDebug() << "清理Network完成！";
     }
+    if(NetworkThread && NetworkThread->isRunning()){
+        NetworkThread->quit();
+        NetworkThread->wait();
+    }
+    // 重置按钮状态
     stopButton->setEnabled(false);
     contentButton->setEnabled(true);
     portLineEdit->setEnabled(true);
     serverIPLineEdit->setEnabled(true);
 }
 
-//阻塞式发送线程
-//void GUI::enterExcelClickedSlot(){
-//    QMessageBox::information(this,"debug","debug:enterExcelClickedSlot已经触发");
-//    for(int i =0;i<Exceldata->ExceltotalRows;i++){
-//        Network->NetworkSendData(readExcelTable->item(i,0)->text());
-//    }
-//    stopEnterButton->setEnabled(true);
-//    enterButton->setEnabled(false);
-//}
-//阻塞式发送线程
+//GUI显示发送的数据
+void GUI::GUIDisplaSendData(QString msg){
+    sendListWidge->addItem(msg);
+}
+
+//GUI显示收到的数据
+void GUI::GUIDisplaConnectData(QString msg){
+    contentListWidge->addItem(msg);
+}
+
+//非阻塞式发送线程
 void GUI::enterExcelClickedSlot(){
-    QMessageBox::information(this, "debug", "debug:enterExcelClickedSlot已经触发");
-
-    // 获取用户设置的延时（毫秒）
-    int delayMs = delayLineEdit->text().toInt();
-    if (delayMs < 0) delayMs = 0;
-
-    for (int i = 0; i < Exceldata->ExceltotalRows; ++i) {
-        QTableWidgetItem *item = readExcelTable->item(i, 0);
-        if (item && !item->text().isEmpty()) {
-            Network->NetworkSendData(item->text());
-            // 延时（非阻塞式，保持界面响应）
-            if (delayMs > 0) {
-                QTime dieTime = QTime::currentTime().addMSecs(delayMs);
-                while (QTime::currentTime() < dieTime) {
-                    QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
-                }
-            }
-        }
+    qDebug()<<"debug:enterExcelClickedSlot已经触发";
+    //发送数据通过信号量传递
+    for(int i =0;i<Exceldata->ExceltotalRows;i++){
+        emit NetworkSendDataSignals(readExcelTable->item(i,0)->text(),delayLineEdit->text().toInt());
     }
     stopEnterButton->setEnabled(true);
     enterButton->setEnabled(false);
 }
 
+//停止Excel发送
 void GUI::stopEnterExcelClickedSlot(){
     QMessageBox::information(this,"debug","debug:stopEnterExcelClickedSlot已经触发");
 
@@ -170,6 +184,7 @@ void GUI::stopEnterExcelClickedSlot(){
     stopEnterButton->setEnabled(false);
     enterButton->setEnabled(true);
 }
+
 
 GUI::~GUI()
 {

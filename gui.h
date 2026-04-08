@@ -12,6 +12,7 @@
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QCoreApplication>
+#include <QThread>
 
 #include "readexceldata.h"
 #include "connectnetwork.h"
@@ -24,6 +25,9 @@ public:
     GUI(QWidget *parent = 0,Qt::WindowFlags f =0);
     ~GUI();
 private:
+    //创建子线程
+    QThread *NetworkThread;
+    //主界面
     QGridLayout *mainLayout;
     QTableWidget *readExcelTable;
     QPushButton *openExcelButton;
@@ -48,12 +52,17 @@ private:
     QPushButton *stopButton;        //停止链接按钮
     QPushButton *contentButton;     //链接到电源按钮
     QPushButton *stopEnterButton;   //  关闭发送excel命令按钮
+signals:
+    void StartConnectNetwork(int port,QHostAddress serverIP);                     //网络链接启动了
+    void NetworkSendDataSignals(QString msg,int delayMS = 0);                     //通知子线程发送数据
 private slots:
     void openExcelClickedSlot();        //打开excel信号量
     void contentServerSlot();           //链接到电源信号量
     void stopServerSlot();              //关闭链接电源信号量
     void enterExcelClickedSlot();       //发送excel表格当中命令信号量
     void stopEnterExcelClickedSlot();       //关闭发送excel命令信号量
+    void GUIDisplaConnectData(QString msg);                                          //接收到的数据显示信号量
+    void GUIDisplaSendData(QString msg);                                             //发送过去的数据显示信号量
 };
 
 #endif // GUI_H

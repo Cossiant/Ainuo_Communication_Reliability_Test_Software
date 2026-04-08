@@ -1,27 +1,24 @@
 #include "connectnetwork.h"
 
-connectNetwork::connectNetwork(int port,QHostAddress serverIP)
+connectNetwork::connectNetwork()
 {
-    status = false;
+}
+
+void connectNetwork::NetworkConnectedSlot(int port,QHostAddress serverIP){
     tcpClient = new QTcpSocket(this);
     connect(tcpClient,SIGNAL(readyRead()),this,SLOT(NetworkDataReceivedSlot()));
     connect(tcpClient,SIGNAL(disconnected()),this,SLOT(NetworkDisconnectedSlot()));
-    connect(tcpClient,SIGNAL(connected()),this,SLOT(NetworkConnectedSlot()));
     tcpClient->connectToHost(serverIP,port);
-    qDebug() << "初始化Network完成！" ;
-    status = true;
-}
-
-void connectNetwork::NetworkConnectedSlot(){
     qDebug() << "网络链接成功！";
 }
 
-void connectNetwork::NetworkSendData(QString msg){
-    if(msg.length()==0){
-        return;
-    }
+void connectNetwork::NetworkSendData(QString msg,int delayMS){
+    if(msg.isEmpty()) return;
     tcpClient->write(msg.toLatin1(),msg.length());
-    contentListWidge->addItem("["+QTime::currentTime().toString("hh:mm:ss.zzz")+"] "+msg);
+    DisplaSendData("["+QTime::currentTime().toString("hh:mm:ss.zzz")+"] "+msg);
+    if(delayMS > 0) {
+        QThread::msleep(delayMS);  // 包含头文件 <QThread>
+    }
 }
 
 void connectNetwork::NetworkDataReceivedSlot(){
@@ -30,7 +27,7 @@ void connectNetwork::NetworkDataReceivedSlot(){
         dataprogram.resize(tcpClient->bytesAvailable());
         tcpClient->read(dataprogram.data(),dataprogram.size());
         QString msg = dataprogram.data();
-        sendListWidge->addItem("["+QTime::currentTime().toString("hh:mm:ss.zzz")+"] "+msg.left(dataprogram.size()));
+        DisplaConnectData("["+QTime::currentTime().toString("hh:mm:ss.zzz")+"] "+msg.left(dataprogram.size()));
     }
 }
 
