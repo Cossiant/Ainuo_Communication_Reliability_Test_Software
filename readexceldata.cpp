@@ -61,6 +61,7 @@ bool readExcelData::loadExcelToTable(const QString &filePath, QTableWidget *tabl
     delete usedRange;
 
     qDebug() << "检测到 Excel 总行数（UsedRange）:" << totalRows;
+    ExceltotalRows = totalRows;
 
     if (totalRows == 0) {
         if (parent)
@@ -68,7 +69,7 @@ bool readExcelData::loadExcelToTable(const QString &filePath, QTableWidget *tabl
         table->clear();
         table->setRowCount(0);
         table->setColumnCount(2);
-        table->setHorizontalHeaderLabels(QStringList() << ("编号") << ("需要发送的命令"));
+        table->setHorizontalHeaderLabels(QStringList() << ("需要发送的命令") << ("正确的返回值"));
         delete sheet;
         delete sheets;
         workbook->dynamicCall("Close()");
@@ -80,7 +81,7 @@ bool readExcelData::loadExcelToTable(const QString &filePath, QTableWidget *tabl
     table->clear();
     table->setRowCount(totalRows);
     table->setColumnCount(2);
-    table->setHorizontalHeaderLabels(QStringList() << ("编号") << ("命令"));
+    table->setHorizontalHeaderLabels(QStringList() << ("需要发送的命令") << ("正确的返回值"));
 
     int nonEmptyCount = 0;
     // 读取第一列（A列）数据
@@ -124,13 +125,13 @@ bool readExcelData::loadExcelToTable(const QString &filePath, QTableWidget *tabl
             nonEmptyCount++;
         }
 
-        // 表格第1列（编号）填入行号
-        QTableWidgetItem *indexItem = new QTableWidgetItem(QString::number(row));
-        table->setItem(row - 1, 0, indexItem);
+        // 表格第1列（命令）填入行号
+        QTableWidgetItem *cmdItem = new QTableWidgetItem(value);
+        table->setItem(row - 1, 0, cmdItem);
 
         // 表格第2列（命令）填入读取到的值
-        QTableWidgetItem *cmdItem = new QTableWidgetItem(value);
-        table->setItem(row - 1, 1, cmdItem);
+        QTableWidgetItem *backItem = new QTableWidgetItem(value);
+        table->setItem(row - 1, 1, backItem);
 
         delete cell;
     }

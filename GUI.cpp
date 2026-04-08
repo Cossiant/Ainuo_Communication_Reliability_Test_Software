@@ -2,15 +2,20 @@
 
 GUI::GUI(QWidget *parent,Qt::WindowFlags f): QDialog(parent,f)
 {
+    qRegisterMetaType<QHostAddress>("QHostAddress");
+    //创建线程对象
+    NetworkThread = new QThread;
+
     setWindowTitle(tr("Ainuo通用通讯可靠性测试软件"));
-    resize(800,600);
+    resize(1000,600);
     mainLayout = new QGridLayout(this);
 
     excelReadLabel = new QLabel(tr("读取到的Excel表格的数据"));
-    contentLabel = new QLabel(tr("通过LAN发送、接受的数据"));
+    contentLabel = new QLabel(tr("接受的数据"));
+    sendLabel = new QLabel(tr("发送的数据"));
     serverIPLabel = new QLabel(tr("电源的网络地址:"));
     portLabel = new QLabel(tr("端口号:"));
-    delayLabel = new QLabel(tr("每条命令发送延时(s)："));
+    delayLabel = new QLabel(tr("每条命令发送延时(ms)："));
 
     serverIPLineEdit = new QLineEdit;
     portLineEdit = new QLineEdit;
@@ -18,6 +23,7 @@ GUI::GUI(QWidget *parent,Qt::WindowFlags f): QDialog(parent,f)
 
     serverIPLineEdit->setText("127.0.0.1");
     portLineEdit->setText("20108");
+    delayLineEdit->setText("50");
 
     contentButton = new QPushButton(tr("连接到电源"));
     stopButton = new QPushButton(tr("断开链接"));
@@ -37,20 +43,25 @@ GUI::GUI(QWidget *parent,Qt::WindowFlags f): QDialog(parent,f)
     connect(stopButton,SIGNAL(clicked()),this,SLOT(stopServerSlot()));//信号量链接
     connect(stopEnterButton,SIGNAL(clicked()),this,SLOT(stopEnterExcelClickedSlot()));//信号量链接
 
-    contentListWidge = new QListWidget;//发送、接受命令显示窗口
+    contentListWidge = new QListWidget;//接受命令显示窗口
+    sendListWidge = new QListWidget;//发送命令显示窗口
     readExcelTable = new QTableWidget;//读取excel数据窗口
+
+    Exceldata = new readExcelData;
 
     readExcelTable->setColumnCount(2);//初始化为2列
     readExcelTable->setColumnWidth(1,300);//设置第二列的列宽为300像素
-    readExcelTable->setHorizontalHeaderLabels(QStringList()<<"编号"<<"需发送的命令");
+    readExcelTable->setHorizontalHeaderLabels(QStringList()<<"需发送的命令"<<"正确的返回值");
     readExcelTable->setRowCount(10);    //初始化为10行
     readExcelTable->setItem(0,0,new QTableWidgetItem("等待读取excel表格"));
 
     mainLayout->addWidget(excelReadLabel,0,0,1,2);
-    mainLayout->addWidget(contentLabel,0,2,1,1);
+    mainLayout->addWidget(contentLabel,0,2,1,2);
+    mainLayout->addWidget(sendLabel,0,4,1,1);
 
     mainLayout->addWidget(readExcelTable,1,0,1,2);
     mainLayout->addWidget(contentListWidge,1,2,1,2);
+    mainLayout->addWidget(sendListWidge,1,4,1,1);
 
     mainLayout->addWidget(openExcelButton,2,0,1,2);
     mainLayout->addWidget(serverIPLabel,2,2,1,1);
@@ -86,8 +97,8 @@ void GUI::openExcelClickedSlot(){
     if(fdialog.exec()){
         QStringList files = fdialog.selectedFiles();
         for(auto fname:files){
-            if (readExcelData::loadExcelToTable(fname, readExcelTable, this)) {
-                QMessageBox::information(this, tr("提示"), tr("Excel 文件读取完成！"));
+            if (Exceldata->loadExcelToTable(fname, readExcelTable, this)) {
+                QMessageBox::information(this, "提示", QStringLiteral("Excel 文件读取完成！\r\n总行数：") + QString::number(Exceldata->ExceltotalRows));
             }
         }
     }
@@ -97,40 +108,83 @@ void GUI::openExcelClickedSlot(){
 //链接服务器
 void GUI::contentServerSlot(){
     qDebug()<< "debug:contentServerSlot已经触发";
-    Network = new connectNetwork(portLineEdit->text().toInt(),QHostAddress(serverIPLineEdit->text()));
-    Network->ListWidge = contentListWidge;
+    //创建工作对象
+    Network = new connectNetwork();
+    //告诉Network接受和发送的数据在什么地方
+    Network->contentListWidge = contentListWidge;
+    Network->sendListWidge = sendListWidge;
+    //移动到子线程当中
+    Network->moveToThread(NetworkThread);
+    //链接信号函数，从GUI到connectNetwork
+    connect(this,&GUI::StartConnectNetwork,Network,&connectNetwork::NetworkConnectedSlot);
+    connect(this,&GUI::NetworkSendDataSignals,Network,&connectNetwork::NetworkSendData);
+    //链接信号函数，从NetWork到GUI
+    connect(Network, &connectNetwork::DisplaSendData, this, &GUI::GUIDisplaSendData);
+    connect(Network, &connectNetwork::DisplaConnectData, this, &GUI::GUIDisplaConnectData);
 
-    Network->NetworkSendData("Hello world!");
+    //传递信号，启动Network
+    emit StartConnectNetwork(portLineEdit->text().toInt(),QHostAddress(serverIPLineEdit->text()));
+
+    //子线程启动
+    NetworkThread->start();
+
     stopButton->setEnabled(true);
     contentButton->setEnabled(false);
     portLineEdit->setEnabled(false);
     serverIPLineEdit->setEnabled(false);
 }
 
+//停止链接到电源
 void GUI::stopServerSlot(){
     qDebug()<< "debug:stopServerSlot已经触发";
     if(Network){
-        delete Network;
+        // 请求Network断开连接并清理，然后删除自身
+        // 可以添加一个信号槽，让Network自己删除
+        // 或者调用Network->deleteLater()，并退出线程
+        Network->deleteLater();
         Network = nullptr;
-        qDebug() << "清理Network完成！";
     }
+    if(NetworkThread && NetworkThread->isRunning()){
+        NetworkThread->quit();
+        NetworkThread->wait();
+    }
+    // 重置按钮状态
     stopButton->setEnabled(false);
     contentButton->setEnabled(true);
     portLineEdit->setEnabled(true);
     serverIPLineEdit->setEnabled(true);
 }
 
+//GUI显示发送的数据
+void GUI::GUIDisplaSendData(QString msg){
+    sendListWidge->addItem(msg);
+}
+
+//GUI显示收到的数据
+void GUI::GUIDisplaConnectData(QString msg){
+    contentListWidge->addItem(msg);
+}
+
+//非阻塞式发送线程
 void GUI::enterExcelClickedSlot(){
-    QMessageBox::information(this,"debug","debug:enterExcelClickedSlot已经触发");
+    qDebug()<<"debug:enterExcelClickedSlot已经触发";
+    //发送数据通过信号量传递
+    for(int i =0;i<Exceldata->ExceltotalRows;i++){
+        emit NetworkSendDataSignals(readExcelTable->item(i,0)->text(),delayLineEdit->text().toInt());
+    }
     stopEnterButton->setEnabled(true);
     enterButton->setEnabled(false);
 }
 
+//停止Excel发送
 void GUI::stopEnterExcelClickedSlot(){
     QMessageBox::information(this,"debug","debug:stopEnterExcelClickedSlot已经触发");
+
+
     stopEnterButton->setEnabled(false);
     enterButton->setEnabled(true);
 }
+
 
 GUI::~GUI()
 {

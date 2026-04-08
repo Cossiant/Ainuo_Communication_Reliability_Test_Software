@@ -28,12 +28,14 @@ SOURCES += \
         main.cpp \
         gui.cpp \
     readexceldata.cpp \
-    connectnetwork.cpp
+    connectnetwork.cpp \
+    threadsendexcel.cpp
 
 HEADERS += \
         gui.h \
     readexceldata.h \
-    connectnetwork.h
+    connectnetwork.h \
+    threadsendexcel.h
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin
