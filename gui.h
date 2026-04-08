@@ -1,6 +1,7 @@
 #ifndef GUI_H
 #define GUI_H
 
+#include <QHostAddress>
 #include <QDialog>
 #include <QListWidget>
 #include <QTableWidget>
@@ -12,6 +13,7 @@
 #include <QMessageBox>
 
 #include "readexceldata.h"
+#include "connectnetwork.h"
 
 class GUI : public QDialog
 {
@@ -25,6 +27,7 @@ private:
     QTableWidget *readExcelTable;
     QPushButton *openExcelButton;
     readExcelData *Exceldata;//被读取的excel对象
+    connectNetwork *Network;//Network对象
     QFileDialog fdialog; //读取的excel地址
     QLabel *excelReadLabel;
     //发送、接受命令显示窗口
