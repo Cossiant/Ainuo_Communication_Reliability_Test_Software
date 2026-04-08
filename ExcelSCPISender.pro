@@ -27,11 +27,13 @@ CONFIG += c++11
 SOURCES += \
         main.cpp \
         gui.cpp \
-    readexceldata.cpp
+    readexceldata.cpp \
+    connectnetwork.cpp
 
 HEADERS += \
         gui.h \
-    readexceldata.h
+    readexceldata.h \
+    connectnetwork.h
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin

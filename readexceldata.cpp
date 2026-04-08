@@ -68,7 +68,7 @@ bool readExcelData::loadExcelToTable(const QString &filePath, QTableWidget *tabl
         table->clear();
         table->setRowCount(0);
         table->setColumnCount(2);
-        table->setHorizontalHeaderLabels(QStringList() << ("编号") << ("命令"));
+        table->setHorizontalHeaderLabels(QStringList() << ("编号") << ("需要发送的命令"));
         delete sheet;
         delete sheets;
         workbook->dynamicCall("Close()");

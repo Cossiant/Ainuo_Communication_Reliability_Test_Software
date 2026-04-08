@@ -73,6 +73,7 @@ GUI::GUI(QWidget *parent,Qt::WindowFlags f): QDialog(parent,f)
     mainLayout->setColumnStretch(3, 0);
 }
 
+//读取excel表格
 void GUI::openExcelClickedSlot(){
 
     // 弹出文件选择对话框，获取 Excel 文件路径
@@ -93,16 +94,30 @@ void GUI::openExcelClickedSlot(){
     enterButton->setEnabled(true);
 }
 
+//链接服务器
 void GUI::contentServerSlot(){
-    QMessageBox::information(this,"debug","debug:contentServerSlot已经触发");
+    qDebug()<< "debug:contentServerSlot已经触发";
+    Network = new connectNetwork(portLineEdit->text().toInt(),QHostAddress(serverIPLineEdit->text()));
+    Network->ListWidge = contentListWidge;
+
+    Network->NetworkSendData("Hello world!");
     stopButton->setEnabled(true);
     contentButton->setEnabled(false);
+    portLineEdit->setEnabled(false);
+    serverIPLineEdit->setEnabled(false);
 }
 
 void GUI::stopServerSlot(){
-    QMessageBox::information(this,"debug","debug:stopServerSlot已经触发");
+    qDebug()<< "debug:stopServerSlot已经触发";
+    if(Network){
+        delete Network;
+        Network = nullptr;
+        qDebug() << "清理Network完成！";
+    }
     stopButton->setEnabled(false);
     contentButton->setEnabled(true);
+    portLineEdit->setEnabled(true);
+    serverIPLineEdit->setEnabled(true);
 }
 
 void GUI::enterExcelClickedSlot(){
