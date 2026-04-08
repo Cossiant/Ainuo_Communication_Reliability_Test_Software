@@ -1,8 +1,3 @@
-
-
-Based on the code map provided, this is a Qt-based desktop application that reads Excel data and sends SCPI commands, likely for test and measurement equipment control. Let me create the README based on the structure.
-
-
 # Ainuo Excel SCPI Sender
 
 ## 项目简介
