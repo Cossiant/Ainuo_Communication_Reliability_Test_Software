@@ -5,7 +5,8 @@ GUI::GUI(QWidget *parent,Qt::WindowFlags f): QDialog(parent,f)
     qRegisterMetaType<QHostAddress>("QHostAddress");
     //创建线程对象
     NetworkThread = new QThread;
-
+    excelSendThread = new QThread;
+    //设置主窗口
     setWindowTitle(tr("Ainuo通用通讯可靠性测试软件"));
     resize(1000,600);
     mainLayout = new QGridLayout(this);
@@ -16,14 +17,20 @@ GUI::GUI(QWidget *parent,Qt::WindowFlags f): QDialog(parent,f)
     serverIPLabel = new QLabel(tr("电源的网络地址:"));
     portLabel = new QLabel(tr("端口号:"));
     delayLabel = new QLabel(tr("每条命令发送延时(ms)："));
+    limitSendDataNumLabel = new QLabel(tr("发送条数(0为一直循环):"));
+
+    SendDataNumStatisLabel = new QLabel(tr("总计发送命令："));
+    DisplaySendDataNumStatisLabel = new QLabel(tr("0"));
 
     serverIPLineEdit = new QLineEdit;
     portLineEdit = new QLineEdit;
     delayLineEdit = new QLineEdit;
+    limitSendDataNumLineEdit = new QLineEdit;
 
     serverIPLineEdit->setText("127.0.0.1");
     portLineEdit->setText("20108");
     delayLineEdit->setText("50");
+    limitSendDataNumLineEdit->setText("0");
 
     contentButton = new QPushButton(tr("连接到电源"));
     stopButton = new QPushButton(tr("断开链接"));
@@ -43,16 +50,16 @@ GUI::GUI(QWidget *parent,Qt::WindowFlags f): QDialog(parent,f)
     connect(stopButton,SIGNAL(clicked()),this,SLOT(stopServerSlot()));//信号量链接
     connect(stopEnterButton,SIGNAL(clicked()),this,SLOT(stopEnterExcelClickedSlot()));//信号量链接
 
-    contentListWidge = new QListWidget;//接受命令显示窗口
-    sendListWidge = new QListWidget;//发送命令显示窗口
-    readExcelTable = new QTableWidget;//读取excel数据窗口
+    contentListWidge = new QListWidget;                             //接受命令显示窗口
+    sendListWidge = new QListWidget;                                //发送命令显示窗口
+    readExcelTable = new QTableWidget;                              //读取excel数据窗口
 
     Exceldata = new readExcelData;
 
-    readExcelTable->setColumnCount(2);//初始化为2列
-    readExcelTable->setColumnWidth(1,300);//设置第二列的列宽为300像素
+    readExcelTable->setColumnCount(2);                              //初始化为2列
+    readExcelTable->setColumnWidth(1,300);                          //设置第二列的列宽为300像素
     readExcelTable->setHorizontalHeaderLabels(QStringList()<<"需发送的命令"<<"正确的返回值");
-    readExcelTable->setRowCount(10);    //初始化为10行
+    readExcelTable->setRowCount(10);                                //初始化为10行
     readExcelTable->setItem(0,0,new QTableWidgetItem("等待读取excel表格"));
 
     mainLayout->addWidget(excelReadLabel,0,0,1,2);
@@ -69,13 +76,20 @@ GUI::GUI(QWidget *parent,Qt::WindowFlags f): QDialog(parent,f)
 
     mainLayout->addWidget(portLabel,3,2,1,1);
     mainLayout->addWidget(portLineEdit,3,3,1,1);
-    mainLayout->addWidget(delayLabel,3,0,1,1);
-    mainLayout->addWidget(delayLineEdit,3,1,1,1);
+    mainLayout->addWidget(limitSendDataNumLabel,3,0,1,1);
+    mainLayout->addWidget(limitSendDataNumLineEdit,3,1,1,1);
 
-    mainLayout->addWidget(enterButton,4,0,1,1);
-    mainLayout->addWidget(stopEnterButton,4,1,1,1);
-    mainLayout->addWidget(contentButton,4,3,1,1);
-    mainLayout->addWidget(stopButton,4,2,1,1);
+    mainLayout->addWidget(delayLabel,4,0,1,1);
+    mainLayout->addWidget(delayLineEdit,4,1,1,1);
+    mainLayout->addWidget(SendDataNumStatisLabel,4,2,1,1);
+    mainLayout->addWidget(DisplaySendDataNumStatisLabel,4,3,1,1);
+
+    mainLayout->addWidget(enterButton,5,0,1,1);
+    mainLayout->addWidget(stopEnterButton,5,1,1,1);
+    mainLayout->addWidget(contentButton,5,3,1,1);
+    mainLayout->addWidget(stopButton,5,2,1,1);
+
+
     // 设置第 0 列和第 1 列可拉伸，比例为 1:1
     mainLayout->setColumnStretch(0, 1);
     mainLayout->setColumnStretch(1, 1);
@@ -119,8 +133,8 @@ void GUI::contentServerSlot(){
     connect(this,&GUI::StartConnectNetwork,Network,&connectNetwork::NetworkConnectedSlot);
     connect(this,&GUI::NetworkSendDataSignals,Network,&connectNetwork::NetworkSendData);
     //链接信号函数，从NetWork到GUI
-    connect(Network, &connectNetwork::DisplaSendData, this, &GUI::GUIDisplaSendData);
-    connect(Network, &connectNetwork::DisplaConnectData, this, &GUI::GUIDisplaConnectData);
+    connect(Network, &connectNetwork::DisplaSendData, this, &GUI::GUIDisplaySendData);
+    connect(Network, &connectNetwork::DisplaConnectData, this, &GUI::GUIDisplayConnectData);
 
     //传递信号，启动Network
     emit StartConnectNetwork(portLineEdit->text().toInt(),QHostAddress(serverIPLineEdit->text()));
@@ -155,36 +169,102 @@ void GUI::stopServerSlot(){
     serverIPLineEdit->setEnabled(true);
 }
 
-//GUI显示发送的数据
-void GUI::GUIDisplaSendData(QString msg){
-    sendListWidge->addItem(msg);
-}
-
-//GUI显示收到的数据
-void GUI::GUIDisplaConnectData(QString msg){
-    contentListWidge->addItem(msg);
-}
-
 //非阻塞式发送线程
 void GUI::enterExcelClickedSlot(){
-    qDebug()<<"debug:enterExcelClickedSlot已经触发";
-    //发送数据通过信号量传递
-    for(int i =0;i<Exceldata->ExceltotalRows;i++){
-        emit NetworkSendDataSignals(readExcelTable->item(i,0)->text(),delayLineEdit->text().toInt());
-    }
-    stopEnterButton->setEnabled(true);
+    qDebug() << "debug:enterExcelClickedSlot 非阻塞线程启动";
+
+    // 禁止重复点击发送
     enterButton->setEnabled(false);
+    stopEnterButton->setEnabled(true);
+    limitSendDataNumLineEdit->setEnabled(false);
+    delayLineEdit->setEnabled(false);
+
+    // 创建新线程和工作对象
+    ExcelSendwork = new ExcelSendWorker();
+    //传递要发送的数据到excel发送work
+    ExcelSendwork->m_table = readExcelTable;                                    //传递发送的表格table
+    ExcelSendwork->m_totalRows = Exceldata->ExceltotalRows;                     //传递表格的行数
+    ExcelSendwork->m_delayMs = delayLineEdit->text().toInt();                   //传递延时时间
+    ExcelSendwork->m_repeatLimit = limitSendDataNumLineEdit->text().toInt();    //传递发送次数限制
+
+    //移动到子线程当中
+    ExcelSendwork->moveToThread(excelSendThread);
+
+    //链接信号与槽
+    connect(this,&GUI::StartSendData,ExcelSendwork,&ExcelSendWorker::startWork);
+    // 关键：使用直接连接，让 stopWork 在 GUI 线程被调用
+    //    Qt 有几种连接方式（Qt::ConnectionType）：
+    //    Qt::AutoConnection（默认）：若发送者与接收者在同一线程，则为直接连接（Qt::DirectConnection）；若在不同线程，则为队列连接（Qt::QueuedConnection）。
+    //    Qt::DirectConnection：发送信号时，立即在当前线程调用槽函数，就像直接调用普通函数一样。
+    //    Qt::QueuedConnection：将槽函数调用封装为事件，投递到接收者所在线程的事件队列中，等待该线程的事件循环处理。
+    //因为发送任务是死循环的，如果此时停止信号使用队列链接，那么将永远也不会执行到，那么会造成主线程阻塞等待停止且一直不会停止
+    connect(this, &GUI::StopSendData, ExcelSendwork, &ExcelSendWorker::stopWork, Qt::DirectConnection);
+    connect(ExcelSendwork,&ExcelSendWorker::sendCommand,Network,&connectNetwork::NetworkSendData);
+    connect(ExcelSendwork, &ExcelSendWorker::finished, this, &GUI::onEnterExcelFinished);
+    connect(ExcelSendwork,&ExcelSendWorker::sendDataNumSignals,this,&GUI::GUIDisplaySendDataNum);
+
+    //子线程启动
+    excelSendThread->start();
+
+    //发送信号，启动发送
+    emit StartSendData();
 }
 
 //停止Excel发送
 void GUI::stopEnterExcelClickedSlot(){
-    QMessageBox::information(this,"debug","debug:stopEnterExcelClickedSlot已经触发");
+    qDebug() << "手动停止发送";
+    if (ExcelSendwork) {
+        emit StopSendData();                // 仅发送停止信号，不清理
+    }
+    stopEnterButton->setEnabled(false);     // 防止重复点击
+}
 
+void GUI::onEnterExcelFinished()
+{
+    qDebug() << "发送线程结束，开始清理资源";
+    if (ExcelSendwork) {
+        ExcelSendwork->deleteLater();
+        ExcelSendwork = nullptr;
+    }
+    if (excelSendThread && excelSendThread->isRunning()) {
+        excelSendThread->quit();
+        excelSendThread->wait();
+    }
 
+    // 恢复界面控件
+    limitSendDataNumLineEdit->setEnabled(true);
+    delayLineEdit->setEnabled(true);
     stopEnterButton->setEnabled(false);
     enterButton->setEnabled(true);
 }
 
+
+//GUI显示发送的数据
+void GUI::GUIDisplaySendData(QString msg){
+    // 添加新条目
+    sendListWidge->addItem(msg);
+
+    // 限制最多显示 1000 条
+    const int maxItems = MAXDisplayItems;
+    while (sendListWidge->count() > maxItems) {
+        delete sendListWidge->takeItem(0);  // 删除最旧的一条（索引0）
+    }
+}
+
+//GUI显示收到的数据
+void GUI::GUIDisplayConnectData(QString msg){
+    contentListWidge->addItem(msg);
+
+    const int maxItems = MAXDisplayItems;
+    while (contentListWidge->count() > maxItems) {
+        delete contentListWidge->takeItem(0);
+    }
+}
+
+//GUI显示统计发送了多少次
+void GUI::GUIDisplaySendDataNum(int Num){
+    DisplaySendDataNumStatisLabel->setText(QString::number(Num));
+}
 
 GUI::~GUI()
 {
