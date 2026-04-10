@@ -129,7 +129,50 @@ bool readExcelData::loadExcelToTable(const QString &filePath, QTableWidget *tabl
         QTableWidgetItem *cmdItem = new QTableWidgetItem(value);
         table->setItem(row - 1, 0, cmdItem);
 
-        // 表格第2列（命令）填入读取到的值
+        delete cell;
+    }
+    // 读取第一列（B列）数据
+    for (int row = 1; row <= totalRows; ++row) {
+        // 获取单元格对象
+        QAxObject *cell = sheet->querySubObject("Cells(int,int)", row, 2);
+        if (!cell) {
+            qWarning() << "无法获取单元格" << row << ",1";
+            delete cell;
+            continue;
+        }
+
+        // 尝试多种方式获取单元格文本
+        QString value;
+        // 方式1: Value 属性
+        QVariant var = cell->property("Value");
+        if (!var.isNull()) {
+            value = var.toString();
+        }
+        // 如果 value 为空，尝试 Text 属性（显示文本）
+        if (value.isEmpty()) {
+            QVariant textVar = cell->property("Text");
+            if (!textVar.isNull()) {
+                value = textVar.toString();
+            }
+        }
+        // 如果还是空，尝试 Value2
+        if (value.isEmpty()) {
+            QVariant val2 = cell->property("Value2");
+            if (!val2.isNull()) {
+                value = val2.toString();
+            }
+        }
+
+        // 调试输出前5行的内容
+        if (row <= 5) {
+            qDebug() << "第" << row << "行，读取到的值:" << value;
+        }
+
+        if (!value.isEmpty()) {
+            nonEmptyCount++;
+        }
+
+        // 表格第2列（返回值）填入读取到的值
         QTableWidgetItem *backItem = new QTableWidgetItem(value);
         table->setItem(row - 1, 1, backItem);
 

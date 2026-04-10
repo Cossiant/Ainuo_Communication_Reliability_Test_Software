@@ -16,9 +16,6 @@ void connectNetwork::NetworkSendData(QString msg,int delayMS){
     if(msg.isEmpty()) return;
     tcpClient->write(msg.toLatin1(),msg.length());
     DisplaSendData("["+QTime::currentTime().toString("hh:mm:ss.zzz")+"] "+msg);
-    if(delayMS > 0) {
-        QThread::msleep(delayMS);  // 包含头文件 <QThread>
-    }
 }
 
 void connectNetwork::NetworkDataReceivedSlot(){
