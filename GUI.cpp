@@ -40,7 +40,9 @@ GUI::GUI(QWidget *parent,Qt::WindowFlags f): QDialog(parent,f)
 
     stopButton->setEnabled(false);
     contentButton->setEnabled(true);
-    openExcelButton->setEnabled(true);
+    portLineEdit->setEnabled(true);
+    serverIPLineEdit->setEnabled(true);
+    openExcelButton->setEnabled(false);
     enterButton->setEnabled(false);
     stopEnterButton->setEnabled(false);
 
@@ -113,10 +115,11 @@ void GUI::openExcelClickedSlot(){
         for(auto fname:files){
             if (Exceldata->loadExcelToTable(fname, readExcelTable, this)) {
                 QMessageBox::information(this, "提示", QStringLiteral("Excel 文件读取完成！\r\n总行数：") + QString::number(Exceldata->ExceltotalRows));
+                //只有正确读取才能允许发送！
+                enterButton->setEnabled(true);
             }
         }
     }
-    enterButton->setEnabled(true);
 }
 
 //链接服务器
@@ -146,6 +149,7 @@ void GUI::contentServerSlot(){
     contentButton->setEnabled(false);
     portLineEdit->setEnabled(false);
     serverIPLineEdit->setEnabled(false);
+    openExcelButton->setEnabled(true);
 }
 
 //停止链接到电源
@@ -167,6 +171,9 @@ void GUI::stopServerSlot(){
     contentButton->setEnabled(true);
     portLineEdit->setEnabled(true);
     serverIPLineEdit->setEnabled(true);
+    openExcelButton->setEnabled(false);
+    enterButton->setEnabled(false);
+    stopEnterButton->setEnabled(false);
 }
 
 //非阻塞式发送线程
@@ -178,6 +185,8 @@ void GUI::enterExcelClickedSlot(){
     stopEnterButton->setEnabled(true);
     limitSendDataNumLineEdit->setEnabled(false);
     delayLineEdit->setEnabled(false);
+    //不允许在点击发送之后还可以读取excel！
+    openExcelButton->setEnabled(false);
 
     // 创建新线程和工作对象
     ExcelSendwork = new ExcelSendWorker();
@@ -236,6 +245,7 @@ void GUI::onEnterExcelFinished()
     delayLineEdit->setEnabled(true);
     stopEnterButton->setEnabled(false);
     enterButton->setEnabled(true);
+    openExcelButton->setEnabled(true);
 }
 
 
