@@ -8,25 +8,25 @@
 #include <QTime>
 #include <QThread>
 
-class connectNetwork:public QObject
+class NetworkClient : public QObject
 {
     Q_OBJECT
 public:
-    connectNetwork();
+    NetworkClient();
     //对外只需要输入port和serverip就可以了
-    QListWidget *contentListWidge;
-    QListWidget *sendListWidge;
-    void NetworkSendData(QString msg,int delayMS);
+    QListWidget *contentListWidget;
+    QListWidget *sendListWidget;
+    void sendNetworkData(QString msg, int delayMS);
 private:
-    QTcpSocket *tcpClient;
-    bool status;
+    QTcpSocket *m_tcpClient;
+    bool m_connectedStatus;
 signals:
-    void DisplaConnectData(QString msg);                                          //接收到的数据显示信号量
-    void DisplaSendData(QString msg);                                             //发送过去的数据显示信号量
+    void displayReceivedData(QString msg);       //接收到的数据显示信号量
+    void displaySentData(QString msg);           //发送过去的数据显示信号量
 public slots:
-    void NetworkConnectedSlot(int port,QHostAddress serverIP);
-    void NetworkDisconnectedSlot();
-    void NetworkDataReceivedSlot();
+    void onNetworkConnected(int port, QHostAddress serverIP);
+    void onNetworkDisconnected();
+    void onDataReceived();
 };
 
 #endif // CONNECTNETWORK_H

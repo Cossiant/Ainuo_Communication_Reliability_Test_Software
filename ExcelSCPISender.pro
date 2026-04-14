@@ -31,15 +31,15 @@ SOURCES += \
         gui.cpp \
     readexceldata.cpp \
     connectnetwork.cpp \
-    threadsendexcel.cpp \
-    excelsendworker.cpp
+    excelsendworker.cpp \
+    serialworker.cpp
 
 HEADERS += \
         gui.h \
     readexceldata.h \
     connectnetwork.h \
-    threadsendexcel.h \
-    excelsendworker.h
+    excelsendworker.h \
+    serialworker.h
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin

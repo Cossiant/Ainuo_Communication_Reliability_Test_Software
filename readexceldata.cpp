@@ -6,18 +6,18 @@
 #include <QWidget>
 #include <QDebug>
 
-bool readExcelData::loadExcelToTable(const QString &filePath, QTableWidget *table, QWidget *parent)
+bool ExcelReader::loadExcelToTable(const QString &filePath, QTableWidget *table, QWidget *parent)
 {
     if (!table) {
         if (parent)
-            QMessageBox::critical(parent,("错误"), ("目标表格控件为空"));
+            QMessageBox::critical(parent, ("错误"), ("目标表格控件为空"));
         return false;
     }
 
     QAxObject excel("Excel.Application");
     if (excel.isNull()) {
         if (parent)
-            QMessageBox::critical(parent,("错误"),("无法启动 Excel 应用程序，请确保已安装 Excel 或 WPS。"));
+            QMessageBox::critical(parent, ("错误"), ("无法启动 Excel 应用程序，请确保已安装 Excel 或 WPS。"));
         return false;
     }
 
@@ -28,7 +28,7 @@ bool readExcelData::loadExcelToTable(const QString &filePath, QTableWidget *tabl
     QAxObject *workbook = workbooks->querySubObject("Open(const QString&)", filePath);
     if (!workbook) {
         if (parent)
-            QMessageBox::critical(parent,("错误"), QString("无法打开 Excel 文件:\n%1").arg(filePath));
+            QMessageBox::critical(parent, ("错误"), QString("无法打开 Excel 文件:\n%1").arg(filePath));
         excel.dynamicCall("Quit()");
         return false;
     }
@@ -37,7 +37,7 @@ bool readExcelData::loadExcelToTable(const QString &filePath, QTableWidget *tabl
     QAxObject *sheet = sheets->querySubObject("Item(int)", 1);
     if (!sheet) {
         if (parent)
-            QMessageBox::critical(parent, ("错误"),("无法获取第一个工作表"));
+            QMessageBox::critical(parent, ("错误"), ("无法获取第一个工作表"));
         workbook->dynamicCall("Close()");
         excel.dynamicCall("Quit()");
         return false;
@@ -56,14 +56,14 @@ bool readExcelData::loadExcelToTable(const QString &filePath, QTableWidget *tabl
     }
 
     QAxObject *rows = usedRange->querySubObject("Rows");
-    int totalRows = rows->property("Count").toInt();
+    int totalRowsCount = rows->property("Count").toInt();
     delete rows;
     delete usedRange;
 
-    qDebug() << "检测到 Excel 总行数（UsedRange）:" << totalRows;
-    ExceltotalRows = totalRows;
+    qDebug() << "检测到 Excel 总行数（UsedRange）:" << totalRowsCount;
+    totalRows = totalRowsCount;
 
-    if (totalRows == 0) {
+    if (totalRowsCount == 0) {
         if (parent)
             QMessageBox::warning(parent, ("提示"), ("Excel 文件为空"));
         table->clear();
@@ -79,13 +79,13 @@ bool readExcelData::loadExcelToTable(const QString &filePath, QTableWidget *tabl
 
     // 设置表格
     table->clear();
-    table->setRowCount(totalRows);
+    table->setRowCount(totalRowsCount);
     table->setColumnCount(2);
     table->setHorizontalHeaderLabels(QStringList() << ("需要发送的命令") << ("正确的返回值"));
 
     int nonEmptyCount = 0;
     // 读取第一列（A列）数据
-    for (int row = 1; row <= totalRows; ++row) {
+    for (int row = 1; row <= totalRowsCount; ++row) {
         // 获取单元格对象
         QAxObject *cell = sheet->querySubObject("Cells(int,int)", row, 1);
         if (!cell) {
@@ -132,7 +132,7 @@ bool readExcelData::loadExcelToTable(const QString &filePath, QTableWidget *tabl
         delete cell;
     }
     // 读取第一列（B列）数据
-    for (int row = 1; row <= totalRows; ++row) {
+    for (int row = 1; row <= totalRowsCount; ++row) {
         // 获取单元格对象
         QAxObject *cell = sheet->querySubObject("Cells(int,int)", row, 2);
         if (!cell) {
@@ -179,7 +179,7 @@ bool readExcelData::loadExcelToTable(const QString &filePath, QTableWidget *tabl
         delete cell;
     }
 
-    qDebug() << "共读取" << totalRows << "行，非空单元格数量:" << nonEmptyCount;
+    qDebug() << "共读取" << totalRowsCount << "行，非空单元格数量:" << nonEmptyCount;
 
     // 清理 COM 对象
     delete sheet;
@@ -189,9 +189,9 @@ bool readExcelData::loadExcelToTable(const QString &filePath, QTableWidget *tabl
     delete workbooks;
     excel.dynamicCall("Quit()");
 
-    if (nonEmptyCount == 0 && totalRows > 0) {
+    if (nonEmptyCount == 0 && totalRowsCount > 0) {
         if (parent) {
-            QMessageBox::warning(parent,("警告"),("Excel 第一列所有单元格都为空或无法读取。\n请检查文件内容或格式。"));
+            QMessageBox::warning(parent, ("警告"), ("Excel 第一列所有单元格都为空或无法读取。\n请检查文件内容或格式。"));
         }
         return false;
     }
