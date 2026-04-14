@@ -13,6 +13,9 @@
 #include <QMessageBox>
 #include <QCoreApplication>
 #include <QThread>
+#include <QSerialPort>
+#include <QSerialPortInfo>
+#include <QComboBox>
 
 #include "readexceldata.h"
 #include "connectnetwork.h"
@@ -50,12 +53,18 @@ private:
     QLineEdit *serverIPLineEdit;    //电源IP输入框
     QLabel *portLabel;              //电源端口提示Label
     QLineEdit *portLineEdit;        //电源端口输入框
-    //按钮
+    //excel按钮
     QPushButton *openExcelButton;   //打开excel按钮
     QPushButton *enterButton;       //发送excel命令按钮
     QPushButton *stopEnterButton;   //关闭发送excel命令按钮
+    QPushButton *openEnterSerialButton; //通过串口发送按钮
+    QPushButton *stopEnterSerialButton;  //关闭串口发送按钮
+    //网络连接按钮
     QPushButton *stopButton;        //停止链接按钮
     QPushButton *contentButton;     //链接到电源按钮
+    //串口按钮
+    QPushButton *openSerialButton;              //打开串口按钮
+    QPushButton *closeSerialButton;             //关闭串口按钮
     //数据显示框，例如执行了多少次这样的
     QLabel *delayLabel;                         //命令发送延时提示Label
     QLineEdit *delayLineEdit;                   //命令发送延时输入框
@@ -63,6 +72,20 @@ private:
     QLineEdit *limitSendDataNumLineEdit;        //限制的发送次数输入框
     QLabel *SendDataNumStatisLabel;             //统计的发送命令提示Label
     QLabel *DisplaySendDataNumStatisLabel;      //统计的发送命令总数显示Label
+    QLabel *SendDataErrorNumLabel;              //统计的返回错误数量提示Label
+    QLabel *DisplaySendDataErrorNumLabel;       //统计的返回错误数量显示
+    //使用串口进行通讯
+    QLabel *SerialPortLabel;                    //串口Label
+    QComboBox *SerialPortComboBox;              //串口端口号选择
+    QLabel *SerialbaudRateLabel;                //波特率label
+    QComboBox *SerialbaudRateComboBox;          //波特率
+    QLabel *SerialdataBitsLabel;                //数据位Label
+    QComboBox *SerialdataBitsComboBox;          //数据位
+    QLabel *SerialstopBitsLabel;                //停止位label
+    QComboBox *SerialstopBitsComboBox;          //停止位
+    QLabel *SerialparityLabel;                  //校验位Label
+    QComboBox *SerialparityComboBox;            //校验位
+
 
 signals:
     void StartConnectNetwork(int port,QHostAddress serverIP);                   //通知子线程网络链接启动了

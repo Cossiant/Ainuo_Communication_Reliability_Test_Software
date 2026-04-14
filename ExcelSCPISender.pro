@@ -4,7 +4,7 @@
 #
 #-------------------------------------------------
 
-QT       += core gui network axcontainer
+QT       += core gui network axcontainer serialport
 
 RC_FILE = logo.rc
 

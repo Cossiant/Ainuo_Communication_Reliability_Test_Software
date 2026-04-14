@@ -11,6 +11,7 @@ GUI::GUI(QWidget *parent,Qt::WindowFlags f): QDialog(parent,f)
     resize(1000,600);
     mainLayout = new QGridLayout(this);
 
+    //初始化label
     excelReadLabel = new QLabel(tr("读取到的Excel表格的数据"));
     contentLabel = new QLabel(tr("接受的数据"));
     sendLabel = new QLabel(tr("发送的数据"));
@@ -18,25 +19,71 @@ GUI::GUI(QWidget *parent,Qt::WindowFlags f): QDialog(parent,f)
     portLabel = new QLabel(tr("端口号:"));
     delayLabel = new QLabel(tr("每条命令发送延时(ms)："));
     limitSendDataNumLabel = new QLabel(tr("发送条数(0为一直循环):"));
-
     SendDataNumStatisLabel = new QLabel(tr("总计发送命令："));
     DisplaySendDataNumStatisLabel = new QLabel(tr("0"));
+    SerialPortLabel = new QLabel(tr("串口端口号:"));
+    SerialbaudRateLabel = new QLabel(tr("串口波特率:"));
+    SerialdataBitsLabel = new QLabel(tr("串口数据位:"));
+    SerialstopBitsLabel = new QLabel(tr("串口停止位:"));
+    SerialparityLabel = new QLabel(tr("串口校验位:"));
+    SendDataErrorNumLabel = new QLabel(tr("返回错误次数:"));
+    DisplaySendDataErrorNumLabel = new QLabel(tr("0"));
 
+    //初始化下拉菜单
+    SerialPortComboBox = new QComboBox(this);
+    SerialbaudRateComboBox = new QComboBox(this);
+    SerialdataBitsComboBox = new QComboBox(this);
+    SerialstopBitsComboBox = new QComboBox(this);
+    SerialparityComboBox = new QComboBox(this);
+
+    //这里获取当前串口端口号
+    QList<QSerialPortInfo> portList = QSerialPortInfo::availablePorts();
+    if (portList.isEmpty()) {
+        SerialPortComboBox->addItem(tr("无可用串口"));
+    } else {
+        for (const QSerialPortInfo &info : portList) {
+            //将已有的端口号显示出来
+            SerialPortComboBox->addItem(info.portName());
+        }
+    }
+    //串口列表内容
+    QStringList baudRates = {"1200", "2400", "4800", "9600", "19200", "38400", "57600", "115200"};
+    QStringList dataBits = {"5", "6", "7", "8"};
+    QStringList stopBits = {"1", "1.5", "2"};
+    QStringList parities = {"None", "Even", "Odd", "Space", "Mark"};
+    //将列表内容添加到Combobox当中
+    SerialbaudRateComboBox->addItems(baudRates);
+    SerialdataBitsComboBox->addItems(dataBits);
+    SerialstopBitsComboBox->addItems(stopBits);
+    SerialparityComboBox->addItems(parities);
+    //初始化串口参数
+    SerialbaudRateComboBox->setCurrentText("115200"); // 默认值
+    SerialdataBitsComboBox->setCurrentText("8");
+    SerialstopBitsComboBox->setCurrentText("1");
+    SerialparityComboBox->setCurrentText("None");
+
+    //初始化LineEdit
     serverIPLineEdit = new QLineEdit;
     portLineEdit = new QLineEdit;
     delayLineEdit = new QLineEdit;
     limitSendDataNumLineEdit = new QLineEdit;
 
+    //设置参数
     serverIPLineEdit->setText("127.0.0.1");
     portLineEdit->setText("20108");
     delayLineEdit->setText("50");
     limitSendDataNumLineEdit->setText("0");
 
+    //初始化按钮
     contentButton = new QPushButton(tr("连接到电源"));
     stopButton = new QPushButton(tr("断开链接"));
     openExcelButton = new QPushButton(tr("打开excel并读取"));
     enterButton = new QPushButton(tr("发送excel命令到电源"));
     stopEnterButton = new QPushButton(tr("停止发送excel命令到电源"));
+    openSerialButton = new QPushButton(tr("打开串口"));
+    closeSerialButton = new QPushButton(tr("关闭串口"));
+    openEnterSerialButton = new QPushButton(tr("通过串口发送excel命令"));
+    stopEnterSerialButton = new QPushButton(tr("停止串口发送excel命令"));
 
     stopButton->setEnabled(false);
     contentButton->setEnabled(true);
@@ -45,6 +92,8 @@ GUI::GUI(QWidget *parent,Qt::WindowFlags f): QDialog(parent,f)
     openExcelButton->setEnabled(false);
     enterButton->setEnabled(false);
     stopEnterButton->setEnabled(false);
+    openSerialButton->setEnabled(true);
+    closeSerialButton->setEnabled(false);
 
     connect(openExcelButton,SIGNAL(clicked()),this,SLOT(openExcelClickedSlot()));//信号量链接
     connect(contentButton,SIGNAL(clicked()),this,SLOT(contentServerSlot()));//信号量链接
@@ -66,31 +115,48 @@ GUI::GUI(QWidget *parent,Qt::WindowFlags f): QDialog(parent,f)
 
     mainLayout->addWidget(excelReadLabel,0,0,1,2);
     mainLayout->addWidget(contentLabel,0,2,1,2);
-    mainLayout->addWidget(sendLabel,0,4,1,1);
+    mainLayout->addWidget(sendLabel,0,4,1,2);
 
     mainLayout->addWidget(readExcelTable,1,0,1,2);
     mainLayout->addWidget(contentListWidge,1,2,1,2);
-    mainLayout->addWidget(sendListWidge,1,4,1,1);
+    mainLayout->addWidget(sendListWidge,1,4,1,2);
 
     mainLayout->addWidget(openExcelButton,2,0,1,2);
     mainLayout->addWidget(serverIPLabel,2,2,1,1);
     mainLayout->addWidget(serverIPLineEdit,2,3,1,1);
+    mainLayout->addWidget(SerialPortLabel,2,4,1,1);
+    mainLayout->addWidget(SerialPortComboBox,2,5,1,1);
 
     mainLayout->addWidget(portLabel,3,2,1,1);
     mainLayout->addWidget(portLineEdit,3,3,1,1);
     mainLayout->addWidget(limitSendDataNumLabel,3,0,1,1);
     mainLayout->addWidget(limitSendDataNumLineEdit,3,1,1,1);
+    mainLayout->addWidget(SerialbaudRateLabel,3,4,1,1);
+    mainLayout->addWidget(SerialbaudRateComboBox,3,5,1,1);
 
     mainLayout->addWidget(delayLabel,4,0,1,1);
     mainLayout->addWidget(delayLineEdit,4,1,1,1);
-    mainLayout->addWidget(SendDataNumStatisLabel,4,2,1,1);
-    mainLayout->addWidget(DisplaySendDataNumStatisLabel,4,3,1,1);
+    mainLayout->addWidget(SendDataErrorNumLabel,4,2,1,1);
+    mainLayout->addWidget(DisplaySendDataErrorNumLabel,4,3,1,1);
+    mainLayout->addWidget(SerialdataBitsLabel,4,4,1,1);
+    mainLayout->addWidget(SerialdataBitsComboBox,4,5,1,1);
 
     mainLayout->addWidget(enterButton,5,0,1,1);
     mainLayout->addWidget(stopEnterButton,5,1,1,1);
-    mainLayout->addWidget(contentButton,5,3,1,1);
-    mainLayout->addWidget(stopButton,5,2,1,1);
+    mainLayout->addWidget(SendDataNumStatisLabel,5,2,1,1);
+    mainLayout->addWidget(DisplaySendDataNumStatisLabel,5,3,1,1);
+    mainLayout->addWidget(SerialparityLabel,5,4,1,1);
+    mainLayout->addWidget(SerialparityComboBox,5,5,1,1);
 
+    mainLayout->addWidget(openEnterSerialButton,6,0,1,1);
+    mainLayout->addWidget(stopEnterSerialButton,6,1,1,1);
+    mainLayout->addWidget(stopButton,6,2,1,1);
+    mainLayout->addWidget(contentButton,6,3,1,1);
+    mainLayout->addWidget(SerialstopBitsLabel,6,4,1,1);
+    mainLayout->addWidget(SerialstopBitsComboBox,6,5,1,1);
+
+    mainLayout->addWidget(openSerialButton,7,4,1,1);
+    mainLayout->addWidget(closeSerialButton,7,5,1,1);
 
     // 设置第 0 列和第 1 列可拉伸，比例为 1:1
     mainLayout->setColumnStretch(0, 1);
