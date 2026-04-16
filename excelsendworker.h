@@ -6,8 +6,10 @@
 #include <QTableWidget>
 #include <QThread>
 #include <QDebug>
-#include <QElapsedTimer>
 #include <atomic>
+#include <QTimer>
+#include <QCoreApplication>
+#include <QEventLoop>
 
 class ExcelSendWorker : public QObject
 {

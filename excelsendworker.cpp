@@ -5,21 +5,22 @@
 ExcelSendWorker::ExcelSendWorker() : m_stopFlag(false)
 {
 }
+
+//延时函数
+void interruptibleWait(int msec)
+{ // 这个最准
+    QTimer timer;
+    timer.setTimerType(Qt::PreciseTimer);
+    timer.start(msec);
+    while(timer.remainingTime() > 0) QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+}
+
 //网络excel连续发送函数
 void ExcelSendWorker::startNetworkWork()
 {
     m_stopFlag = false;
     m_sentCount = 0;
     qDebug() << "网络发送函数已触发";
-    // 可中断的忙等待函数，响应精度可达微秒级
-    auto interruptibleWait = [this](int ms) {
-        if (ms <= 0) return;
-        QElapsedTimer timer;
-        timer.start();
-        while (timer.elapsed() < ms && !m_stopFlag) {
-            QThread::yieldCurrentThread();   // 避免 100% 占用核心
-        }
-    };
 
     if (m_repeatLimit == 0) {
         // 无限循环模式
@@ -62,16 +63,6 @@ void ExcelSendWorker::serialStartWork()
     m_stopFlag = false;      // 复用同一个停止标志，或者您可以再定义一个串口专用标志
     m_sentCount = 0;
     qDebug() << "串口发送函数已触发";
-    // 可中断的忙等待函数，响应精度可达微秒级
-    auto interruptibleWait = [this](int ms) {
-        if (ms <= 0) return;
-        QElapsedTimer timer;
-        timer.start();
-        while (timer.elapsed() < ms && !m_stopFlag) {
-            QThread::yieldCurrentThread();   // 避免 100% 占用核心
-        }
-    };
-
     if (m_repeatLimit == 0) {
         // 无限循环模式
         while (!m_stopFlag) {
