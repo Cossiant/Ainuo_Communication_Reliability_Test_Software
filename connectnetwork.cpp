@@ -1,33 +1,33 @@
 #include "connectnetwork.h"
 
-connectNetwork::connectNetwork()
+NetworkClient::NetworkClient()
 {
 }
 
-void connectNetwork::NetworkConnectedSlot(int port,QHostAddress serverIP){
-    tcpClient = new QTcpSocket(this);
-    connect(tcpClient,SIGNAL(readyRead()),this,SLOT(NetworkDataReceivedSlot()));
-    connect(tcpClient,SIGNAL(disconnected()),this,SLOT(NetworkDisconnectedSlot()));
-    tcpClient->connectToHost(serverIP,port);
+void NetworkClient::onNetworkConnected(int port, QHostAddress serverIP){
+    m_tcpClient = new QTcpSocket(this);
+    connect(m_tcpClient, SIGNAL(readyRead()), this, SLOT(onDataReceived()));
+    connect(m_tcpClient, SIGNAL(disconnected()), this, SLOT(onNetworkDisconnected()));
+    m_tcpClient->connectToHost(serverIP, port);
     qDebug() << "网络链接成功！";
 }
 
-void connectNetwork::NetworkSendData(QString msg,int delayMS){
+void NetworkClient::sendNetworkData(QString msg, int delayMS){
     if(msg.isEmpty()) return;
-    tcpClient->write(msg.toLatin1(),msg.length());
-    DisplaSendData("["+QTime::currentTime().toString("hh:mm:ss.zzz")+"] "+msg);
+    m_tcpClient->write(msg.toLatin1(), msg.length());
+    emit displaySentData("[" + QTime::currentTime().toString("hh:mm:ss.zzz") + "] " + msg);
 }
 
-void connectNetwork::NetworkDataReceivedSlot(){
-    while(tcpClient->bytesAvailable()>0){
-        QByteArray dataprogram;
-        dataprogram.resize(tcpClient->bytesAvailable());
-        tcpClient->read(dataprogram.data(),dataprogram.size());
-        QString msg = dataprogram.data();
-        DisplaConnectData("["+QTime::currentTime().toString("hh:mm:ss.zzz")+"] "+msg.left(dataprogram.size()));
+void NetworkClient::onDataReceived(){
+    while(m_tcpClient->bytesAvailable() > 0){
+        QByteArray datagram;
+        datagram.resize(m_tcpClient->bytesAvailable());
+        m_tcpClient->read(datagram.data(), datagram.size());
+        QString msg = datagram.data();
+        emit displayReceivedData("[" + QTime::currentTime().toString("hh:mm:ss.zzz") + "] " + msg.left(datagram.size()));
     }
 }
 
-void connectNetwork::NetworkDisconnectedSlot(){
+void NetworkClient::onNetworkDisconnected(){
     qDebug() << "已断开网络连接！";
 }
