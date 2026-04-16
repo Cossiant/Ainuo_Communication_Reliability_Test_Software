@@ -17,6 +17,8 @@ private:
 
 signals:
     void serialClosed();
+    void displayReceivedData(QString msg);       //接收到的数据显示信号量
+    void displaySentData(QString msg);           //发送过去的数据显示信号量
 public slots:
     void writeData(const QString &data);
     void onSerialStart(const QString &portName,
@@ -26,6 +28,7 @@ public slots:
                        QSerialPort::StopBits stopBits,
                        QSerialPort::FlowControl flowControl);     //串口启动槽
     void onSerialStop();
+    void handleReadyRead();                      // 串口数据到达时被调用
 };
 
 #endif // SERIALWORKER_H

@@ -275,13 +275,20 @@ void GUI::onStartSendExcel()
 {
     qDebug() << "debug:onStartSendExcel 非阻塞线程启动";
 
-    // 禁止重复点击发送
+    // 首先禁止其他按钮状态
+    //不允许在点击发送之后还可以读取excel！
+    m_disconnectButton->setEnabled(false);
+    m_connectButton->setEnabled(false);
+    m_openExcelButton->setEnabled(false);
     m_sendExcelButton->setEnabled(false);
     m_stopSendExcelButton->setEnabled(true);
+    m_openSerialButton->setEnabled(false);
+    m_closeSerialButton->setEnabled(false);
+    m_sendSerialButton->setEnabled(false);
+    m_stopSendSerialButton->setEnabled(false);
+    // 禁止重复点击发送
     m_sendLimitLineEdit->setEnabled(false);
     m_delayLineEdit->setEnabled(false);
-    //不允许在点击发送之后还可以读取excel！
-    m_openExcelButton->setEnabled(false);
 
     // 创建新线程和工作对象
     m_excelSendWorker = new ExcelSendWorker();
@@ -343,6 +350,7 @@ void GUI::onSendFinished()
     m_stopSendExcelButton->setEnabled(false);
     m_sendExcelButton->setEnabled(true);
     m_openExcelButton->setEnabled(true);
+    m_disconnectButton->setEnabled(true);
 }
 
 //GUI显示发送的数据
@@ -422,7 +430,14 @@ void GUI::onOpenSerial()
     // 连接信号：GUI 的 requestSerialOpen（带参） -> SerialWorker 的槽
     connect(this, &GUI::requestSerialOpen, m_serialWorker, &SerialWorker::onSerialStart);
     connect(this, &GUI::requestSerialClose, m_serialWorker, &SerialWorker::onSerialStop);
+    //链接槽函数
     connect(m_serialWorker, &SerialWorker::serialClosed, this, &GUI::onSerialClosed);
+    connect(m_serialWorker, &SerialWorker::displaySentData, this, &GUI::onDisplaySentData);
+    connect(m_serialWorker, &SerialWorker::displayReceivedData, this, &GUI::onDisplayReceivedData);
+
+//    //链接信号函数，从NetWork到GUI
+//    connect(m_networkClient, &NetworkClient::displaySentData, this, &GUI::onDisplaySentData);
+//    connect(m_networkClient, &NetworkClient::displayReceivedData, this, &GUI::onDisplayReceivedData);
 
     // 启动子线程
     m_serialThread->start();
@@ -488,13 +503,20 @@ void GUI::onSerialClosed()
 void GUI::onStartSendSerial(){
     qDebug()<<"onStartSendSerial已触发!";
 
-    // 禁止重复点击发送
+    // 首先禁止其他按钮状态
+    //不允许在点击发送之后还可以读取excel！
+    m_disconnectButton->setEnabled(false);
+    m_connectButton->setEnabled(false);
+    m_openExcelButton->setEnabled(false);
     m_sendExcelButton->setEnabled(false);
-    m_stopSendExcelButton->setEnabled(true);
+    m_stopSendExcelButton->setEnabled(false);
+    m_openSerialButton->setEnabled(false);
+    m_closeSerialButton->setEnabled(false);
+    m_sendSerialButton->setEnabled(false);
+    m_stopSendSerialButton->setEnabled(true);
+    // 禁止重复点击发送
     m_sendLimitLineEdit->setEnabled(false);
     m_delayLineEdit->setEnabled(false);
-    //不允许在点击发送之后还可以读取excel！
-    m_openExcelButton->setEnabled(false);
 
     // 创建新线程和工作对象
     m_excelSendWorker = new ExcelSendWorker();
@@ -516,9 +538,9 @@ void GUI::onStartSendSerial(){
     //    Qt::QueuedConnection：将槽函数调用封装为事件，投递到接收者所在线程的事件队列中，等待该线程的事件循环处理。
     //因为发送任务是死循环的，如果此时停止信号使用队列链接，那么将永远也不会执行到，那么会造成主线程阻塞等待停止且一直不会停止
     connect(this, &GUI::requestStopSend, m_excelSendWorker, &ExcelSendWorker::serialStopWork, Qt::DirectConnection);
-    connect(m_excelSendWorker, &ExcelSendWorker::sendCommand, m_serialWorker, &SerialWorker::writeData);
-    connect(m_excelSendWorker, &ExcelSendWorker::finished, this, &GUI::onSerialSendFinished);
-    connect(m_excelSendWorker, &ExcelSendWorker::sentCountChanged, this, &GUI::onUpdateSentCount);
+    connect(m_excelSendWorker, &ExcelSendWorker::sendSerialCommand, m_serialWorker, &SerialWorker::writeData);
+    connect(m_excelSendWorker, &ExcelSendWorker::serialFinished, this, &GUI::onSerialSendFinished);
+    connect(m_excelSendWorker, &ExcelSendWorker::serialSentCountChanged, this, &GUI::onUpdateSentCount);
 
     //子线程启动
     m_excelSendThread->start();
@@ -530,10 +552,32 @@ void GUI::onStartSendSerial(){
 
 void GUI::onStopSendSerial(){
     qDebug()<<"onStopSendSerial已触发!";
+    //点击停止按钮后，需要发送停止信号，停止发送
+    if (m_excelSendWorker) {
+        emit requestStopSend();                // 仅发送停止信号，不清理
+    }
+    m_stopSendSerialButton->setEnabled(false);
 }
 
 void GUI::onSerialSendFinished(){
     qDebug()<<"onSerialSendFinished已触发!";
+    //收到停止信号后刷新
+    if (m_excelSendWorker) {
+        m_excelSendWorker->deleteLater();
+        m_excelSendWorker = nullptr;
+    }
+    if (m_excelSendThread && m_excelSendThread->isRunning()) {
+        m_excelSendThread->quit();
+        m_excelSendThread->wait();
+    }
+    //随后需要将按钮状态重置
+    // 恢复界面控件
+    m_sendLimitLineEdit->setEnabled(true);
+    m_delayLineEdit->setEnabled(true);
+    m_stopSendSerialButton->setEnabled(false);
+    m_sendSerialButton->setEnabled(true);
+    m_openExcelButton->setEnabled(true);
+    m_closeSerialButton->setEnabled(true);
 }
 
 GUI::~GUI()

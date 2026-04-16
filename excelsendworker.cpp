@@ -5,7 +5,7 @@
 ExcelSendWorker::ExcelSendWorker() : m_stopFlag(false)
 {
 }
-
+//网络excel连续发送函数
 void ExcelSendWorker::startNetworkWork()
 {
     m_stopFlag = false;
@@ -56,6 +56,7 @@ void ExcelSendWorker::stopNetworkWork()
     m_stopFlag = true;
 }
 
+//串口excel发送函数
 void ExcelSendWorker::serialStartWork()
 {
     m_stopFlag = false;      // 复用同一个停止标志，或者您可以再定义一个串口专用标志
