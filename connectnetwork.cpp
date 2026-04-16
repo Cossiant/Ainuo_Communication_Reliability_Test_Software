@@ -15,7 +15,7 @@ void NetworkClient::onNetworkConnected(int port, QHostAddress serverIP){
 void NetworkClient::sendNetworkData(QString msg, int delayMS){
     if(msg.isEmpty()) return;
     m_tcpClient->write(msg.toLatin1(), msg.length());
-    emit displaySentData("[" + QTime::currentTime().toString("hh:mm:ss.zzz") + "] " + msg);
+    emit displaySentData(msg);
 }
 
 void NetworkClient::onDataReceived(){
@@ -24,7 +24,7 @@ void NetworkClient::onDataReceived(){
         datagram.resize(m_tcpClient->bytesAvailable());
         m_tcpClient->read(datagram.data(), datagram.size());
         QString msg = datagram.data();
-        emit displayReceivedData("[" + QTime::currentTime().toString("hh:mm:ss.zzz") + "] " + msg.left(datagram.size()));
+        emit displayReceivedData(msg.left(datagram.size()));
     }
 }
 

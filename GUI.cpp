@@ -596,7 +596,7 @@ void GUI::onSerialSendFinished(){
 void GUI::onDisplaySentData(QString msg)
 {
     // 添加新条目
-    m_sendListWidget->addItem(msg);
+    m_sendListWidget->addItem("[" + QTime::currentTime().toString("hh:mm:ss.zzz") + "]"+msg);
     //这里可以记录发送了什么数据
     //    if (m_savedataWorker && m_savedataThread && m_savedataThread->isRunning()) {
     //        emit requestWriteSaveFile("[发送] " + msg);
@@ -611,10 +611,12 @@ void GUI::onDisplaySentData(QString msg)
 //GUI显示收到的数据
 void GUI::onDisplayReceivedData(QString msg)
 {
-    m_receiveListWidget->addItem(msg);
+    //先保存到文件当中
     if (m_savedataWorker && m_savedataThread && m_savedataThread->isRunning()) {
         emit requestWriteSaveFile(msg);
     }
+    //再通过GUI显示出来
+    m_receiveListWidget->addItem("[" + QTime::currentTime().toString("hh:mm:ss.zzz") + "]"+msg);
     const int maxItems = m_maxDisplayItems;
     while (m_receiveListWidget->count() > maxItems) {
         delete m_receiveListWidget->takeItem(0);
