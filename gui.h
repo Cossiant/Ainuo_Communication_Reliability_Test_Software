@@ -21,6 +21,7 @@
 #include "connectnetwork.h"
 #include "excelsendworker.h"
 #include "serialworker.h"
+#include "saveworker.h"
 
 class GUI : public QDialog
 {
@@ -34,6 +35,7 @@ private:
     QThread *m_networkThread;           //网络发送子线程
     QThread *m_excelSendThread;         //excel表格子线程
     QThread *m_serialThread;            //串口工作线程
+    QThread *m_savedataThread;
     //主界面
     QGridLayout *m_mainLayout;          //主界面
     QTableWidget *m_excelTableWidget;   //读取excel的table
@@ -54,6 +56,8 @@ private:
     NetworkClient *m_networkClient;     //Network对象
 
     SerialWorker *m_serialWorker;       //串口工作对象
+
+    saveworker *m_savedataWorker;       //自动保存到文件工作对象
     //发送、接受命令显示窗口
     QListWidget *m_receiveListWidget;   //接受命令窗口
     QLabel *m_receiveLabel;             //接受命令提示Label
@@ -110,6 +114,10 @@ signals:
                            QSerialPort::StopBits stopBits,
                            QSerialPort::FlowControl flowControl);               //通知串口可以创建了
     void requestSerialClose();
+
+    void requestInitSaveFile(const QString &baseDir);                           //通知保存线程可以工作了
+    void requestWriteSaveFile(const QString &text);                             //通知保存线程写入XX内容
+    void requestCloseSaveFile();                                                //通知保存线程关闭
 
 private slots:
     void onOpenExcelClicked();                                                  //打开excel信号量

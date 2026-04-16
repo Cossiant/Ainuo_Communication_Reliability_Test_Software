@@ -13,6 +13,7 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     m_networkThread = new QThread;
     m_excelSendThread = new QThread;
     m_serialThread = new QThread;
+    m_savedataThread= new QThread;
     //设置主窗口
     setWindowTitle(tr("Ainuo通用通讯可靠性测试软件"));
     resize(1000, 600);
@@ -211,23 +212,34 @@ void GUI::onConnectServer()
     qDebug() << "debug:onConnectServer已经触发";
     //创建工作对象
     m_networkClient = new NetworkClient();
+    m_savedataWorker = new saveworker();
+
     //告诉Network接受和发送的数据在什么地方
     m_networkClient->contentListWidget = m_receiveListWidget;
     m_networkClient->sendListWidget = m_sendListWidget;
+
     //移动到子线程当中
     m_networkClient->moveToThread(m_networkThread);
+    m_savedataWorker->moveToThread(m_savedataThread);
+
     //链接信号函数，从GUI到NetworkClient
     connect(this, &GUI::requestNetworkConnect, m_networkClient, &NetworkClient::onNetworkConnected);
     connect(this, &GUI::requestSendNetworkData, m_networkClient, &NetworkClient::sendNetworkData);
     //链接信号函数，从NetWork到GUI
     connect(m_networkClient, &NetworkClient::displaySentData, this, &GUI::onDisplaySentData);
     connect(m_networkClient, &NetworkClient::displayReceivedData, this, &GUI::onDisplayReceivedData);
-
-    //传递信号，启动Network
-    emit requestNetworkConnect(m_portLineEdit->text().toInt(), QHostAddress(m_serverIpLineEdit->text()));
+    //链接信号，将GUI的启动、发送、结束信号进行链接
+    connect(this,&GUI::requestInitSaveFile,m_savedataWorker,&saveworker::initWriteFile);
+    connect(this,&GUI::requestWriteSaveFile,m_savedataWorker,&saveworker::writeFile);
+    connect(this,&GUI::requestCloseSaveFile,m_savedataWorker,&saveworker::closeWriteFile);
 
     //子线程启动
     m_networkThread->start();
+    m_savedataThread->start();
+
+    //传递信号，启动Network和数据保存功能
+    emit requestNetworkConnect(m_portLineEdit->text().toInt(), QHostAddress(m_serverIpLineEdit->text()));
+    emit requestInitSaveFile(QString());
 
     //设置发送方式和按钮控件
     m_currentConnectionType = ConnectionType::Network;
@@ -254,6 +266,15 @@ void GUI::onDisconnectServer()
         m_networkThread->quit();
         m_networkThread->wait();
     }
+    // 关闭日志文件并停止日志线程
+    if (m_savedataWorker) {
+        emit requestCloseSaveFile();
+    }
+    if (m_savedataThread && m_savedataThread->isRunning()) {
+        m_savedataThread->quit();
+        m_savedataThread->wait();
+    }
+    qDebug()<<"文件已保存！";
     qDebug() << "已断开网络连接";
     // 重置选择发送方式状态
     m_currentConnectionType = ConnectionType::None;
@@ -353,30 +374,6 @@ void GUI::onSendFinished()
     m_disconnectButton->setEnabled(true);
 }
 
-//GUI显示发送的数据
-void GUI::onDisplaySentData(QString msg)
-{
-    // 添加新条目
-    m_sendListWidget->addItem(msg);
-
-    // 限制最多显示 1000 条
-    const int maxItems = m_maxDisplayItems;
-    while (m_sendListWidget->count() > maxItems) {
-        delete m_sendListWidget->takeItem(0);  // 删除最旧的一条（索引0）
-    }
-}
-
-//GUI显示收到的数据
-void GUI::onDisplayReceivedData(QString msg)
-{
-    m_receiveListWidget->addItem(msg);
-
-    const int maxItems = m_maxDisplayItems;
-    while (m_receiveListWidget->count() > maxItems) {
-        delete m_receiveListWidget->takeItem(0);
-    }
-}
-
 //GUI显示统计发送了多少次
 void GUI::onUpdateSentCount(int count)
 {
@@ -427,6 +424,9 @@ void GUI::onOpenSerial()
     m_serialWorker = new SerialWorker;
     m_serialWorker->moveToThread(m_serialThread);
 
+    m_savedataWorker = new saveworker();
+    m_savedataWorker->moveToThread(m_savedataThread);
+
     // 连接信号：GUI 的 requestSerialOpen（带参） -> SerialWorker 的槽
     connect(this, &GUI::requestSerialOpen, m_serialWorker, &SerialWorker::onSerialStart);
     connect(this, &GUI::requestSerialClose, m_serialWorker, &SerialWorker::onSerialStop);
@@ -434,16 +434,18 @@ void GUI::onOpenSerial()
     connect(m_serialWorker, &SerialWorker::serialClosed, this, &GUI::onSerialClosed);
     connect(m_serialWorker, &SerialWorker::displaySentData, this, &GUI::onDisplaySentData);
     connect(m_serialWorker, &SerialWorker::displayReceivedData, this, &GUI::onDisplayReceivedData);
-
-//    //链接信号函数，从NetWork到GUI
-//    connect(m_networkClient, &NetworkClient::displaySentData, this, &GUI::onDisplaySentData);
-//    connect(m_networkClient, &NetworkClient::displayReceivedData, this, &GUI::onDisplayReceivedData);
+    //链接信号，将GUI的启动、发送、结束信号进行链接
+    connect(this,&GUI::requestInitSaveFile,m_savedataWorker,&saveworker::initWriteFile);
+    connect(this,&GUI::requestWriteSaveFile,m_savedataWorker,&saveworker::writeFile);
+    connect(this,&GUI::requestCloseSaveFile,m_savedataWorker,&saveworker::closeWriteFile);
 
     // 启动子线程
     m_serialThread->start();
+    m_savedataThread->start();
 
     // ---------- 3. 发射信号，传递参数到工作线程 ----------
     emit requestSerialOpen(portName, baudRate, dataBits, parity, stopBits, flowControl);
+    emit requestInitSaveFile(QString());
 
     // ---------- 4. 更新界面按钮状态 ----------
     //设置发送方式和按钮控件
@@ -483,6 +485,16 @@ void GUI::onSerialClosed()
         m_serialWorker->deleteLater();
         m_serialWorker = nullptr;
     }
+    // 关闭日志文件并停止日志线程
+    if (m_savedataWorker) {
+        emit requestCloseSaveFile();
+    }
+    if (m_savedataThread && m_savedataThread->isRunning()) {
+        m_savedataThread->quit();
+        m_savedataThread->wait();
+    }
+    qDebug()<<"文件已保存！";
+    qDebug() << "已断开串口连接";
     // 重置选择发送方式状态
     m_currentConnectionType = ConnectionType::None;
     // 恢复界面控件
@@ -578,6 +590,35 @@ void GUI::onSerialSendFinished(){
     m_sendSerialButton->setEnabled(true);
     m_openExcelButton->setEnabled(true);
     m_closeSerialButton->setEnabled(true);
+}
+
+//GUI显示发送的数据
+void GUI::onDisplaySentData(QString msg)
+{
+    // 添加新条目
+    m_sendListWidget->addItem(msg);
+    //这里可以记录发送了什么数据
+    //    if (m_savedataWorker && m_savedataThread && m_savedataThread->isRunning()) {
+    //        emit requestWriteSaveFile("[发送] " + msg);
+    //    }
+    // 限制最多显示 1000 条
+    const int maxItems = m_maxDisplayItems;
+    while (m_sendListWidget->count() > maxItems) {
+        delete m_sendListWidget->takeItem(0);  // 删除最旧的一条（索引0）
+    }
+}
+
+//GUI显示收到的数据
+void GUI::onDisplayReceivedData(QString msg)
+{
+    m_receiveListWidget->addItem(msg);
+    if (m_savedataWorker && m_savedataThread && m_savedataThread->isRunning()) {
+        emit requestWriteSaveFile(msg);
+    }
+    const int maxItems = m_maxDisplayItems;
+    while (m_receiveListWidget->count() > maxItems) {
+        delete m_receiveListWidget->takeItem(0);
+    }
 }
 
 GUI::~GUI()
