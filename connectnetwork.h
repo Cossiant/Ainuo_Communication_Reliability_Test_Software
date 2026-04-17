@@ -5,24 +5,28 @@
 #include <QObject>
 #include <QHostAddress>
 #include <QListWidget>
-#include <QTime>
-#include <QThread>
+#include <QByteArray>
 
 class NetworkClient : public QObject
 {
     Q_OBJECT
 public:
-    NetworkClient();
-    //对外只需要输入port和serverip就可以了
-    QListWidget *contentListWidget;
-    QListWidget *sendListWidget;
-    void sendNetworkData(QString msg, int delayMS);
+    explicit NetworkClient(QObject *parent = nullptr);
+
+    // 对外接口
+    QListWidget *contentListWidget;   // 接收显示列表（可选）
+    QListWidget *sendListWidget;      // 发送显示列表（可选）
+
+    void sendNetworkData(const QByteArray &data);
+
 private:
     QTcpSocket *m_tcpClient;
     bool m_connectedStatus;
+
 signals:
-    void displayReceivedData(QString msg);       //接收到的数据显示信号量
-    void displaySentData(QString msg);           //发送过去的数据显示信号量
+    void displayReceivedData(const QByteArray &data);   // 接收到的数据（原始字节）
+    void displaySentData(const QByteArray &data);       // 发送的数据（原始字节）
+
 public slots:
     void onNetworkConnected(int port, QHostAddress serverIP);
     void onNetworkDisconnected();

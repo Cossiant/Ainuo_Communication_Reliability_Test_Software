@@ -93,6 +93,9 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     m_sendSerialButton = new QPushButton(tr("通过串口发送excel命令"));
     m_stopSendSerialButton = new QPushButton(tr("停止串口发送excel命令"));
 
+    m_sendWithAN3CheckBox = new QCheckBox(tr("使用AN3.0发送"));
+    m_saveErrorDataCheckBox = new QCheckBox(tr("只保存错误数据"));
+
     m_disconnectButton->setEnabled(false);
     m_connectButton->setEnabled(true);
     m_portLineEdit->setEnabled(true);
@@ -104,6 +107,8 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     m_closeSerialButton->setEnabled(false);
     m_sendSerialButton->setEnabled(false);
     m_stopSendSerialButton->setEnabled(false);
+    m_saveErrorDataCheckBox->setEnabled(true);
+    m_sendWithAN3CheckBox->setEnabled(true);
 
     connect(m_openExcelButton, SIGNAL(clicked()), this, SLOT(onOpenExcelClicked()));//信号量链接
     connect(m_connectButton, SIGNAL(clicked()), this, SLOT(onConnectServer()));//信号量链接
@@ -150,25 +155,27 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
 
     m_mainLayout->addWidget(m_delayLabel, 4, 0, 1, 1);
     m_mainLayout->addWidget(m_delayLineEdit, 4, 1, 1, 1);
-    m_mainLayout->addWidget(m_errorCountLabel, 4, 2, 1, 1);
-    m_mainLayout->addWidget(m_errorCountDisplayLabel, 4, 3, 1, 1);
+    m_mainLayout->addWidget(m_sendWithAN3CheckBox,4,2,1,1);
+    m_mainLayout->addWidget(m_saveErrorDataCheckBox,4,3,1,1);
     m_mainLayout->addWidget(m_dataBitsLabel, 4, 4, 1, 1);
     m_mainLayout->addWidget(m_dataBitsComboBox, 4, 5, 1, 1);
 
     m_mainLayout->addWidget(m_sendExcelButton, 5, 0, 1, 1);
     m_mainLayout->addWidget(m_stopSendExcelButton, 5, 1, 1, 1);
-    m_mainLayout->addWidget(m_sentCountLabel, 5, 2, 1, 1);
-    m_mainLayout->addWidget(m_sentCountDisplayLabel, 5, 3, 1, 1);
+    m_mainLayout->addWidget(m_errorCountLabel, 5, 2, 1, 1);
+    m_mainLayout->addWidget(m_errorCountDisplayLabel, 5, 3, 1, 1);
     m_mainLayout->addWidget(m_parityLabel, 5, 4, 1, 1);
     m_mainLayout->addWidget(m_parityComboBox, 5, 5, 1, 1);
 
     m_mainLayout->addWidget(m_sendSerialButton, 6, 0, 1, 1);
     m_mainLayout->addWidget(m_stopSendSerialButton, 6, 1, 1, 1);
-    m_mainLayout->addWidget(m_disconnectButton, 6, 2, 1, 1);
-    m_mainLayout->addWidget(m_connectButton, 6, 3, 1, 1);
+    m_mainLayout->addWidget(m_sentCountLabel, 6, 2, 1, 1);
+    m_mainLayout->addWidget(m_sentCountDisplayLabel, 6, 3, 1, 1);
     m_mainLayout->addWidget(m_stopBitsLabel, 6, 4, 1, 1);
     m_mainLayout->addWidget(m_stopBitsComboBox, 6, 5, 1, 1);
 
+    m_mainLayout->addWidget(m_disconnectButton, 7, 2, 1, 1);
+    m_mainLayout->addWidget(m_connectButton, 7, 3, 1, 1);
     m_mainLayout->addWidget(m_openSerialButton, 7, 4, 1, 1);
     m_mainLayout->addWidget(m_closeSerialButton, 7, 5, 1, 1);
 
@@ -249,6 +256,8 @@ void GUI::onConnectServer()
     m_serverIpLineEdit->setEnabled(false);
     m_openExcelButton->setEnabled(true);
     m_openSerialButton->setEnabled(false);
+    m_saveErrorDataCheckBox->setEnabled(false);
+    m_sendWithAN3CheckBox->setEnabled(false);
 }
 
 //停止链接到电源
@@ -289,6 +298,8 @@ void GUI::onDisconnectServer()
     m_openSerialButton->setEnabled(true);
     m_sendSerialButton->setEnabled(false);
     m_sendExcelButton->setEnabled(false);
+    m_saveErrorDataCheckBox->setEnabled(true);
+    m_sendWithAN3CheckBox->setEnabled(true);
 }
 
 //非阻塞式发送线程
@@ -315,9 +326,10 @@ void GUI::onStartSendExcel()
     m_excelSendWorker = new ExcelSendWorker();
     //传递要发送的数据到excel发送work
     m_excelSendWorker->m_table = m_excelTableWidget;                                    //传递发送的表格table
-    m_excelSendWorker->m_totalRows = m_excelReader->totalRows;                     //传递表格的行数
-    m_excelSendWorker->m_delayMs = m_delayLineEdit->text().toInt();                   //传递延时时间
-    m_excelSendWorker->m_repeatLimit = m_sendLimitLineEdit->text().toInt();    //传递发送次数限制
+    m_excelSendWorker->m_totalRows = m_excelReader->totalRows;                          //传递表格的行数
+    m_excelSendWorker->m_delayMs = m_delayLineEdit->text().toInt();                     //传递延时时间
+    m_excelSendWorker->m_repeatLimit = m_sendLimitLineEdit->text().toInt();             //传递发送次数限制
+    m_excelSendWorker->m_useHexSend = m_sendWithAN3CheckBox->isChecked();               //是否用AN3.0发送
 
     //移动到子线程当中
     m_excelSendWorker->moveToThread(m_excelSendThread);
@@ -460,6 +472,8 @@ void GUI::onOpenSerial()
     m_stopBitsComboBox->setEnabled(false);
     m_parityComboBox->setEnabled(false);
     m_openExcelButton->setEnabled(true);
+    m_saveErrorDataCheckBox->setEnabled(false);
+    m_sendWithAN3CheckBox->setEnabled(false);
 }
 
 //关闭串口函数
@@ -509,6 +523,8 @@ void GUI::onSerialClosed()
     m_connectButton->setEnabled(true);
     m_sendSerialButton->setEnabled(false);
     m_sendExcelButton->setEnabled(false);
+    m_saveErrorDataCheckBox->setEnabled(true);
+    m_sendWithAN3CheckBox->setEnabled(true);
 }
 
 //串口发送启动
@@ -534,9 +550,10 @@ void GUI::onStartSendSerial(){
     m_excelSendWorker = new ExcelSendWorker();
     //传递要发送的数据到excel发送work
     m_excelSendWorker->m_table = m_excelTableWidget;                                    //传递发送的表格table
-    m_excelSendWorker->m_totalRows = m_excelReader->totalRows;                     //传递表格的行数
-    m_excelSendWorker->m_delayMs = m_delayLineEdit->text().toInt();                   //传递延时时间
-    m_excelSendWorker->m_repeatLimit = m_sendLimitLineEdit->text().toInt();    //传递发送次数限制
+    m_excelSendWorker->m_totalRows = m_excelReader->totalRows;                          //传递表格的行数
+    m_excelSendWorker->m_delayMs = m_delayLineEdit->text().toInt();                     //传递延时时间
+    m_excelSendWorker->m_repeatLimit = m_sendLimitLineEdit->text().toInt();             //传递发送次数限制
+    m_excelSendWorker->m_useHexSend = m_sendWithAN3CheckBox->isChecked();               //是否用AN3.0发送
 
     //移动到子线程当中
     m_excelSendWorker->moveToThread(m_excelSendThread);

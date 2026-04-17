@@ -4,31 +4,32 @@
 #include <QObject>
 #include <QSerialPort>
 #include <QSerialPortInfo>
-#include <QDebug>
-#include <QThread>
+#include <QByteArray>
 
 class SerialWorker : public QObject
 {
     Q_OBJECT
 public:
-    SerialWorker();
+    explicit SerialWorker(QObject *parent = nullptr);
+
 private:
-    QSerialPort *m_serialPort;      //串口变量
+    QSerialPort *m_serialPort;
 
 signals:
     void serialClosed();
-    void displayReceivedData(QString msg);       //接收到的数据显示信号量
-    void displaySentData(QString msg);           //发送过去的数据显示信号量
+    void displayReceivedData(const QByteArray &data);
+    void displaySentData(const QByteArray &data);
+
 public slots:
-    void writeData(const QString &data);
+    void writeData(const QByteArray &data);
     void onSerialStart(const QString &portName,
                        qint32 baudRate,
                        QSerialPort::DataBits dataBits,
                        QSerialPort::Parity parity,
                        QSerialPort::StopBits stopBits,
-                       QSerialPort::FlowControl flowControl);     //串口启动槽
+                       QSerialPort::FlowControl flowControl);
     void onSerialStop();
-    void handleReadyRead();                      // 串口数据到达时被调用
+    void handleReadyRead();
 };
 
 #endif // SERIALWORKER_H

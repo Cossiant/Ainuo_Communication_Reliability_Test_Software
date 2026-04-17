@@ -16,6 +16,7 @@
 #include <QSerialPort>
 #include <QSerialPortInfo>
 #include <QComboBox>
+#include <QCheckBox>
 
 #include "readexceldata.h"
 #include "connectnetwork.h"
@@ -80,6 +81,9 @@ private:
     //串口按钮
     QPushButton *m_openSerialButton;    //打开串口按钮
     QPushButton *m_closeSerialButton;   //关闭串口按钮
+    //选择是否AN3.0发送勾选框和是否只保存错误数据勾选框
+    QCheckBox *m_sendWithAN3CheckBox;
+    QCheckBox *m_saveErrorDataCheckBox;
     //数据显示框，例如执行了多少次这样的
     QLabel *m_delayLabel;               //命令发送延时提示Label
     QLineEdit *m_delayLineEdit;         //命令发送延时输入框
@@ -103,7 +107,7 @@ private:
 
 signals:
     void requestNetworkConnect(int port, QHostAddress serverIP);                //通知子线程网络链接启动了
-    void requestSendNetworkData(QString msg, int delayMS = 0);                  //通知子线程发送数据
+    void requestSendNetworkData(QByteArray msg, int delayMS = 0);               //通知子线程发送数据
     void requestStartSend();                                                    //通知子线程准备发送了
     void requestStopSend();                                                     //通知子线程停止发送了
 
