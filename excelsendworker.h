@@ -1,4 +1,3 @@
-// ExcelSendWorker.h
 #ifndef EXCELSENDWORKER_H
 #define EXCELSENDWORKER_H
 
@@ -10,18 +9,22 @@
 #include <QTimer>
 #include <QCoreApplication>
 #include <QEventLoop>
+#include <QByteArray>
 
 class ExcelSendWorker : public QObject
 {
     Q_OBJECT
 public:
-    ExcelSendWorker();
+    explicit ExcelSendWorker(QObject *parent = nullptr);
+
     QTableWidget *m_table;
 
-    int m_delayMs;          // 命令之间的延时时间
+    int m_delayMs;          // 命令之间的延时时间（毫秒）
     int m_repeatLimit;      // 总发送条数限制，0 表示无限循环
     int m_totalRows;        // 发送表格的行数，用于限制其不会跑飞
-    int m_sentCount = 0;    // 总计发送了多少条，用于统计
+    int m_sentCount;        // 总计发送了多少条，用于统计
+
+    bool m_useHexSend;      // 是否使用十六进制发送
 
 public slots:
     void startNetworkWork();           // 原网络发送启动槽
@@ -30,16 +33,15 @@ public slots:
     void serialStopWork();      // 串口发送停止槽
 
 signals:
-    void sendCommand(QString cmd, int delayMs);         // 请求发送一条命令（网络）
-    void finished();                                    // 发送完成（自然结束或被停止）
-    void sentCountChanged(int count);                   // 当前发送了多少次，发送给主线程显示
+    void sendCommand(QByteArray data, int delayMs);       // 网络发送命令（字节流）
+    void finished();
+    void sentCountChanged(int count);
 
-    void sendSerialCommand(QString cmd, int delayMs);   // 请求发送一条串口命令
-    void serialFinished();                              // 串口发送完成
-    void serialSentCountChanged(int count);             // 串口发送次数统计
+    void sendSerialCommand(QByteArray data, int delayMs); // 串口发送命令（字节流）
+    void serialFinished();
+    void serialSentCountChanged(int count);
 
 private:
-    //定义原子bool变量 m_stopFlag 保证不会发生半个字节被修改的中间状态
     std::atomic<bool> m_stopFlag;
 };
 
