@@ -24,6 +24,7 @@ public:
     int m_totalRows;        // 发送表格的行数，用于限制其不会跑飞
     int m_sentCount;        // 总计发送了多少条，用于统计
 
+
     bool m_useHexSend;      // 是否使用十六进制发送
 
 public slots:
@@ -40,6 +41,8 @@ signals:
     void sendSerialCommand(QByteArray data, int delayMs); // 串口发送命令（字节流）
     void serialFinished();
     void serialSentCountChanged(int count);
+
+    void commandSent(int row, QByteArray expectedResponse);   // 发送命令时通知期望的返回值
 
 private:
     std::atomic<bool> m_stopFlag;

@@ -59,6 +59,9 @@ void SerialWorker::handleReadyRead()
     if (!m_serialPort) return;
     QByteArray receivedData = m_serialPort->readAll();
     if (!receivedData.isEmpty()) {
-        emit displayReceivedData(receivedData);
+        // 移除所有的 "\r\n"
+        QByteArray filteredData = receivedData;
+        filteredData.replace("\r\n", "");
+        emit displayReceivedData(filteredData);
     }
 }

@@ -34,7 +34,12 @@ void NetworkClient::onDataReceived()
 {
     if (!m_tcpClient) return;
     QByteArray datagram = m_tcpClient->readAll();
-    if (!datagram.isEmpty()) emit displayReceivedData(datagram);
+    if (!datagram.isEmpty()) {
+        // 移除所有的 "\r\n"
+        QByteArray filteredData = datagram;
+        filteredData.replace("\r\n", "");
+        emit displayReceivedData(filteredData);
+    }
 }
 
 void NetworkClient::onNetworkDisconnected()
