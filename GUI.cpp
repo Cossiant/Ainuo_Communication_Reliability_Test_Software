@@ -321,7 +321,10 @@ void GUI::onStartSendExcel()
     // 禁止重复点击发送
     m_sendLimitLineEdit->setEnabled(false);
     m_delayLineEdit->setEnabled(false);
-
+    //这里需要清空上一轮的队列
+    m_expectedResponseQueue.clear();
+    m_errorCount = 0;
+    m_errorCountDisplayLabel->setText("0");
     // 创建新线程和工作对象
     m_excelSendWorker = new ExcelSendWorker();
     //传递要发送的数据到excel发送work
@@ -346,7 +349,8 @@ void GUI::onStartSendExcel()
     connect(m_excelSendWorker, &ExcelSendWorker::sendCommand, m_networkClient, &NetworkClient::sendNetworkData);
     connect(m_excelSendWorker, &ExcelSendWorker::finished, this, &GUI::onSendFinished);
     connect(m_excelSendWorker, &ExcelSendWorker::sentCountChanged, this, &GUI::onUpdateSentCount);
-
+    //接受发送错误数据统计
+    connect(m_excelSendWorker, &ExcelSendWorker::commandSent, this, &GUI::onCommandSent);
     //子线程启动
     m_excelSendThread->start();
 
@@ -384,12 +388,6 @@ void GUI::onSendFinished()
     m_sendExcelButton->setEnabled(true);
     m_openExcelButton->setEnabled(true);
     m_disconnectButton->setEnabled(true);
-}
-
-//GUI显示统计发送了多少次
-void GUI::onUpdateSentCount(int count)
-{
-    m_sentCountDisplayLabel->setText(QString::number(count));
 }
 
 //点击按钮执行操作，创建对象，然后发送数据，启动子线程，最后在子线程完成串口链接
@@ -545,7 +543,10 @@ void GUI::onStartSendSerial(){
     // 禁止重复点击发送
     m_sendLimitLineEdit->setEnabled(false);
     m_delayLineEdit->setEnabled(false);
-
+    //这里需要清空上一轮的队列
+    m_expectedResponseQueue.clear();
+    m_errorCount = 0;
+    m_errorCountDisplayLabel->setText("0");
     // 创建新线程和工作对象
     m_excelSendWorker = new ExcelSendWorker();
     //传递要发送的数据到excel发送work
@@ -570,7 +571,8 @@ void GUI::onStartSendSerial(){
     connect(m_excelSendWorker, &ExcelSendWorker::sendSerialCommand, m_serialWorker, &SerialWorker::writeData);
     connect(m_excelSendWorker, &ExcelSendWorker::serialFinished, this, &GUI::onSerialSendFinished);
     connect(m_excelSendWorker, &ExcelSendWorker::serialSentCountChanged, this, &GUI::onUpdateSentCount);
-
+    //接受发送错误数据统计
+    connect(m_excelSendWorker, &ExcelSendWorker::commandSent, this, &GUI::onCommandSent);
     //子线程启动
     m_excelSendThread->start();
 
@@ -610,34 +612,78 @@ void GUI::onSerialSendFinished(){
 }
 
 //GUI显示发送的数据
-void GUI::onDisplaySentData(QString msg)
+void GUI::onDisplaySentData(QByteArray msg)
 {
-    // 添加新条目
-    m_sendListWidget->addItem("[" + QTime::currentTime().toString("hh:mm:ss.zzz") + "]"+msg);
+    QString displayText;
+    if (m_sendWithAN3CheckBox->isChecked()) {
+        displayText = toHexDisplay(msg);          // 十六进制显示
+    } else {
+        displayText = QString::fromUtf8(msg);     // 普通文本显示
+    }
+    m_sendListWidget->addItem("[" + QTime::currentTime().toString("hh:mm:ss.zzz") + "] " + displayText);
+    // 限制最多显示条数
+    const int maxItems = m_maxDisplayItems;
+    while (m_sendListWidget->count() > maxItems) {
+        delete m_sendListWidget->takeItem(0);
+    }
     //这里可以记录发送了什么数据
     //    if (m_savedataWorker && m_savedataThread && m_savedataThread->isRunning()) {
     //        emit requestWriteSaveFile("[发送] " + msg);
     //    }
     // 限制最多显示 1000 条
-    const int maxItems = m_maxDisplayItems;
-    while (m_sendListWidget->count() > maxItems) {
-        delete m_sendListWidget->takeItem(0);  // 删除最旧的一条（索引0）
-    }
 }
 
 //GUI显示收到的数据
-void GUI::onDisplayReceivedData(QString msg)
+void GUI::onDisplayReceivedData(QByteArray data)
 {
-    //先保存到文件当中
-    if (m_savedataWorker && m_savedataThread && m_savedataThread->isRunning()) {
-        emit requestWriteSaveFile(msg);
+    QString displayText;
+    if (m_sendWithAN3CheckBox->isChecked()) {
+        displayText = toHexDisplay(data);
+    } else {
+        displayText = QString::fromUtf8(data);
     }
-    //再通过GUI显示出来
-    m_receiveListWidget->addItem("[" + QTime::currentTime().toString("hh:mm:ss.zzz") + "]"+msg);
+    // 保存到文件（保存的内容也可以根据需求选择格式，此处保持与显示一致）
+    if (m_savedataWorker && m_savedataThread && m_savedataThread->isRunning()) {
+        emit requestWriteSaveFile(displayText);
+    }
+    // 显示在接收列表
+    m_receiveListWidget->addItem("[" + QTime::currentTime().toString("hh:mm:ss.zzz") + "] " + displayText);
     const int maxItems = m_maxDisplayItems;
     while (m_receiveListWidget->count() > maxItems) {
         delete m_receiveListWidget->takeItem(0);
     }
+    // ---------- 错误判断（使用原始数据比较，不受显示格式影响）----------
+    if (!m_expectedResponseQueue.isEmpty()) {
+        QByteArray expected = m_expectedResponseQueue.dequeue();
+        if (data.trimmed() != expected.trimmed()) {
+            m_errorCount++;
+            m_errorCountDisplayLabel->setText(QString::number(m_errorCount));
+        }
+    }
+}
+
+//用户使用AN3.0的时候使用这个辅助函数进行显示
+QString GUI::toHexDisplay(const QByteArray &data)
+{
+    QString result;
+    for (unsigned char byte : data) {
+        result.append(QString("%1 ").arg(byte, 2, 16, QChar('0')).toUpper());
+    }
+    return result.trimmed(); // 去掉末尾多余空格
+}
+
+//GUI显示统计发送了多少次
+void GUI::onUpdateSentCount(int count)
+{
+    m_sentCountDisplayLabel->setText(QString::number(count));
+}
+
+//命令发送之后，传递该命令对应的期望返回值，用来做判断错误
+void GUI::onCommandSent(int row, QByteArray expectedResponse)
+{
+    Q_UNUSED(row);
+    //每次发送一条命令成功了就添加一条到队列里面
+    m_expectedResponseQueue.enqueue(expectedResponse);
 }
 
 GUI::~GUI()

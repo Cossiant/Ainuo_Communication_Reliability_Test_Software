@@ -17,6 +17,7 @@
 #include <QSerialPortInfo>
 #include <QComboBox>
 #include <QCheckBox>
+#include <QQueue>
 
 #include "readexceldata.h"
 #include "connectnetwork.h"
@@ -43,7 +44,10 @@ private:
     ExcelReader *m_excelReader;         //被读取的excel对象
     ExcelSendWorker *m_excelSendWorker; //excel发送数据对象
 
+    QQueue<QByteArray> m_expectedResponseQueue;   // 期望返回值队列
+    int m_errorCount = 0;                         // 错误计数
     int m_maxDisplayItems = 300;        //限制最大显示条数为300
+
     enum class ConnectionType {
         None,
         Network,
@@ -84,6 +88,7 @@ private:
     //选择是否AN3.0发送勾选框和是否只保存错误数据勾选框
     QCheckBox *m_sendWithAN3CheckBox;
     QCheckBox *m_saveErrorDataCheckBox;
+    static QString toHexDisplay(const QByteArray &data);    //当使用AN3.0的时候，显示函数用这个
     //数据显示框，例如执行了多少次这样的
     QLabel *m_delayLabel;               //命令发送延时提示Label
     QLineEdit *m_delayLineEdit;         //命令发送延时输入框
@@ -136,12 +141,14 @@ private slots:
     void onStopSendSerial();                                                    //关闭发送excel命令信号量（串口）
     void onSerialSendFinished();                                                //负责清理excel发送完成后的变量（串口）
 
+    void onCommandSent(int row, QByteArray expectedResponse);                   //命令发送之后，传递该命令对应的期望返回值，用来做判断错误
+
     void onOpenSerial();                                                        //打开串口槽
     void onCloseSerial();                                                       //点击关闭信号槽
     void onSerialClosed();                                                      //关闭串口释放资源
 
-    void onDisplayReceivedData(QString msg);                                    //接收到的数据显示信号量
-    void onDisplaySentData(QString msg);                                        //发送过去的数据显示信号量
+    void onDisplayReceivedData(QByteArray msg);                                 //接收到的数据显示信号量
+    void onDisplaySentData(QByteArray msg);                                     //发送过去的数据显示信号量
     void onUpdateSentCount(int count);                                          //显示发送了多少条命令
 };
 

@@ -52,6 +52,19 @@ void ExcelSendWorker::startNetworkWork()
         // 无限循环模式
         while (!m_stopFlag) {
             for (int i = 0; i < m_totalRows && !m_stopFlag; ++i) {
+                /*************************改动开始*****************************/
+                // 获取期望的返回值（第二列）
+                QTableWidgetItem *expectedItem = m_table->item(i, 1);
+                QString expectedText = expectedItem ? expectedItem->text() : "";
+                QByteArray expectedBytes;
+                if (m_useHexSend) {
+                    expectedBytes = stringToHexBytes(expectedText);
+                } else {
+                    expectedBytes = expectedText.toUtf8();
+                }
+                emit commandSent(i, expectedBytes);   // 发射信号，传递行索引和期望字节
+                /*************************改动结束*****************************/
+                //发送期望命令数据
                 QTableWidgetItem *item = m_table->item(i, 0);
                 if (!item) continue;
                 QString cellText = item->text();
@@ -73,6 +86,19 @@ void ExcelSendWorker::startNetworkWork()
         // 有限次数模式
         while (m_sentCount < m_repeatLimit && !m_stopFlag) {
             for (int i = 0; i < m_totalRows && m_sentCount < m_repeatLimit && !m_stopFlag; ++i) {
+                /*************************改动开始*****************************/
+                // 获取期望的返回值（第二列）
+                QTableWidgetItem *expectedItem = m_table->item(i, 1);
+                QString expectedText = expectedItem ? expectedItem->text() : "";
+                QByteArray expectedBytes;
+                if (m_useHexSend) {
+                    expectedBytes = stringToHexBytes(expectedText);
+                } else {
+                    expectedBytes = expectedText.toUtf8();
+                }
+                emit commandSent(i, expectedBytes);   // 发射信号，传递行索引和期望字节
+                /*************************改动结束*****************************/
+                //发送期望命令数据
                 QTableWidgetItem *item = m_table->item(i, 0);
                 if (!item) continue;
                 QString cellText = item->text();
@@ -84,10 +110,10 @@ void ExcelSendWorker::startNetworkWork()
                 } else {
                     cmdToSend = cellText.toUtf8();
                 }
-
                 emit sendCommand(cmdToSend, m_delayMs);
                 interruptibleWait(m_delayMs);
                 emit sentCountChanged(++m_sentCount);
+
             }
         }
     }
@@ -118,6 +144,19 @@ void ExcelSendWorker::serialStartWork()
         // 无限循环模式
         while (!m_stopFlag) {
             for (int i = 0; i < m_totalRows && !m_stopFlag; ++i) {
+                /*************************改动开始*****************************/
+                // 获取期望的返回值（第二列）
+                QTableWidgetItem *expectedItem = m_table->item(i, 1);
+                QString expectedText = expectedItem ? expectedItem->text() : "";
+                QByteArray expectedBytes;
+                if (m_useHexSend) {
+                    expectedBytes = stringToHexBytes(expectedText);
+                } else {
+                    expectedBytes = expectedText.toUtf8();
+                }
+                emit commandSent(i, expectedBytes);   // 发射信号，传递行索引和期望字节
+                /*************************改动结束*****************************/
+                //发送期望命令数据
                 QTableWidgetItem *item = m_table->item(i, 0);
                 if (!item) continue;
                 QString cellText = item->text();
@@ -139,6 +178,19 @@ void ExcelSendWorker::serialStartWork()
         // 有限次数模式
         while (m_sentCount < m_repeatLimit && !m_stopFlag) {
             for (int i = 0; i < m_totalRows && m_sentCount < m_repeatLimit && !m_stopFlag; ++i) {
+                /*************************改动开始*****************************/
+                // 获取期望的返回值（第二列）
+                QTableWidgetItem *expectedItem = m_table->item(i, 1);
+                QString expectedText = expectedItem ? expectedItem->text() : "";
+                QByteArray expectedBytes;
+                if (m_useHexSend) {
+                    expectedBytes = stringToHexBytes(expectedText);
+                } else {
+                    expectedBytes = expectedText.toUtf8();
+                }
+                emit commandSent(i, expectedBytes);   // 发射信号，传递行索引和期望字节
+                /*************************改动结束*****************************/
+                //发送期望命令数据
                 QTableWidgetItem *item = m_table->item(i, 0);
                 if (!item) continue;
                 QString cellText = item->text();
