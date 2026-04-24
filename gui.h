@@ -85,9 +85,11 @@ private:
     //串口按钮
     QPushButton *m_openSerialButton;    //打开串口按钮
     QPushButton *m_closeSerialButton;   //关闭串口按钮
+    //其他按钮
+    QPushButton *m_GUIClearButton;       //清空发送与接受按钮
     //选择是否AN3.0发送勾选框和是否只保存错误数据勾选框
     QCheckBox *m_sendWithAN3CheckBox;
-    QCheckBox *m_saveErrorDataCheckBox;
+    QCheckBox *m_tcpNoDelayCheckBox;
     static QString toHexDisplay(const QByteArray &data);    //当使用AN3.0的时候，显示函数用这个
     //数据显示框，例如执行了多少次这样的
     QLabel *m_delayLabel;               //命令发送延时提示Label
@@ -130,8 +132,9 @@ signals:
 
 private slots:
     void onOpenExcelClicked();                                                  //打开excel信号量
-    void onConnectServer();                                                     //链接到电源信号量
-    void onDisconnectServer();                                                  //关闭链接电源信号量
+    void onConnectServer();                                                     //网络链接到电源信号量
+    void onDisconnectServer();                                                  //关闭网络链接电源信号量
+    void successConnectServer();                                                //链接网络成功信号量，用来打开按钮
 
     void onStartSendExcel();                                                    //发送excel表格当中命令信号量（网络）
     void onStopSendExcel();                                                     //关闭发送excel命令信号量（手动，只负责发送信号）（网络）
@@ -150,6 +153,8 @@ private slots:
     void onDisplayReceivedData(QByteArray msg);                                 //接收到的数据显示信号量
     void onDisplaySentData(QByteArray msg);                                     //发送过去的数据显示信号量
     void onUpdateSentCount(int count);                                          //显示发送了多少条命令
+
+    void clearGUI();                                                            //清空发送与接受区域的数据
 };
 
 #endif // GUI_H

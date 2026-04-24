@@ -92,9 +92,11 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     m_closeSerialButton = new QPushButton(tr("关闭串口"));
     m_sendSerialButton = new QPushButton(tr("通过串口发送excel命令"));
     m_stopSendSerialButton = new QPushButton(tr("停止串口发送excel命令"));
+    m_GUIClearButton = new QPushButton(tr("清空发送与接受区数据"));
 
     m_sendWithAN3CheckBox = new QCheckBox(tr("使用AN3.0发送"));
-    m_saveErrorDataCheckBox = new QCheckBox(tr("只保存错误数据"));
+    m_tcpNoDelayCheckBox = new QCheckBox(tr("TCP发送禁用nagle算法"));
+
 
     m_disconnectButton->setEnabled(false);
     m_connectButton->setEnabled(true);
@@ -107,8 +109,9 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     m_closeSerialButton->setEnabled(false);
     m_sendSerialButton->setEnabled(false);
     m_stopSendSerialButton->setEnabled(false);
-    m_saveErrorDataCheckBox->setEnabled(true);
+    m_tcpNoDelayCheckBox->setEnabled(true);
     m_sendWithAN3CheckBox->setEnabled(true);
+    m_GUIClearButton->setEnabled(true);
 
     connect(m_openExcelButton, SIGNAL(clicked()), this, SLOT(onOpenExcelClicked()));//信号量链接
     connect(m_connectButton, SIGNAL(clicked()), this, SLOT(onConnectServer()));//信号量链接
@@ -119,6 +122,7 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     connect(m_closeSerialButton, SIGNAL(clicked()), this, SLOT(onCloseSerial()));
     connect(m_sendSerialButton,SIGNAL(clicked()),this,SLOT(onStartSendSerial()));
     connect(m_stopSendSerialButton,SIGNAL(clicked()),this,SLOT(onStopSendSerial()));
+    connect(m_GUIClearButton,SIGNAL(clicked()),this,SLOT(clearGUI()));              //点击按钮清空GUI的发送和接受区域
 
     m_receiveListWidget = new QListWidget;                             //接受命令显示窗口
     m_sendListWidget = new QListWidget;                                //发送命令显示窗口
@@ -156,7 +160,7 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     m_mainLayout->addWidget(m_delayLabel, 4, 0, 1, 1);
     m_mainLayout->addWidget(m_delayLineEdit, 4, 1, 1, 1);
     m_mainLayout->addWidget(m_sendWithAN3CheckBox,4,2,1,1);
-    m_mainLayout->addWidget(m_saveErrorDataCheckBox,4,3,1,1);
+    m_mainLayout->addWidget(m_tcpNoDelayCheckBox,4,3,1,1);
     m_mainLayout->addWidget(m_dataBitsLabel, 4, 4, 1, 1);
     m_mainLayout->addWidget(m_dataBitsComboBox, 4, 5, 1, 1);
 
@@ -174,6 +178,7 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     m_mainLayout->addWidget(m_stopBitsLabel, 6, 4, 1, 1);
     m_mainLayout->addWidget(m_stopBitsComboBox, 6, 5, 1, 1);
 
+    m_mainLayout->addWidget(m_GUIClearButton,7,0,1,2);
     m_mainLayout->addWidget(m_disconnectButton, 7, 2, 1, 1);
     m_mainLayout->addWidget(m_connectButton, 7, 3, 1, 1);
     m_mainLayout->addWidget(m_openSerialButton, 7, 4, 1, 1);
@@ -224,6 +229,8 @@ void GUI::onConnectServer()
     //告诉Network接受和发送的数据在什么地方
     m_networkClient->contentListWidget = m_receiveListWidget;
     m_networkClient->sendListWidget = m_sendListWidget;
+    //确定TCP链接是否禁用naggle算法
+    m_networkClient->m_disableNagle = m_tcpNoDelayCheckBox->isChecked();
 
     //移动到子线程当中
     m_networkClient->moveToThread(m_networkThread);
@@ -235,6 +242,15 @@ void GUI::onConnectServer()
     //链接信号函数，从NetWork到GUI
     connect(m_networkClient, &NetworkClient::displaySentData, this, &GUI::onDisplaySentData);
     connect(m_networkClient, &NetworkClient::displayReceivedData, this, &GUI::onDisplayReceivedData);
+    connect(m_networkClient,&NetworkClient::disConnectServer,this,&GUI::onDisconnectServer);
+    connect(m_networkClient,&NetworkClient::successConnectServer,this,&GUI::successConnectServer);
+    //将网络连接失败的信息从子线程传递到GUI
+    connect(m_networkClient, &NetworkClient::connectionError, this, [this](const QString &errorMsg) {
+        QMessageBox::critical(this, tr("连接错误"), tr("网络连接失败：%1").arg(errorMsg));
+    });
+    connect(m_networkClient, &NetworkClient::disConnectWithServer, this ,[this]{
+        QMessageBox::warning(this, tr("连接错误"), tr("电源主动断开网络连接！"));
+    });
     //链接信号，将GUI的启动、发送、结束信号进行链接
     connect(this,&GUI::requestInitSaveFile,m_savedataWorker,&saveworker::initWriteFile);
     connect(this,&GUI::requestWriteSaveFile,m_savedataWorker,&saveworker::writeFile);
@@ -250,13 +266,30 @@ void GUI::onConnectServer()
 
     //设置发送方式和按钮控件
     m_currentConnectionType = ConnectionType::Network;
+    m_disconnectButton->setEnabled(false);
+    m_connectButton->setEnabled(false);
+    m_portLineEdit->setEnabled(false);
+    m_serverIpLineEdit->setEnabled(false);
+    m_openExcelButton->setEnabled(false);
+    m_sendExcelButton->setEnabled(false);
+    m_stopSendExcelButton->setEnabled(false);
+    m_openSerialButton->setEnabled(false);
+    m_sendSerialButton->setEnabled(false);
+    m_sendExcelButton->setEnabled(false);
+    m_tcpNoDelayCheckBox->setEnabled(false);
+    m_sendWithAN3CheckBox->setEnabled(false);
+}
+
+//如果连接成功的话，允许操作按钮
+void GUI::successConnectServer(){
+    m_currentConnectionType = ConnectionType::Network;
     m_disconnectButton->setEnabled(true);
     m_connectButton->setEnabled(false);
     m_portLineEdit->setEnabled(false);
     m_serverIpLineEdit->setEnabled(false);
     m_openExcelButton->setEnabled(true);
     m_openSerialButton->setEnabled(false);
-    m_saveErrorDataCheckBox->setEnabled(false);
+    m_tcpNoDelayCheckBox->setEnabled(false);
     m_sendWithAN3CheckBox->setEnabled(false);
 }
 
@@ -298,7 +331,7 @@ void GUI::onDisconnectServer()
     m_openSerialButton->setEnabled(true);
     m_sendSerialButton->setEnabled(false);
     m_sendExcelButton->setEnabled(false);
-    m_saveErrorDataCheckBox->setEnabled(true);
+    m_tcpNoDelayCheckBox->setEnabled(true);
     m_sendWithAN3CheckBox->setEnabled(true);
 }
 
@@ -470,7 +503,7 @@ void GUI::onOpenSerial()
     m_stopBitsComboBox->setEnabled(false);
     m_parityComboBox->setEnabled(false);
     m_openExcelButton->setEnabled(true);
-    m_saveErrorDataCheckBox->setEnabled(false);
+    m_tcpNoDelayCheckBox->setEnabled(false);
     m_sendWithAN3CheckBox->setEnabled(false);
 }
 
@@ -521,7 +554,7 @@ void GUI::onSerialClosed()
     m_connectButton->setEnabled(true);
     m_sendSerialButton->setEnabled(false);
     m_sendExcelButton->setEnabled(false);
-    m_saveErrorDataCheckBox->setEnabled(true);
+    m_tcpNoDelayCheckBox->setEnabled(true);
     m_sendWithAN3CheckBox->setEnabled(true);
 }
 
@@ -684,6 +717,22 @@ void GUI::onCommandSent(int row, QByteArray expectedResponse)
     Q_UNUSED(row);
     //每次发送一条命令成功了就添加一条到队列里面
     m_expectedResponseQueue.enqueue(expectedResponse);
+}
+
+//清空发送与接受区域
+void GUI::clearGUI(){
+    qDebug()<<"clearGUI已触发";
+    // 清空发送/接收显示列表
+    m_sendListWidget->clear();
+    m_receiveListWidget->clear();
+
+    // 清空期望返回值队列，防止残留数据干扰后续错误判断
+    m_expectedResponseQueue.clear();
+    m_errorCount = 0;
+    m_errorCountDisplayLabel->setText("0");
+
+    // 注意：不重置已发送命令计数（m_sentCountDisplayLabel），
+    // 因为那是全过程统计，与界面显示区无关
 }
 
 GUI::~GUI()

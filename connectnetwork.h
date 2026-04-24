@@ -19,6 +19,8 @@ public:
 
     void sendNetworkData(const QByteArray &data);
 
+    bool m_disableNagle = false;   // 是否禁用 Nagle 算法
+
 private:
     QTcpSocket *m_tcpClient;
     bool m_connectedStatus;
@@ -26,6 +28,10 @@ private:
 signals:
     void displayReceivedData(const QByteArray &data);   // 接收到的数据（原始字节）
     void displaySentData(const QByteArray &data);       // 发送的数据（原始字节）
+    void connectionError(const QString &errorMessage);  //网络连接失败发送提示
+    void disConnectWithServer();                        //被电源断开网络连接
+    void disConnectServer();                            //通知GUI线程结束网络连接（执行断开链接的按钮操作）
+    void successConnectServer();                        //通知GUI网络连接成功
 
 public slots:
     void onNetworkConnected(int port, QHostAddress serverIP);
