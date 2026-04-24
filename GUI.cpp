@@ -36,6 +36,13 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     m_parityLabel = new QLabel(tr("串口校验位:"));
     m_errorCountLabel = new QLabel(tr("返回错误次数:"));
     m_errorCountDisplayLabel = new QLabel(tr("0"));
+    m_NetWorkLEDLabel = new QLabel(tr("网络连接状态"));
+    m_SerialLEDLabel = new QLabel(tr("串口链接状态"));
+    //状态LED初始化
+    m_NetWorkLED = new QLabel();
+    m_SerialLED = new QLabel();
+    LED::setLED(m_NetWorkLED,0,16);
+    LED::setLED(m_SerialLED,0,16);
 
     //初始化下拉菜单
     m_serialPortComboBox = new QComboBox(this);
@@ -145,44 +152,48 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     m_mainLayout->addWidget(m_sendListWidget, 1, 4, 1, 2);
 
     m_mainLayout->addWidget(m_openExcelButton, 2, 0, 1, 2);
-    m_mainLayout->addWidget(m_serverIpLabel, 2, 2, 1, 1);
-    m_mainLayout->addWidget(m_serverIpLineEdit, 2, 3, 1, 1);
-    m_mainLayout->addWidget(m_serialPortLabel, 2, 4, 1, 1);
-    m_mainLayout->addWidget(m_serialPortComboBox, 2, 5, 1, 1);
+    m_mainLayout->addWidget(m_NetWorkLEDLabel,2,2,1,1);
+    m_mainLayout->addWidget(m_NetWorkLED,2,3,1,1);
+    m_mainLayout->addWidget(m_SerialLEDLabel,2,4,1,1);
+    m_mainLayout->addWidget(m_SerialLED,2,5,1,1);
 
-    m_mainLayout->addWidget(m_portLabel, 3, 2, 1, 1);
-    m_mainLayout->addWidget(m_portLineEdit, 3, 3, 1, 1);
     m_mainLayout->addWidget(m_sendLimitLabel, 3, 0, 1, 1);
     m_mainLayout->addWidget(m_sendLimitLineEdit, 3, 1, 1, 1);
-    m_mainLayout->addWidget(m_baudRateLabel, 3, 4, 1, 1);
-    m_mainLayout->addWidget(m_baudRateComboBox, 3, 5, 1, 1);
+    m_mainLayout->addWidget(m_serverIpLabel, 3, 2, 1, 1);
+    m_mainLayout->addWidget(m_serverIpLineEdit, 3, 3, 1, 1);
+    m_mainLayout->addWidget(m_serialPortLabel, 3, 4, 1, 1);
+    m_mainLayout->addWidget(m_serialPortComboBox, 3, 5, 1, 1);
 
     m_mainLayout->addWidget(m_delayLabel, 4, 0, 1, 1);
     m_mainLayout->addWidget(m_delayLineEdit, 4, 1, 1, 1);
-    m_mainLayout->addWidget(m_sendWithAN3CheckBox,4,2,1,1);
-    m_mainLayout->addWidget(m_tcpNoDelayCheckBox,4,3,1,1);
-    m_mainLayout->addWidget(m_dataBitsLabel, 4, 4, 1, 1);
-    m_mainLayout->addWidget(m_dataBitsComboBox, 4, 5, 1, 1);
+    m_mainLayout->addWidget(m_portLabel, 4, 2, 1, 1);
+    m_mainLayout->addWidget(m_portLineEdit, 4, 3, 1, 1);
+    m_mainLayout->addWidget(m_baudRateLabel, 4, 4, 1, 1);
+    m_mainLayout->addWidget(m_baudRateComboBox, 4, 5, 1, 1);
 
     m_mainLayout->addWidget(m_sendExcelButton, 5, 0, 1, 1);
     m_mainLayout->addWidget(m_stopSendExcelButton, 5, 1, 1, 1);
-    m_mainLayout->addWidget(m_errorCountLabel, 5, 2, 1, 1);
-    m_mainLayout->addWidget(m_errorCountDisplayLabel, 5, 3, 1, 1);
-    m_mainLayout->addWidget(m_parityLabel, 5, 4, 1, 1);
-    m_mainLayout->addWidget(m_parityComboBox, 5, 5, 1, 1);
+    m_mainLayout->addWidget(m_sentCountLabel, 5, 2, 1, 1);
+    m_mainLayout->addWidget(m_sentCountDisplayLabel, 5, 3, 1, 1);
+    m_mainLayout->addWidget(m_stopBitsLabel, 5, 4, 1, 1);
+    m_mainLayout->addWidget(m_dataBitsComboBox, 5, 5, 1, 1);
 
     m_mainLayout->addWidget(m_sendSerialButton, 6, 0, 1, 1);
     m_mainLayout->addWidget(m_stopSendSerialButton, 6, 1, 1, 1);
-    m_mainLayout->addWidget(m_sentCountLabel, 6, 2, 1, 1);
-    m_mainLayout->addWidget(m_sentCountDisplayLabel, 6, 3, 1, 1);
-    m_mainLayout->addWidget(m_stopBitsLabel, 6, 4, 1, 1);
-    m_mainLayout->addWidget(m_stopBitsComboBox, 6, 5, 1, 1);
+    m_mainLayout->addWidget(m_errorCountLabel, 6, 2, 1, 1);
+    m_mainLayout->addWidget(m_errorCountDisplayLabel, 6, 3, 1, 1);
+    m_mainLayout->addWidget(m_parityLabel, 6, 4, 1, 1);
+    m_mainLayout->addWidget(m_parityComboBox, 6, 5, 1, 1);
 
     m_mainLayout->addWidget(m_GUIClearButton,7,0,1,2);
-    m_mainLayout->addWidget(m_disconnectButton, 7, 2, 1, 1);
-    m_mainLayout->addWidget(m_connectButton, 7, 3, 1, 1);
-    m_mainLayout->addWidget(m_openSerialButton, 7, 4, 1, 1);
-    m_mainLayout->addWidget(m_closeSerialButton, 7, 5, 1, 1);
+    m_mainLayout->addWidget(m_sendWithAN3CheckBox,7,2,1,1);
+    m_mainLayout->addWidget(m_tcpNoDelayCheckBox,7,3,1,1);
+    m_mainLayout->addWidget(m_dataBitsLabel, 7, 4, 1, 1);
+    m_mainLayout->addWidget(m_stopBitsComboBox, 7, 5, 1, 1);
+    m_mainLayout->addWidget(m_disconnectButton, 8, 2, 1, 1);
+    m_mainLayout->addWidget(m_connectButton, 8, 3, 1, 1);
+    m_mainLayout->addWidget(m_openSerialButton, 8, 4, 1, 1);
+    m_mainLayout->addWidget(m_closeSerialButton, 8, 5, 1, 1);
 
     // 设置第 0 列和第 1 列可拉伸，比例为 1:1
     m_mainLayout->setColumnStretch(0, 1);
@@ -291,6 +302,7 @@ void GUI::successConnectServer(){
     m_openSerialButton->setEnabled(false);
     m_tcpNoDelayCheckBox->setEnabled(false);
     m_sendWithAN3CheckBox->setEnabled(false);
+    LED::setLED(m_NetWorkLED,2,16);
 }
 
 //停止链接到电源
@@ -333,6 +345,7 @@ void GUI::onDisconnectServer()
     m_sendExcelButton->setEnabled(false);
     m_tcpNoDelayCheckBox->setEnabled(true);
     m_sendWithAN3CheckBox->setEnabled(true);
+    LED::setLED(m_NetWorkLED,0,16);
 }
 
 //非阻塞式发送线程
@@ -505,6 +518,7 @@ void GUI::onOpenSerial()
     m_openExcelButton->setEnabled(true);
     m_tcpNoDelayCheckBox->setEnabled(false);
     m_sendWithAN3CheckBox->setEnabled(false);
+    LED::setLED(m_SerialLED,2,16);
 }
 
 //关闭串口函数
@@ -556,6 +570,7 @@ void GUI::onSerialClosed()
     m_sendExcelButton->setEnabled(false);
     m_tcpNoDelayCheckBox->setEnabled(true);
     m_sendWithAN3CheckBox->setEnabled(true);
+    LED::setLED(m_SerialLED,0,16);
 }
 
 //串口发送启动
