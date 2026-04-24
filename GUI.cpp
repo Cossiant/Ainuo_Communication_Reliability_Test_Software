@@ -14,6 +14,7 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     m_excelSendThread = new QThread;
     m_serialThread = new QThread;
     m_savedataThread= new QThread;
+    m_validatorThread = new QThread;
     //设置主窗口
     setWindowTitle(tr("Ainuo通用通讯可靠性测试软件"));
     resize(1000, 600);
@@ -103,7 +104,10 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
 
     m_sendWithAN3CheckBox = new QCheckBox(tr("使用AN3.0发送"));
     m_tcpNoDelayCheckBox = new QCheckBox(tr("TCP发送禁用nagle算法"));
+    m_testPacketLossCheckBox = new QCheckBox(tr("测试丢包情况"));
 
+    //初始化模式为测试丢包情况，一行一行对照(如果发生错误证明丢包了)（如果没勾选发生错误证明返回值错误）
+    m_testPacketLossCheckBox->setChecked(false);
 
     m_disconnectButton->setEnabled(false);
     m_connectButton->setEnabled(true);
@@ -190,6 +194,8 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     m_mainLayout->addWidget(m_tcpNoDelayCheckBox,7,3,1,1);
     m_mainLayout->addWidget(m_dataBitsLabel, 7, 4, 1, 1);
     m_mainLayout->addWidget(m_stopBitsComboBox, 7, 5, 1, 1);
+
+    m_mainLayout->addWidget(m_testPacketLossCheckBox,8,0,1,1);
     m_mainLayout->addWidget(m_disconnectButton, 8, 2, 1, 1);
     m_mainLayout->addWidget(m_connectButton, 8, 3, 1, 1);
     m_mainLayout->addWidget(m_openSerialButton, 8, 4, 1, 1);
@@ -236,6 +242,7 @@ void GUI::onConnectServer()
     //创建工作对象
     m_networkClient = new NetworkClient();
     m_savedataWorker = new saveworker();
+    m_responseValidator = new ResponseValidator;        //对比错误值对象
 
     //告诉Network接受和发送的数据在什么地方
     m_networkClient->contentListWidget = m_receiveListWidget;
@@ -246,10 +253,16 @@ void GUI::onConnectServer()
     //移动到子线程当中
     m_networkClient->moveToThread(m_networkThread);
     m_savedataWorker->moveToThread(m_savedataThread);
+    m_responseValidator->moveToThread(m_validatorThread);
 
     //链接信号函数，从GUI到NetworkClient
     connect(this, &GUI::requestNetworkConnect, m_networkClient, &NetworkClient::onNetworkConnected);
     connect(this, &GUI::requestSendNetworkData, m_networkClient, &NetworkClient::sendNetworkData);
+
+    // 连接信号：GUI -> Validator
+    connect(this, &GUI::requestEnqueueExpected, m_responseValidator, &ResponseValidator::onCommandSent);
+    connect(this, &GUI::requestValidateData, m_responseValidator, &ResponseValidator::onDataReceived);
+    connect(this, &GUI::requestResetValidator, m_responseValidator, &ResponseValidator::onReset);
     //链接信号函数，从NetWork到GUI
     connect(m_networkClient, &NetworkClient::displaySentData, this, &GUI::onDisplaySentData);
     connect(m_networkClient, &NetworkClient::displayReceivedData, this, &GUI::onDisplayReceivedData);
@@ -262,6 +275,12 @@ void GUI::onConnectServer()
     connect(m_networkClient, &NetworkClient::disConnectWithServer, this ,[this]{
         QMessageBox::warning(this, tr("连接错误"), tr("电源主动断开网络连接！"));
     });
+
+    // 连接复选框状态变化到验证器模式设置
+    connect(m_testPacketLossCheckBox, &QCheckBox::toggled, m_responseValidator, &ResponseValidator::onSetTestPacketLossMode);
+    // 连接验证器错误信号到 GUI 错误处理槽
+    connect(m_responseValidator, &ResponseValidator::errorDetected,this, &GUI::onErrorDetected);
+
     //链接信号，将GUI的启动、发送、结束信号进行链接
     connect(this,&GUI::requestInitSaveFile,m_savedataWorker,&saveworker::initWriteFile);
     connect(this,&GUI::requestWriteSaveFile,m_savedataWorker,&saveworker::writeFile);
@@ -270,6 +289,7 @@ void GUI::onConnectServer()
     //子线程启动
     m_networkThread->start();
     m_savedataThread->start();
+    m_validatorThread->start();
 
     //传递信号，启动Network和数据保存功能
     emit requestNetworkConnect(m_portLineEdit->text().toInt(), QHostAddress(m_serverIpLineEdit->text()));
@@ -309,10 +329,9 @@ void GUI::successConnectServer(){
 void GUI::onDisconnectServer()
 {
     qDebug() << "debug:onDisconnectServer已经触发";
+
+    // ---- 网络部分 ----
     if (m_networkClient) {
-        // 请求Network断开连接并清理，然后删除自身
-        // 可以添加一个信号槽，让Network自己删除
-        // 或者调用Network->deleteLater()，并退出线程
         m_networkClient->deleteLater();
         m_networkClient = nullptr;
     }
@@ -320,19 +339,37 @@ void GUI::onDisconnectServer()
         m_networkThread->quit();
         m_networkThread->wait();
     }
-    // 关闭日志文件并停止日志线程
+    qDebug() << "已断开网络连接";
+
+    // ---- 日志保存部分 ----
     if (m_savedataWorker) {
-        emit requestCloseSaveFile();
+        emit requestCloseSaveFile();  // 请求关闭文件（将在 savedata 线程中执行）
     }
     if (m_savedataThread && m_savedataThread->isRunning()) {
         m_savedataThread->quit();
         m_savedataThread->wait();
     }
-    qDebug()<<"文件已保存！";
-    qDebug() << "已断开网络连接";
-    // 重置选择发送方式状态
+    if (m_savedataWorker) {
+        m_savedataWorker->deleteLater();
+        m_savedataWorker = nullptr;
+    }
+    qDebug() << "文件已保存！";
+
+    /*************************改动开始*****************************/
+    // ---- 验证器部分 ----
+    if (m_responseValidator) {
+        m_responseValidator->deleteLater();
+        m_responseValidator = nullptr;
+    }
+    if (m_validatorThread && m_validatorThread->isRunning()) {
+        m_validatorThread->quit();
+        m_validatorThread->wait();
+    }
+    qDebug() << "错误判断线程已清理";
+    /*************************改动结束*****************************/
+
+    // ---- 界面重置 ----
     m_currentConnectionType = ConnectionType::None;
-    // 重置按钮状态
     m_disconnectButton->setEnabled(false);
     m_connectButton->setEnabled(true);
     m_portLineEdit->setEnabled(true);
@@ -345,9 +382,8 @@ void GUI::onDisconnectServer()
     m_sendExcelButton->setEnabled(false);
     m_tcpNoDelayCheckBox->setEnabled(true);
     m_sendWithAN3CheckBox->setEnabled(true);
-    LED::setLED(m_NetWorkLED,0,16);
+    LED::setLED(m_NetWorkLED, 0, 16);
 }
-
 //非阻塞式发送线程
 void GUI::onStartSendExcel()
 {
@@ -483,6 +519,9 @@ void GUI::onOpenSerial()
     m_savedataWorker = new saveworker();
     m_savedataWorker->moveToThread(m_savedataThread);
 
+    m_responseValidator = new ResponseValidator;        //对比错误值对象
+    m_responseValidator->moveToThread(m_validatorThread);
+
     // 连接信号：GUI 的 requestSerialOpen（带参） -> SerialWorker 的槽
     connect(this, &GUI::requestSerialOpen, m_serialWorker, &SerialWorker::onSerialStart);
     connect(this, &GUI::requestSerialClose, m_serialWorker, &SerialWorker::onSerialStop);
@@ -490,6 +529,14 @@ void GUI::onOpenSerial()
     connect(m_serialWorker, &SerialWorker::serialClosed, this, &GUI::onSerialClosed);
     connect(m_serialWorker, &SerialWorker::displaySentData, this, &GUI::onDisplaySentData);
     connect(m_serialWorker, &SerialWorker::displayReceivedData, this, &GUI::onDisplayReceivedData);
+    // 连接信号：GUI -> Validator
+    connect(this, &GUI::requestEnqueueExpected, m_responseValidator, &ResponseValidator::onCommandSent);
+    connect(this, &GUI::requestValidateData, m_responseValidator, &ResponseValidator::onDataReceived);
+    connect(this, &GUI::requestResetValidator, m_responseValidator, &ResponseValidator::onReset);
+    // 连接复选框状态变化到验证器模式设置
+    connect(m_testPacketLossCheckBox, &QCheckBox::toggled, m_responseValidator, &ResponseValidator::onSetTestPacketLossMode);
+    // 连接验证器错误信号到 GUI 错误处理槽
+    connect(m_responseValidator, &ResponseValidator::errorDetected,this, &GUI::onErrorDetected);
     //链接信号，将GUI的启动、发送、结束信号进行链接
     connect(this,&GUI::requestInitSaveFile,m_savedataWorker,&saveworker::initWriteFile);
     connect(this,&GUI::requestWriteSaveFile,m_savedataWorker,&saveworker::writeFile);
@@ -498,6 +545,7 @@ void GUI::onOpenSerial()
     // 启动子线程
     m_serialThread->start();
     m_savedataThread->start();
+    m_validatorThread->start();
 
     // ---------- 3. 发射信号，传递参数到工作线程 ----------
     emit requestSerialOpen(portName, baudRate, dataBits, parity, stopBits, flowControl);
@@ -544,16 +592,32 @@ void GUI::onSerialClosed()
         m_serialWorker->deleteLater();
         m_serialWorker = nullptr;
     }
-    // 关闭日志文件并停止日志线程
+    qDebug() << "已断开串口连接";
+    // ---- 日志保存部分 ----
     if (m_savedataWorker) {
-        emit requestCloseSaveFile();
+        emit requestCloseSaveFile();  // 请求关闭文件（将在 savedata 线程中执行）
     }
     if (m_savedataThread && m_savedataThread->isRunning()) {
         m_savedataThread->quit();
         m_savedataThread->wait();
     }
-    qDebug()<<"文件已保存！";
-    qDebug() << "已断开串口连接";
+    if (m_savedataWorker) {
+        m_savedataWorker->deleteLater();
+        m_savedataWorker = nullptr;
+    }
+    qDebug() << "文件已保存！";
+    /*************************改动开始*****************************/
+    // ---- 验证器部分 ----
+    if (m_responseValidator) {
+        m_responseValidator->deleteLater();
+        m_responseValidator = nullptr;
+    }
+    if (m_validatorThread && m_validatorThread->isRunning()) {
+        m_validatorThread->quit();
+        m_validatorThread->wait();
+    }
+    qDebug() << "错误判断线程已清理";
+    /*************************改动结束*****************************/
     // 重置选择发送方式状态
     m_currentConnectionType = ConnectionType::None;
     // 恢复界面控件
@@ -700,14 +764,9 @@ void GUI::onDisplayReceivedData(QByteArray data)
     while (m_receiveListWidget->count() > maxItems) {
         delete m_receiveListWidget->takeItem(0);
     }
-    // ---------- 错误判断（使用原始数据比较，不受显示格式影响）----------
-    if (!m_expectedResponseQueue.isEmpty()) {
-        QByteArray expected = m_expectedResponseQueue.dequeue();
-        if (data.trimmed() != expected.trimmed()) {
-            m_errorCount++;
-            m_errorCountDisplayLabel->setText(QString::number(m_errorCount));
-        }
-    }
+    /*************************改动开始*****************************/
+    emit requestValidateData(data);
+    /*************************改动结束*****************************/
 }
 
 //用户使用AN3.0的时候使用这个辅助函数进行显示
@@ -726,12 +785,19 @@ void GUI::onUpdateSentCount(int count)
     m_sentCountDisplayLabel->setText(QString::number(count));
 }
 
+//GUI显示出错了多少次
+void GUI::onErrorDetected()
+{
+    m_errorCount++;
+    m_errorCountDisplayLabel->setText(QString::number(m_errorCount));
+}
+
 //命令发送之后，传递该命令对应的期望返回值，用来做判断错误
 void GUI::onCommandSent(int row, QByteArray expectedResponse)
 {
     Q_UNUSED(row);
     //每次发送一条命令成功了就添加一条到队列里面
-    m_expectedResponseQueue.enqueue(expectedResponse);
+    emit requestEnqueueExpected(expectedResponse);
 }
 
 //清空发送与接受区域
@@ -741,8 +807,10 @@ void GUI::clearGUI(){
     m_sendListWidget->clear();
     m_receiveListWidget->clear();
 
+    // 清空验证器内部队列
+    emit requestResetValidator();
+
     // 清空期望返回值队列，防止残留数据干扰后续错误判断
-    m_expectedResponseQueue.clear();
     m_errorCount = 0;
     m_errorCountDisplayLabel->setText("0");
 

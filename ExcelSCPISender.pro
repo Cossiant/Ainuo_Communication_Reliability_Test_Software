@@ -34,7 +34,8 @@ SOURCES += \
     excelsendworker.cpp \
     serialworker.cpp \
     saveworker.cpp \
-    led.cpp
+    led.cpp \
+    responsevalidator.cpp
 
 HEADERS += \
         gui.h \
@@ -43,7 +44,8 @@ HEADERS += \
     excelsendworker.h \
     serialworker.h \
     saveworker.h \
-    led.h
+    led.h \
+    responsevalidator.h
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin
