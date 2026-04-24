@@ -24,6 +24,7 @@
 #include "excelsendworker.h"
 #include "serialworker.h"
 #include "saveworker.h"
+#include "led.h"
 
 class GUI : public QDialog
 {
@@ -59,10 +60,13 @@ private:
     QFileDialog m_fileDialog;           //读取的excel地址
     QLabel *m_excelReadLabel;           //读取excel提示Label
     NetworkClient *m_networkClient;     //Network对象
-
     SerialWorker *m_serialWorker;       //串口工作对象
-
     saveworker *m_savedataWorker;       //自动保存到文件工作对象
+    //LED对象及其显示窗口
+    QLabel *m_NetWorkLED;               //网口状态显示LED
+    QLabel *m_SerialLED;                //串口状态显示LED
+    QLabel *m_NetWorkLEDLabel;          //网口状态提示Label
+    QLabel *m_SerialLEDLabel;           //串口状态提示Label
     //发送、接受命令显示窗口
     QListWidget *m_receiveListWidget;   //接受命令窗口
     QLabel *m_receiveLabel;             //接受命令提示Label
