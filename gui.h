@@ -87,7 +87,7 @@ private:
     QPushButton *m_closeSerialButton;   //关闭串口按钮
     //选择是否AN3.0发送勾选框和是否只保存错误数据勾选框
     QCheckBox *m_sendWithAN3CheckBox;
-    QCheckBox *m_saveErrorDataCheckBox;
+    QCheckBox *m_tcpNoDelayCheckBox;
     static QString toHexDisplay(const QByteArray &data);    //当使用AN3.0的时候，显示函数用这个
     //数据显示框，例如执行了多少次这样的
     QLabel *m_delayLabel;               //命令发送延时提示Label

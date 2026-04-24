@@ -19,6 +19,8 @@ public:
 
     void sendNetworkData(const QByteArray &data);
 
+    bool m_disableNagle = false;   // 是否禁用 Nagle 算法
+
 private:
     QTcpSocket *m_tcpClient;
     bool m_connectedStatus;

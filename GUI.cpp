@@ -94,7 +94,7 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     m_stopSendSerialButton = new QPushButton(tr("停止串口发送excel命令"));
 
     m_sendWithAN3CheckBox = new QCheckBox(tr("使用AN3.0发送"));
-    m_saveErrorDataCheckBox = new QCheckBox(tr("只保存错误数据"));
+    m_tcpNoDelayCheckBox = new QCheckBox(tr("TCP发送禁用nagle算法"));
 
     m_disconnectButton->setEnabled(false);
     m_connectButton->setEnabled(true);
@@ -107,7 +107,7 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     m_closeSerialButton->setEnabled(false);
     m_sendSerialButton->setEnabled(false);
     m_stopSendSerialButton->setEnabled(false);
-    m_saveErrorDataCheckBox->setEnabled(true);
+    m_tcpNoDelayCheckBox->setEnabled(true);
     m_sendWithAN3CheckBox->setEnabled(true);
 
     connect(m_openExcelButton, SIGNAL(clicked()), this, SLOT(onOpenExcelClicked()));//信号量链接
@@ -156,7 +156,7 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     m_mainLayout->addWidget(m_delayLabel, 4, 0, 1, 1);
     m_mainLayout->addWidget(m_delayLineEdit, 4, 1, 1, 1);
     m_mainLayout->addWidget(m_sendWithAN3CheckBox,4,2,1,1);
-    m_mainLayout->addWidget(m_saveErrorDataCheckBox,4,3,1,1);
+    m_mainLayout->addWidget(m_tcpNoDelayCheckBox,4,3,1,1);
     m_mainLayout->addWidget(m_dataBitsLabel, 4, 4, 1, 1);
     m_mainLayout->addWidget(m_dataBitsComboBox, 4, 5, 1, 1);
 
@@ -224,6 +224,8 @@ void GUI::onConnectServer()
     //告诉Network接受和发送的数据在什么地方
     m_networkClient->contentListWidget = m_receiveListWidget;
     m_networkClient->sendListWidget = m_sendListWidget;
+    //确定TCP链接是否禁用naggle算法
+    m_networkClient->m_disableNagle = m_tcpNoDelayCheckBox->isChecked();
 
     //移动到子线程当中
     m_networkClient->moveToThread(m_networkThread);
@@ -256,7 +258,7 @@ void GUI::onConnectServer()
     m_serverIpLineEdit->setEnabled(false);
     m_openExcelButton->setEnabled(true);
     m_openSerialButton->setEnabled(false);
-    m_saveErrorDataCheckBox->setEnabled(false);
+    m_tcpNoDelayCheckBox->setEnabled(false);
     m_sendWithAN3CheckBox->setEnabled(false);
 }
 
@@ -298,7 +300,7 @@ void GUI::onDisconnectServer()
     m_openSerialButton->setEnabled(true);
     m_sendSerialButton->setEnabled(false);
     m_sendExcelButton->setEnabled(false);
-    m_saveErrorDataCheckBox->setEnabled(true);
+    m_tcpNoDelayCheckBox->setEnabled(true);
     m_sendWithAN3CheckBox->setEnabled(true);
 }
 
@@ -470,7 +472,7 @@ void GUI::onOpenSerial()
     m_stopBitsComboBox->setEnabled(false);
     m_parityComboBox->setEnabled(false);
     m_openExcelButton->setEnabled(true);
-    m_saveErrorDataCheckBox->setEnabled(false);
+    m_tcpNoDelayCheckBox->setEnabled(false);
     m_sendWithAN3CheckBox->setEnabled(false);
 }
 
@@ -521,7 +523,7 @@ void GUI::onSerialClosed()
     m_connectButton->setEnabled(true);
     m_sendSerialButton->setEnabled(false);
     m_sendExcelButton->setEnabled(false);
-    m_saveErrorDataCheckBox->setEnabled(true);
+    m_tcpNoDelayCheckBox->setEnabled(true);
     m_sendWithAN3CheckBox->setEnabled(true);
 }
 

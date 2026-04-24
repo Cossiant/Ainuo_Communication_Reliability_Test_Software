@@ -18,6 +18,13 @@ void NetworkClient::onNetworkConnected(int port, QHostAddress serverIP)
     if (m_tcpClient->waitForConnected(3000)) {
         m_connectedStatus = true;
         qDebug() << "网络连接成功！";
+        /*************************改动开始*****************************/
+        // 根据标志禁用 Nagle 算法
+        if (m_disableNagle) {
+            m_tcpClient->setSocketOption(QAbstractSocket::LowDelayOption, 1);
+            qDebug() << "已禁用 Nagle 算法 (TCP_NODELAY)";
+        }
+        /*************************改动结束*****************************/
     } else {
         qDebug() << "网络连接失败：" << m_tcpClient->errorString();
     }
