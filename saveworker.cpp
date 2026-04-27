@@ -61,6 +61,7 @@ void saveworker::initWriteFile(const QString &baseDir){
     m_stream.flush();
 }
 
+//写入到文件当中
 void saveworker::writeFile(const QString &text){
     QMutexLocker locker(&m_mutex);
 
@@ -72,6 +73,7 @@ void saveworker::writeFile(const QString &text){
     m_stream.flush();  // 立即刷新到磁盘，确保数据不丢失
 }
 
+//关闭文件
 void saveworker::closeWriteFile(){
     QMutexLocker locker(&m_mutex);
 
@@ -86,4 +88,44 @@ void saveworker::closeWriteFile(){
         qDebug() << "LogWriter: 日志文件已关闭。";
     }
 }
+//***************************************************************************************************//
+//将数据写入到table当中
+// 设置待写入表格的数据（由外部在收到回读时调用）
+void saveworker::setPendingTableData(const QString &data)
+{
+    QMutexLocker locker(&m_mutex);
+    m_pendingTableData = data;
+}
 
+// 重置写入行号（例如开始新一次发送流程时调用）
+void saveworker::resetTableWritePosition()
+{
+    QMutexLocker locker(&m_mutex);
+    m_tableWriteRow = 0;
+}
+
+// 实现：将暂存的数据写入表格第二列，行号自增
+void saveworker::writeDataToTable(QTableWidget *excelTable)
+{
+    if (!excelTable)
+        return;
+
+    QMutexLocker locker(&m_mutex);
+
+    // 如果没有待写数据，直接返回
+    if (m_pendingTableData.isEmpty())
+        return;
+
+    // 确保表格有足够的行
+    if (m_tableWriteRow >= excelTable->rowCount()) {
+        excelTable->setRowCount(m_tableWriteRow + 1);
+    }
+
+    // 创建表格项并设置到第 m_tableWriteRow 行、第 1 列（索引1，即第二列）
+    QTableWidgetItem *item = new QTableWidgetItem(m_pendingTableData);
+    excelTable->setItem(m_tableWriteRow, 1, item);
+
+    // 递增行号，清空待写数据
+    ++m_tableWriteRow;
+    m_pendingTableData.clear();
+}

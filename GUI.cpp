@@ -107,10 +107,12 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     m_sendSerialButton = new QPushButton(tr("通过串口发送excel命令"));
     m_stopSendSerialButton = new QPushButton(tr("停止串口发送excel命令"));
     m_GUIClearButton = new QPushButton(tr("清空发送与接受区数据"));
+    m_sendNetWorkAndReadRecordButton = new QPushButton(tr("发送并保存回读参数Network"));
+    m_sendSerialAndReadRecordButton = new QPushButton(tr("发送并保存回读参数Serial"));
 
     m_sendWithAN3CheckBox = new QCheckBox(tr("使用AN3.0发送"));
     m_tcpNoDelayCheckBox = new QCheckBox(tr("TCP发送禁用nagle算法"));
-    m_testPacketLossCheckBox = new QCheckBox(tr("测试接受丢包情况"));
+    m_testPacketLossCheckBox = new QCheckBox(tr("测试接收丢包情况"));
     m_onlySendDataModeCheckBox = new QCheckBox(tr("只发送，不统计错误率"));
 
     //初始化模式为测试丢包情况，一行一行对照(如果发生错误证明丢包了)（如果没勾选发生错误证明返回值错误）
@@ -131,17 +133,21 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     m_tcpNoDelayCheckBox->setEnabled(true);
     m_sendWithAN3CheckBox->setEnabled(true);
     m_GUIClearButton->setEnabled(true);
+    m_sendNetWorkAndReadRecordButton->setEnabled(false);
+    m_sendSerialAndReadRecordButton->setEnabled(false);
 
     connect(m_openExcelButton, SIGNAL(clicked()), this, SLOT(onOpenExcelClicked()));//信号量链接
     connect(m_connectButton, SIGNAL(clicked()), this, SLOT(onConnectServer()));//信号量链接
-    connect(m_sendExcelButton, SIGNAL(clicked()), this, SLOT(onStartSendExcel()));//信号量链接
+    connect(m_sendExcelButton, &QPushButton::clicked, this, [this]() {onStartSendExcel(false);});
     connect(m_disconnectButton, SIGNAL(clicked()), this, SLOT(onDisconnectServer()));//信号量链接
     connect(m_stopSendExcelButton, SIGNAL(clicked()), this, SLOT(onStopSendExcel()));//信号量链接
     connect(m_openSerialButton, SIGNAL(clicked()), this, SLOT(onOpenSerial()));
     connect(m_closeSerialButton, SIGNAL(clicked()), this, SLOT(onCloseSerial()));
-    connect(m_sendSerialButton,SIGNAL(clicked()),this,SLOT(onStartSendSerial()));
+    connect(m_sendSerialButton, &QPushButton::clicked, this, [this]() {onStartSendSerial(false);});
     connect(m_stopSendSerialButton,SIGNAL(clicked()),this,SLOT(onStopSendSerial()));
     connect(m_GUIClearButton,SIGNAL(clicked()),this,SLOT(clearGUI()));              //点击按钮清空GUI的发送和接受区域
+    connect(m_sendNetWorkAndReadRecordButton,SIGNAL(clicked()),this,SLOT(sendNetWorkAndReadRecordSlot()));
+    connect(m_sendSerialAndReadRecordButton,SIGNAL(clicked()),this,SLOT(sendSerialAndReadRecordSlot()));
 
     //将checkbox信号连接到辅助函数updateValidatorMode当中
     connect(m_testPacketLossCheckBox, &QCheckBox::toggled,this, &GUI::updateValidatorMode);
@@ -216,6 +222,8 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     m_mainLayout->addWidget(m_closeSerialButton, 8, 5, 1, 1);
 
     m_mainLayout->addWidget(m_GUIClearButton,9,0,1,2);
+    m_mainLayout->addWidget(m_sendNetWorkAndReadRecordButton,9,2,1,2);
+    m_mainLayout->addWidget(m_sendSerialAndReadRecordButton,9,4,1,2);
     // 设置第 0 列和第 1 列可拉伸，比例为 1:1
     m_mainLayout->setColumnStretch(0, 1);
     m_mainLayout->setColumnStretch(1, 1);
@@ -242,12 +250,28 @@ void GUI::onOpenExcelClicked()
                 //只有正确读取才能允许发送！
                 if (m_currentConnectionType == ConnectionType::Network) {
                     m_sendExcelButton->setEnabled(true);
+                    m_sendNetWorkAndReadRecordButton->setEnabled(true);
                 } else if (m_currentConnectionType == ConnectionType::Serial) {
                     m_sendSerialButton->setEnabled(true);
+                    m_sendSerialAndReadRecordButton->setEnabled(true);
                 }
             }
         }
     }
+}
+
+//发送命令并读取返回值作为比较值Network
+void GUI::sendNetWorkAndReadRecordSlot(){
+    qDebug()<<"发送并读取结果按钮已经点击！";
+    //只允许点击一次！
+    m_sendNetWorkAndReadRecordButton->setEnabled(false);
+    GUI::onStartSendExcel(true);
+}
+//发送命令并读取返回值作为比较值Serial
+void GUI::sendSerialAndReadRecordSlot(){
+    qDebug()<<"发送并读取结果按钮已经点击！";
+    m_sendSerialAndReadRecordButton->setEnabled(false);
+    GUI::onStartSendSerial(true);
 }
 
 //链接服务器
@@ -397,13 +421,14 @@ void GUI::onDisconnectServer()
     m_sendExcelButton->setEnabled(false);
     m_tcpNoDelayCheckBox->setEnabled(true);
     m_sendWithAN3CheckBox->setEnabled(true);
+    m_sendNetWorkAndReadRecordButton->setEnabled(false);
     LED::setLED(m_NetWorkLED, 0, 16);
 }
 //非阻塞式发送线程
-void GUI::onStartSendExcel()
+void GUI::onStartSendExcel(bool data = false)
 {
     qDebug() << "debug:onStartSendExcel 非阻塞线程启动";
-
+    m_sendAndReadRecordBool = data;
     // 首先禁止其他按钮状态
     //不允许在点击发送之后还可以读取excel！
     m_disconnectButton->setEnabled(false);
@@ -649,13 +674,14 @@ void GUI::onSerialClosed()
     m_sendExcelButton->setEnabled(false);
     m_tcpNoDelayCheckBox->setEnabled(true);
     m_sendWithAN3CheckBox->setEnabled(true);
+    m_sendSerialAndReadRecordButton->setEnabled(false);
     LED::setLED(m_SerialLED,0,16);
 }
 
 //串口发送启动
-void GUI::onStartSendSerial(){
+void GUI::onStartSendSerial(bool data = false){
     qDebug()<<"onStartSendSerial已触发!";
-
+    m_sendAndReadRecordBool = data;
     // 首先禁止其他按钮状态
     //不允许在点击发送之后还可以读取excel！
     m_disconnectButton->setEnabled(false);
@@ -774,15 +800,21 @@ void GUI::onDisplayReceivedData(QByteArray data)
     if (m_savedataWorker && m_savedataThread && m_savedataThread->isRunning()) {
         emit requestWriteSaveFile(displayText);
     }
+    //***************************************************************************************//
+    /*************************改动开始*****************************/
+    if (m_savedataWorker && m_sendAndReadRecordBool) {
+        m_savedataWorker->setPendingTableData(displayText);
+        m_savedataWorker->writeDataToTable(m_excelTableWidget);
+    }
+    /*************************改动结束*****************************/
+    //***************************************************************************************//
     // 显示在接收列表
     m_receiveListWidget->addItem("[" + currentTimeString() + "] " + displayText);
     const int maxItems = m_maxDisplayItems;
     while (m_receiveListWidget->count() > maxItems) {
         delete m_receiveListWidget->takeItem(0);
     }
-    /*************************改动开始*****************************/
     emit requestValidateData(data);
-    /*************************改动结束*****************************/
 }
 
 //用户使用AN3.0的时候使用这个辅助函数进行显示

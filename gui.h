@@ -50,9 +50,10 @@ private:
     ExcelSendWorker *m_excelSendWorker; //excel发送数据对象
     ResponseValidator *m_responseValidator; //验证返回值数据是否正确的对象
 
-    QQueue<QByteArray> m_expectedResponseQueue;   // 期望返回值队列
-    int m_errorCount = 0;                         // 错误计数
-    int m_maxDisplayItems = 300;        //限制最大显示条数为300
+    QQueue<QByteArray> m_expectedResponseQueue;     // 期望返回值队列
+    int m_errorCount = 0;                           // 错误计数
+    int m_maxDisplayItems = 300;                    //限制最大显示条数为300
+    bool m_sendAndReadRecordBool = false;           //发送并接受返回值初始状态为false
 
     enum class ConnectionType {
         None,
@@ -96,6 +97,9 @@ private:
     QPushButton *m_closeSerialButton;   //关闭串口按钮
     //其他按钮
     QPushButton *m_GUIClearButton;       //清空发送与接受按钮
+    QPushButton *m_sendNetWorkAndReadRecordButton;    //首先发送当前的命令，并将其读取到table当中（并不负责保存到excel当中！）
+    QPushButton *m_sendSerialAndReadRecordButton;    //首先发送当前的命令，并将其读取到table当中（并不负责保存到excel当中！）
+
     //选择是否AN3.0发送勾选框和是否只保存错误数据勾选框,添加测试丢包测试情况或正常模式
     QCheckBox *m_sendWithAN3CheckBox;
     QCheckBox *m_tcpNoDelayCheckBox;
@@ -160,11 +164,11 @@ private slots:
     void onDisconnectServer();                                                  //关闭网络链接电源信号量
     void successConnectServer();                                                //链接网络成功信号量，用来打开按钮
 
-    void onStartSendExcel();                                                    //发送excel表格当中命令信号量（网络）
+    void onStartSendExcel(bool data);                                                    //发送excel表格当中命令信号量（网络）
     void onStopSendExcel();                                                     //关闭发送excel命令信号量（手动，只负责发送信号）（网络）
     void onSendFinished();                                                      //负责清理excel发送完成后的变量（网络）
 
-    void onStartSendSerial();                                                   //发送excel表格当中命令信号量（串口）
+    void onStartSendSerial(bool data);                                                   //发送excel表格当中命令信号量（串口）
     void onStopSendSerial();                                                    //关闭发送excel命令信号量（串口）
     void onSerialSendFinished();                                                //负责清理excel发送完成后的变量（串口）
 
@@ -181,6 +185,9 @@ private slots:
     void onUpdateSentCount(int count);                                          //显示发送了多少条命令
 
     void clearGUI();                                                            //清空发送与接受区域的数据
+
+    void sendNetWorkAndReadRecordSlot();
+    void sendSerialAndReadRecordSlot();
 };
 
 #endif // GUI_H
