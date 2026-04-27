@@ -5,9 +5,10 @@ ResponseValidator::ResponseValidator(QObject *parent)
 {
 }
 
-void ResponseValidator::onSetTestPacketLossMode(bool enabled)
+void ResponseValidator::onSetTestPacketLossMode(bool enabled,bool onlySendDataMode)
 {
     m_testPacketLossMode = enabled;
+    m_onlySendDataMode = onlySendDataMode;
 }
 
 void ResponseValidator::onCommandSent(QByteArray expectedResponse)
@@ -18,9 +19,13 @@ void ResponseValidator::onCommandSent(QByteArray expectedResponse)
 
 void ResponseValidator::onDataReceived(QByteArray data)
 {
+    if(m_onlySendDataMode){
+        return;
+    }
     if (m_testPacketLossMode) {
         // 丢包测试模式：严格顺序对应，取出队首
-        expected = m_expectedQueue.dequeue();
+        //如果已经取值到最后一个，他还在发送，那么就是出现故障了，始终以最后一个值为正确值
+        if(!m_expectedQueue.isEmpty()) expected = m_expectedQueue.dequeue();
     } else {
         // 正常模式：丢弃所有前面的期望，只保留最后一个（最新发送的命令）
         // 首先，先判断队列是否是空，如果是空，证明在发送之后，读取到了2个以上的数据

@@ -14,7 +14,8 @@ public:
 
 public slots:
     // 设置丢包测试模式
-    void onSetTestPacketLossMode(bool enabled);
+    void onSetTestPacketLossMode(bool enabled,bool onlySendDataMode);
+
     // 接收到新命令的期望返回值
     void onCommandSent(QByteArray expectedResponse);
     // 接收到实际数据，进行比对
@@ -29,7 +30,8 @@ signals:
 private:
     QQueue<QByteArray> m_expectedQueue;
     bool m_testPacketLossMode = false;
-    QByteArray expected;
+    bool m_onlySendDataMode = false;
+    QByteArray expected;    
 };
 
 #endif // RESPONSEVALIDATOR_H

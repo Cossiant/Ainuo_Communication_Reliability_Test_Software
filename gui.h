@@ -100,6 +100,7 @@ private:
     QCheckBox *m_sendWithAN3CheckBox;
     QCheckBox *m_tcpNoDelayCheckBox;
     QCheckBox *m_testPacketLossCheckBox;
+    QCheckBox *m_onlySendDataModeCheckBox;
     static QString toHexDisplay(const QByteArray &data);    //当使用AN3.0的时候，显示函数用这个
     //数据显示框，例如执行了多少次这样的
     QLabel *m_delayLabel;               //命令发送延时提示Label
@@ -121,7 +122,11 @@ private:
     QComboBox *m_stopBitsComboBox;      //停止位
     QLabel *m_parityLabel;              //校验位Label
     QComboBox *m_parityComboBox;        //校验位
+    // 显示时间精度切换
+    QLabel *m_timePrecisionLabel;
+    QComboBox *m_timePrecisionComboBox;
 
+    QString currentTimeString() const;
 signals:
     void requestNetworkConnect(int port, QHostAddress serverIP);                //通知子线程网络链接启动了
     void requestSendNetworkData(QByteArray msg, int delayMS = 0);               //通知子线程发送数据
@@ -146,6 +151,8 @@ signals:
     void requestValidateData(QByteArray data);
     // 通知验证器重置
     void requestResetValidator();
+    // 设置验证器初始状态
+    void requestSetValidatorMode(bool testPacketLoss, bool onlySend);
 
 private slots:
     void onOpenExcelClicked();                                                  //打开excel信号量
@@ -163,6 +170,7 @@ private slots:
 
     void onCommandSent(int row, QByteArray expectedResponse);                   //命令发送之后，传递该命令对应的期望返回值，用来做判断错误
     void onErrorDetected();                                                     //处理验证器发现的错误
+    void updateValidatorMode();                                                 //辅助槽负责收集两个复选框状态并发射信号
 
     void onOpenSerial();                                                        //打开串口槽
     void onCloseSerial();                                                       //点击关闭信号槽
