@@ -4,12 +4,13 @@
 #include <QObject>
 #include <QTableWidget>
 #include <QThread>
-#include <QDebug>
 #include <atomic>
 #include <QTimer>
 #include <QCoreApplication>
 #include <QEventLoop>
 #include <QByteArray>
+#include <QElapsedTimer>
+#include <QDebug>
 
 class ExcelSendWorker : public QObject
 {
@@ -27,6 +28,7 @@ public:
 
     bool m_useHexSend;      // 是否使用十六进制发送
 
+    QElapsedTimer timer;    //精准定时器的timer变量
 public slots:
     void startNetworkWork();           // 原网络发送启动槽
     void stopNetworkWork();            // 原网络发送停止槽
@@ -46,6 +48,7 @@ signals:
 
 private:
     std::atomic<bool> m_stopFlag;
+    void interruptibleWait(int msec);   // 精确可中断延时
 };
 
 #endif // EXCELSENDWORKER_H

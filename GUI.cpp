@@ -14,6 +14,7 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     m_excelSendThread = new QThread;
     m_serialThread = new QThread;
     m_savedataThread= new QThread;
+    m_validatorThread = new QThread;
     //设置主窗口
     setWindowTitle(tr("Ainuo通用通讯可靠性测试软件"));
     resize(1000, 600);
@@ -38,6 +39,7 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     m_errorCountDisplayLabel = new QLabel(tr("0"));
     m_NetWorkLEDLabel = new QLabel(tr("网络连接状态"));
     m_SerialLEDLabel = new QLabel(tr("串口链接状态"));
+    m_timePrecisionLabel = new QLabel(tr("显示时间精度:"));
     //状态LED初始化
     m_NetWorkLED = new QLabel();
     m_SerialLED = new QLabel();
@@ -50,6 +52,7 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     m_dataBitsComboBox = new QComboBox(this);
     m_stopBitsComboBox = new QComboBox(this);
     m_parityComboBox = new QComboBox(this);
+    m_timePrecisionComboBox = new QComboBox(this);
 
     //这里获取当前串口端口号
     QList<QSerialPortInfo> portList = QSerialPortInfo::availablePorts();
@@ -66,16 +69,20 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     QStringList dataBits = {"5", "6", "7", "8"};
     QStringList stopBits = {"1", "1.5", "2"};
     QStringList parities = {"None", "Even", "Odd", "Space", "Mark"};
+
     //将列表内容添加到Combobox当中
     m_baudRateComboBox->addItems(baudRates);
     m_dataBitsComboBox->addItems(dataBits);
     m_stopBitsComboBox->addItems(stopBits);
     m_parityComboBox->addItems(parities);
+    m_timePrecisionComboBox->addItems({tr("毫秒 (hh:mm:ss.zzz)"), tr("微秒 (hh:mm:ss.zzzzzz)")});
+
     //初始化串口参数
     m_baudRateComboBox->setCurrentText("115200"); // 默认值
     m_dataBitsComboBox->setCurrentText("8");
     m_stopBitsComboBox->setCurrentText("1");
     m_parityComboBox->setCurrentText("None");
+    m_timePrecisionComboBox->setCurrentIndex(0);  // 默认毫秒
 
     //初始化LineEdit
     m_serverIpLineEdit = new QLineEdit;
@@ -103,7 +110,12 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
 
     m_sendWithAN3CheckBox = new QCheckBox(tr("使用AN3.0发送"));
     m_tcpNoDelayCheckBox = new QCheckBox(tr("TCP发送禁用nagle算法"));
+    m_testPacketLossCheckBox = new QCheckBox(tr("测试接受丢包情况"));
+    m_onlySendDataModeCheckBox = new QCheckBox(tr("只发送，不统计错误率"));
 
+    //初始化模式为测试丢包情况，一行一行对照(如果发生错误证明丢包了)（如果没勾选发生错误证明返回值错误）
+    m_testPacketLossCheckBox->setChecked(false);
+    m_onlySendDataModeCheckBox->setChecked(false);
 
     m_disconnectButton->setEnabled(false);
     m_connectButton->setEnabled(true);
@@ -130,6 +142,10 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     connect(m_sendSerialButton,SIGNAL(clicked()),this,SLOT(onStartSendSerial()));
     connect(m_stopSendSerialButton,SIGNAL(clicked()),this,SLOT(onStopSendSerial()));
     connect(m_GUIClearButton,SIGNAL(clicked()),this,SLOT(clearGUI()));              //点击按钮清空GUI的发送和接受区域
+
+    //将checkbox信号连接到辅助函数updateValidatorMode当中
+    connect(m_testPacketLossCheckBox, &QCheckBox::toggled,this, &GUI::updateValidatorMode);
+    connect(m_onlySendDataModeCheckBox, &QCheckBox::toggled,this, &GUI::updateValidatorMode);
 
     m_receiveListWidget = new QListWidget;                             //接受命令显示窗口
     m_sendListWidget = new QListWidget;                                //发送命令显示窗口
@@ -171,30 +187,35 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     m_mainLayout->addWidget(m_baudRateLabel, 4, 4, 1, 1);
     m_mainLayout->addWidget(m_baudRateComboBox, 4, 5, 1, 1);
 
-    m_mainLayout->addWidget(m_sendExcelButton, 5, 0, 1, 1);
-    m_mainLayout->addWidget(m_stopSendExcelButton, 5, 1, 1, 1);
+    m_mainLayout->addWidget(m_testPacketLossCheckBox,5,0,1,1);
+    m_mainLayout->addWidget(m_onlySendDataModeCheckBox, 5, 1, 1, 1);
     m_mainLayout->addWidget(m_sentCountLabel, 5, 2, 1, 1);
     m_mainLayout->addWidget(m_sentCountDisplayLabel, 5, 3, 1, 1);
     m_mainLayout->addWidget(m_stopBitsLabel, 5, 4, 1, 1);
     m_mainLayout->addWidget(m_dataBitsComboBox, 5, 5, 1, 1);
 
-    m_mainLayout->addWidget(m_sendSerialButton, 6, 0, 1, 1);
-    m_mainLayout->addWidget(m_stopSendSerialButton, 6, 1, 1, 1);
+    m_mainLayout->addWidget(m_timePrecisionLabel, 6, 0, 1, 1);
+    m_mainLayout->addWidget(m_timePrecisionComboBox, 6, 1, 1, 1);
     m_mainLayout->addWidget(m_errorCountLabel, 6, 2, 1, 1);
     m_mainLayout->addWidget(m_errorCountDisplayLabel, 6, 3, 1, 1);
     m_mainLayout->addWidget(m_parityLabel, 6, 4, 1, 1);
     m_mainLayout->addWidget(m_parityComboBox, 6, 5, 1, 1);
 
-    m_mainLayout->addWidget(m_GUIClearButton,7,0,1,2);
+    m_mainLayout->addWidget(m_sendExcelButton, 7, 0, 1, 1);
+    m_mainLayout->addWidget(m_stopSendExcelButton, 7, 1, 1, 1);
     m_mainLayout->addWidget(m_sendWithAN3CheckBox,7,2,1,1);
     m_mainLayout->addWidget(m_tcpNoDelayCheckBox,7,3,1,1);
     m_mainLayout->addWidget(m_dataBitsLabel, 7, 4, 1, 1);
     m_mainLayout->addWidget(m_stopBitsComboBox, 7, 5, 1, 1);
+
+    m_mainLayout->addWidget(m_sendSerialButton, 8, 0, 1, 1);
+    m_mainLayout->addWidget(m_stopSendSerialButton, 8, 1, 1, 1);
     m_mainLayout->addWidget(m_disconnectButton, 8, 2, 1, 1);
     m_mainLayout->addWidget(m_connectButton, 8, 3, 1, 1);
     m_mainLayout->addWidget(m_openSerialButton, 8, 4, 1, 1);
     m_mainLayout->addWidget(m_closeSerialButton, 8, 5, 1, 1);
 
+    m_mainLayout->addWidget(m_GUIClearButton,9,0,1,2);
     // 设置第 0 列和第 1 列可拉伸，比例为 1:1
     m_mainLayout->setColumnStretch(0, 1);
     m_mainLayout->setColumnStretch(1, 1);
@@ -236,6 +257,7 @@ void GUI::onConnectServer()
     //创建工作对象
     m_networkClient = new NetworkClient();
     m_savedataWorker = new saveworker();
+    m_responseValidator = new ResponseValidator;        //对比错误值对象
 
     //告诉Network接受和发送的数据在什么地方
     m_networkClient->contentListWidget = m_receiveListWidget;
@@ -246,10 +268,16 @@ void GUI::onConnectServer()
     //移动到子线程当中
     m_networkClient->moveToThread(m_networkThread);
     m_savedataWorker->moveToThread(m_savedataThread);
+    m_responseValidator->moveToThread(m_validatorThread);
 
     //链接信号函数，从GUI到NetworkClient
     connect(this, &GUI::requestNetworkConnect, m_networkClient, &NetworkClient::onNetworkConnected);
     connect(this, &GUI::requestSendNetworkData, m_networkClient, &NetworkClient::sendNetworkData);
+
+    // 连接信号：GUI -> Validator
+    connect(this, &GUI::requestEnqueueExpected, m_responseValidator, &ResponseValidator::onCommandSent);
+    connect(this, &GUI::requestValidateData, m_responseValidator, &ResponseValidator::onDataReceived);
+    connect(this, &GUI::requestResetValidator, m_responseValidator, &ResponseValidator::onReset);
     //链接信号函数，从NetWork到GUI
     connect(m_networkClient, &NetworkClient::displaySentData, this, &GUI::onDisplaySentData);
     connect(m_networkClient, &NetworkClient::displayReceivedData, this, &GUI::onDisplayReceivedData);
@@ -262,6 +290,12 @@ void GUI::onConnectServer()
     connect(m_networkClient, &NetworkClient::disConnectWithServer, this ,[this]{
         QMessageBox::warning(this, tr("连接错误"), tr("电源主动断开网络连接！"));
     });
+
+    // 连接复选框状态变化到验证器模式设置
+    connect(this, &GUI::requestSetValidatorMode,m_responseValidator, &ResponseValidator::onSetTestPacketLossMode);
+    // 连接验证器错误信号到 GUI 错误处理槽
+    connect(m_responseValidator, &ResponseValidator::errorDetected,this, &GUI::onErrorDetected);
+
     //链接信号，将GUI的启动、发送、结束信号进行链接
     connect(this,&GUI::requestInitSaveFile,m_savedataWorker,&saveworker::initWriteFile);
     connect(this,&GUI::requestWriteSaveFile,m_savedataWorker,&saveworker::writeFile);
@@ -270,6 +304,7 @@ void GUI::onConnectServer()
     //子线程启动
     m_networkThread->start();
     m_savedataThread->start();
+    m_validatorThread->start();
 
     //传递信号，启动Network和数据保存功能
     emit requestNetworkConnect(m_portLineEdit->text().toInt(), QHostAddress(m_serverIpLineEdit->text()));
@@ -309,10 +344,9 @@ void GUI::successConnectServer(){
 void GUI::onDisconnectServer()
 {
     qDebug() << "debug:onDisconnectServer已经触发";
+
+    // ---- 网络部分 ----
     if (m_networkClient) {
-        // 请求Network断开连接并清理，然后删除自身
-        // 可以添加一个信号槽，让Network自己删除
-        // 或者调用Network->deleteLater()，并退出线程
         m_networkClient->deleteLater();
         m_networkClient = nullptr;
     }
@@ -320,19 +354,37 @@ void GUI::onDisconnectServer()
         m_networkThread->quit();
         m_networkThread->wait();
     }
-    // 关闭日志文件并停止日志线程
+    qDebug() << "已断开网络连接";
+
+    // ---- 日志保存部分 ----
     if (m_savedataWorker) {
-        emit requestCloseSaveFile();
+        emit requestCloseSaveFile();  // 请求关闭文件（将在 savedata 线程中执行）
     }
     if (m_savedataThread && m_savedataThread->isRunning()) {
         m_savedataThread->quit();
         m_savedataThread->wait();
     }
-    qDebug()<<"文件已保存！";
-    qDebug() << "已断开网络连接";
-    // 重置选择发送方式状态
+    if (m_savedataWorker) {
+        m_savedataWorker->deleteLater();
+        m_savedataWorker = nullptr;
+    }
+    qDebug() << "文件已保存！";
+
+    /*************************改动开始*****************************/
+    // ---- 验证器部分 ----
+    if (m_responseValidator) {
+        m_responseValidator->deleteLater();
+        m_responseValidator = nullptr;
+    }
+    if (m_validatorThread && m_validatorThread->isRunning()) {
+        m_validatorThread->quit();
+        m_validatorThread->wait();
+    }
+    qDebug() << "错误判断线程已清理";
+    /*************************改动结束*****************************/
+
+    // ---- 界面重置 ----
     m_currentConnectionType = ConnectionType::None;
-    // 重置按钮状态
     m_disconnectButton->setEnabled(false);
     m_connectButton->setEnabled(true);
     m_portLineEdit->setEnabled(true);
@@ -345,9 +397,8 @@ void GUI::onDisconnectServer()
     m_sendExcelButton->setEnabled(false);
     m_tcpNoDelayCheckBox->setEnabled(true);
     m_sendWithAN3CheckBox->setEnabled(true);
-    LED::setLED(m_NetWorkLED,0,16);
+    LED::setLED(m_NetWorkLED, 0, 16);
 }
-
 //非阻塞式发送线程
 void GUI::onStartSendExcel()
 {
@@ -483,6 +534,9 @@ void GUI::onOpenSerial()
     m_savedataWorker = new saveworker();
     m_savedataWorker->moveToThread(m_savedataThread);
 
+    m_responseValidator = new ResponseValidator;        //对比错误值对象
+    m_responseValidator->moveToThread(m_validatorThread);
+
     // 连接信号：GUI 的 requestSerialOpen（带参） -> SerialWorker 的槽
     connect(this, &GUI::requestSerialOpen, m_serialWorker, &SerialWorker::onSerialStart);
     connect(this, &GUI::requestSerialClose, m_serialWorker, &SerialWorker::onSerialStop);
@@ -490,6 +544,14 @@ void GUI::onOpenSerial()
     connect(m_serialWorker, &SerialWorker::serialClosed, this, &GUI::onSerialClosed);
     connect(m_serialWorker, &SerialWorker::displaySentData, this, &GUI::onDisplaySentData);
     connect(m_serialWorker, &SerialWorker::displayReceivedData, this, &GUI::onDisplayReceivedData);
+    // 连接信号：GUI -> Validator
+    connect(this, &GUI::requestEnqueueExpected, m_responseValidator, &ResponseValidator::onCommandSent);
+    connect(this, &GUI::requestValidateData, m_responseValidator, &ResponseValidator::onDataReceived);
+    connect(this, &GUI::requestResetValidator, m_responseValidator, &ResponseValidator::onReset);
+    // 连接复选框状态变化到验证器模式设置
+    connect(this, &GUI::requestSetValidatorMode,m_responseValidator, &ResponseValidator::onSetTestPacketLossMode);
+    // 连接验证器错误信号到 GUI 错误处理槽
+    connect(m_responseValidator, &ResponseValidator::errorDetected,this, &GUI::onErrorDetected);
     //链接信号，将GUI的启动、发送、结束信号进行链接
     connect(this,&GUI::requestInitSaveFile,m_savedataWorker,&saveworker::initWriteFile);
     connect(this,&GUI::requestWriteSaveFile,m_savedataWorker,&saveworker::writeFile);
@@ -498,6 +560,7 @@ void GUI::onOpenSerial()
     // 启动子线程
     m_serialThread->start();
     m_savedataThread->start();
+    m_validatorThread->start();
 
     // ---------- 3. 发射信号，传递参数到工作线程 ----------
     emit requestSerialOpen(portName, baudRate, dataBits, parity, stopBits, flowControl);
@@ -544,16 +607,32 @@ void GUI::onSerialClosed()
         m_serialWorker->deleteLater();
         m_serialWorker = nullptr;
     }
-    // 关闭日志文件并停止日志线程
+    qDebug() << "已断开串口连接";
+    // ---- 日志保存部分 ----
     if (m_savedataWorker) {
-        emit requestCloseSaveFile();
+        emit requestCloseSaveFile();  // 请求关闭文件（将在 savedata 线程中执行）
     }
     if (m_savedataThread && m_savedataThread->isRunning()) {
         m_savedataThread->quit();
         m_savedataThread->wait();
     }
-    qDebug()<<"文件已保存！";
-    qDebug() << "已断开串口连接";
+    if (m_savedataWorker) {
+        m_savedataWorker->deleteLater();
+        m_savedataWorker = nullptr;
+    }
+    qDebug() << "文件已保存！";
+    /*************************改动开始*****************************/
+    // ---- 验证器部分 ----
+    if (m_responseValidator) {
+        m_responseValidator->deleteLater();
+        m_responseValidator = nullptr;
+    }
+    if (m_validatorThread && m_validatorThread->isRunning()) {
+        m_validatorThread->quit();
+        m_validatorThread->wait();
+    }
+    qDebug() << "错误判断线程已清理";
+    /*************************改动结束*****************************/
     // 重置选择发送方式状态
     m_currentConnectionType = ConnectionType::None;
     // 恢复界面控件
@@ -664,11 +743,11 @@ void GUI::onDisplaySentData(QByteArray msg)
 {
     QString displayText;
     if (m_sendWithAN3CheckBox->isChecked()) {
-        displayText = toHexDisplay(msg);          // 十六进制显示
+        displayText = toHexDisplay(msg);
     } else {
-        displayText = QString::fromUtf8(msg);     // 普通文本显示
+        displayText = QString::fromUtf8(msg);
     }
-    m_sendListWidget->addItem("[" + QTime::currentTime().toString("hh:mm:ss.zzz") + "] " + displayText);
+    m_sendListWidget->addItem("[" + currentTimeString() + "] " + displayText);
     // 限制最多显示条数
     const int maxItems = m_maxDisplayItems;
     while (m_sendListWidget->count() > maxItems) {
@@ -690,24 +769,20 @@ void GUI::onDisplayReceivedData(QByteArray data)
     } else {
         displayText = QString::fromUtf8(data);
     }
+
     // 保存到文件（保存的内容也可以根据需求选择格式，此处保持与显示一致）
     if (m_savedataWorker && m_savedataThread && m_savedataThread->isRunning()) {
         emit requestWriteSaveFile(displayText);
     }
     // 显示在接收列表
-    m_receiveListWidget->addItem("[" + QTime::currentTime().toString("hh:mm:ss.zzz") + "] " + displayText);
+    m_receiveListWidget->addItem("[" + currentTimeString() + "] " + displayText);
     const int maxItems = m_maxDisplayItems;
     while (m_receiveListWidget->count() > maxItems) {
         delete m_receiveListWidget->takeItem(0);
     }
-    // ---------- 错误判断（使用原始数据比较，不受显示格式影响）----------
-    if (!m_expectedResponseQueue.isEmpty()) {
-        QByteArray expected = m_expectedResponseQueue.dequeue();
-        if (data.trimmed() != expected.trimmed()) {
-            m_errorCount++;
-            m_errorCountDisplayLabel->setText(QString::number(m_errorCount));
-        }
-    }
+    /*************************改动开始*****************************/
+    emit requestValidateData(data);
+    /*************************改动结束*****************************/
 }
 
 //用户使用AN3.0的时候使用这个辅助函数进行显示
@@ -726,12 +801,19 @@ void GUI::onUpdateSentCount(int count)
     m_sentCountDisplayLabel->setText(QString::number(count));
 }
 
+//GUI显示出错了多少次
+void GUI::onErrorDetected()
+{
+    m_errorCount++;
+    m_errorCountDisplayLabel->setText(QString::number(m_errorCount));
+}
+
 //命令发送之后，传递该命令对应的期望返回值，用来做判断错误
 void GUI::onCommandSent(int row, QByteArray expectedResponse)
 {
     Q_UNUSED(row);
     //每次发送一条命令成功了就添加一条到队列里面
-    m_expectedResponseQueue.enqueue(expectedResponse);
+    emit requestEnqueueExpected(expectedResponse);
 }
 
 //清空发送与接受区域
@@ -741,13 +823,58 @@ void GUI::clearGUI(){
     m_sendListWidget->clear();
     m_receiveListWidget->clear();
 
+    // 清空验证器内部队列
+    emit requestResetValidator();
+
     // 清空期望返回值队列，防止残留数据干扰后续错误判断
-    m_expectedResponseQueue.clear();
     m_errorCount = 0;
     m_errorCountDisplayLabel->setText("0");
 
     // 注意：不重置已发送命令计数（m_sentCountDisplayLabel），
     // 因为那是全过程统计，与界面显示区无关
+}
+
+//传递信号到工作线程
+void GUI::updateValidatorMode()
+{
+    bool lossMode = m_testPacketLossCheckBox->isChecked();
+    bool onlySend = m_onlySendDataModeCheckBox->isChecked();
+    emit requestSetValidatorMode(lossMode, onlySend);
+}
+
+// 生成当前时间字符串，根据精度选择
+QString GUI::currentTimeString() const
+{
+    if (!m_timePrecisionComboBox)  // 防御
+        return QTime::currentTime().toString("hh:mm:ss.zzz");
+
+    bool useMicro = (m_timePrecisionComboBox->currentIndex() == 1);
+
+    // 使用 chrono 获取微秒精度时间
+    using namespace std::chrono;
+    auto now = system_clock::now();
+    auto now_us = duration_cast<microseconds>(now.time_since_epoch());
+    auto total_sec = now_us.count() / 1000000;
+    int hours   = (total_sec / 3600) % 24;
+    int minutes = (total_sec / 60) % 60;
+    int seconds = total_sec % 60;
+
+    if (useMicro) {
+        int microseconds = now_us.count() % 1000000;
+        return QString("%1:%2:%3.%4")
+                .arg(hours, 2, 10, QChar('0'))
+                .arg(minutes, 2, 10, QChar('0'))
+                .arg(seconds, 2, 10, QChar('0'))
+                .arg(microseconds, 6, 10, QChar('0'));
+    } else {
+        auto now_ms = duration_cast<milliseconds>(now.time_since_epoch());
+        int milliseconds = now_ms.count() % 1000;
+        return QString("%1:%2:%3.%4")
+                .arg(hours, 2, 10, QChar('0'))
+                .arg(minutes, 2, 10, QChar('0'))
+                .arg(seconds, 2, 10, QChar('0'))
+                .arg(milliseconds, 3, 10, QChar('0'));
+    }
 }
 
 GUI::~GUI()

@@ -25,6 +25,7 @@
 #include "serialworker.h"
 #include "saveworker.h"
 #include "led.h"
+#include "responsevalidator.h"
 
 class GUI : public QDialog
 {
@@ -39,11 +40,15 @@ private:
     QThread *m_excelSendThread;         //excel表格子线程
     QThread *m_serialThread;            //串口工作线程
     QThread *m_savedataThread;
+    //验证队列子线程
+    QThread *m_validatorThread;
+
     //主界面
     QGridLayout *m_mainLayout;          //主界面
     QTableWidget *m_excelTableWidget;   //读取excel的table
     ExcelReader *m_excelReader;         //被读取的excel对象
     ExcelSendWorker *m_excelSendWorker; //excel发送数据对象
+    ResponseValidator *m_responseValidator; //验证返回值数据是否正确的对象
 
     QQueue<QByteArray> m_expectedResponseQueue;   // 期望返回值队列
     int m_errorCount = 0;                         // 错误计数
@@ -91,9 +96,11 @@ private:
     QPushButton *m_closeSerialButton;   //关闭串口按钮
     //其他按钮
     QPushButton *m_GUIClearButton;       //清空发送与接受按钮
-    //选择是否AN3.0发送勾选框和是否只保存错误数据勾选框
+    //选择是否AN3.0发送勾选框和是否只保存错误数据勾选框,添加测试丢包测试情况或正常模式
     QCheckBox *m_sendWithAN3CheckBox;
     QCheckBox *m_tcpNoDelayCheckBox;
+    QCheckBox *m_testPacketLossCheckBox;
+    QCheckBox *m_onlySendDataModeCheckBox;
     static QString toHexDisplay(const QByteArray &data);    //当使用AN3.0的时候，显示函数用这个
     //数据显示框，例如执行了多少次这样的
     QLabel *m_delayLabel;               //命令发送延时提示Label
@@ -115,7 +122,11 @@ private:
     QComboBox *m_stopBitsComboBox;      //停止位
     QLabel *m_parityLabel;              //校验位Label
     QComboBox *m_parityComboBox;        //校验位
+    // 显示时间精度切换
+    QLabel *m_timePrecisionLabel;
+    QComboBox *m_timePrecisionComboBox;
 
+    QString currentTimeString() const;
 signals:
     void requestNetworkConnect(int port, QHostAddress serverIP);                //通知子线程网络链接启动了
     void requestSendNetworkData(QByteArray msg, int delayMS = 0);               //通知子线程发送数据
@@ -134,6 +145,15 @@ signals:
     void requestWriteSaveFile(const QString &text);                             //通知保存线程写入XX内容
     void requestCloseSaveFile();                                                //通知保存线程关闭
 
+    // 通知验证器入队新期望
+    void requestEnqueueExpected(QByteArray expectedResponse);
+    // 通知验证器处理收到的数据
+    void requestValidateData(QByteArray data);
+    // 通知验证器重置
+    void requestResetValidator();
+    // 设置验证器初始状态
+    void requestSetValidatorMode(bool testPacketLoss, bool onlySend);
+
 private slots:
     void onOpenExcelClicked();                                                  //打开excel信号量
     void onConnectServer();                                                     //网络链接到电源信号量
@@ -149,6 +169,8 @@ private slots:
     void onSerialSendFinished();                                                //负责清理excel发送完成后的变量（串口）
 
     void onCommandSent(int row, QByteArray expectedResponse);                   //命令发送之后，传递该命令对应的期望返回值，用来做判断错误
+    void onErrorDetected();                                                     //处理验证器发现的错误
+    void updateValidatorMode();                                                 //辅助槽负责收集两个复选框状态并发射信号
 
     void onOpenSerial();                                                        //打开串口槽
     void onCloseSerial();                                                       //点击关闭信号槽

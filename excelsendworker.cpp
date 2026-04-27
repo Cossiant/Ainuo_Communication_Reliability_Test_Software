@@ -25,15 +25,34 @@ static QByteArray stringToHexBytes(const QString &input)
 }
 
 // 延时函数（可被打断）
-void interruptibleWait(int msec)
+//void ExcelSendWorker::interruptibleWait(int msec)
+//{
+//    QTimer timer;
+//    timer.setTimerType(Qt::PreciseTimer);
+//    timer.start(msec);
+//    while (timer.remainingTime() > 0) {
+//        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+//    }
+//}
+
+//高精度延时
+void ExcelSendWorker::interruptibleWait(int msec)
 {
-    QTimer timer;
-    timer.setTimerType(Qt::PreciseTimer);
-    timer.start(msec);
-    while (timer.remainingTime() > 0) {
-        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+    if (msec <= 0) return;
+    timer.start();
+    while (!m_stopFlag && timer.elapsed() < msec) {
+        //        QThread::msleep(1);   // 睡眠1ms，释放CPU，同时足够细粒度
+        QThread::yieldCurrentThread();
     }
 }
+
+//阻塞式延时
+//void ExcelSendWorker::interruptibleWait(int msec) {
+//    timer.start();
+//    qint64 targetNs = static_cast<qint64>(msec) * 1000000LL;
+//    while (!m_stopFlag && timer.nsecsElapsed() < targetNs) {
+//    }
+//}
 
 // 网络 Excel 连续发送函数
 void ExcelSendWorker::startNetworkWork()
