@@ -105,6 +105,7 @@ private:
     QCheckBox *m_tcpNoDelayCheckBox;
     QCheckBox *m_testPacketLossCheckBox;
     QCheckBox *m_onlySendDataModeCheckBox;
+    QCheckBox *m_serialBufferCheckBox;  // 合并串口数据复选框
     static QString toHexDisplay(const QByteArray &data);    //当使用AN3.0的时候，显示函数用这个
     //数据显示框，例如执行了多少次这样的
     QLabel *m_delayLabel;               //命令发送延时提示Label

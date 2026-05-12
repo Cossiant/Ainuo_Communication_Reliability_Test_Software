@@ -10,6 +10,7 @@
 #include <QDebug>
 #include <QThread>
 #include <QTableWidget>
+#include <QTimer>
 
 class saveworker:public QObject
 {

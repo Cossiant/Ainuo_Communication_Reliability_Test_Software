@@ -114,6 +114,7 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     m_tcpNoDelayCheckBox = new QCheckBox(tr("TCP发送禁用nagle算法"));
     m_testPacketLossCheckBox = new QCheckBox(tr("测试接收丢包情况"));
     m_onlySendDataModeCheckBox = new QCheckBox(tr("只发送，不统计错误率"));
+    m_serialBufferCheckBox = new QCheckBox(tr("合并串口接收数据（20ms超时）"));
 
     //初始化模式为测试丢包情况，一行一行对照(如果发生错误证明丢包了)（如果没勾选发生错误证明返回值错误）
     m_testPacketLossCheckBox->setChecked(false);
@@ -224,6 +225,8 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     m_mainLayout->addWidget(m_GUIClearButton,9,0,1,2);
     m_mainLayout->addWidget(m_sendNetWorkAndReadRecordButton,9,2,1,2);
     m_mainLayout->addWidget(m_sendSerialAndReadRecordButton,9,4,1,2);
+
+    m_mainLayout->addWidget(m_serialBufferCheckBox, 10, 4, 1, 2);
     // 设置第 0 列和第 1 列可拉伸，比例为 1:1
     m_mainLayout->setColumnStretch(0, 1);
     m_mainLayout->setColumnStretch(1, 1);
@@ -569,6 +572,11 @@ void GUI::onOpenSerial()
     connect(m_serialWorker, &SerialWorker::serialClosed, this, &GUI::onSerialClosed);
     connect(m_serialWorker, &SerialWorker::displaySentData, this, &GUI::onDisplaySentData);
     connect(m_serialWorker, &SerialWorker::displayReceivedData, this, &GUI::onDisplayReceivedData);
+    /******************************************************修改位置V2.9版本********************************************************************************/
+    // 连接合并串口数据复选框到SerialWorker
+    connect(m_serialBufferCheckBox, &QCheckBox::toggled,m_serialWorker, &SerialWorker::setBufferMode);
+    QMetaObject::invokeMethod(m_serialWorker, "setBufferMode",Qt::QueuedConnection,Q_ARG(bool, m_serialBufferCheckBox->isChecked()));
+    /******************************************************修改位置V2.9版本********************************************************************************/
     // 连接信号：GUI -> Validator
     connect(this, &GUI::requestEnqueueExpected, m_responseValidator, &ResponseValidator::onCommandSent);
     connect(this, &GUI::requestValidateData, m_responseValidator, &ResponseValidator::onDataReceived);
