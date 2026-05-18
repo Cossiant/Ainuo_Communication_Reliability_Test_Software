@@ -27,6 +27,7 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     m_serverIpLabel = new QLabel(tr("电源的网络地址:"));
     m_portLabel = new QLabel(tr("端口号:"));
     m_delayLabel = new QLabel(tr("每条命令发送延时(ms)："));
+    m_timeoutLabel = new QLabel(tr("命令超时时间(ms):"));
     m_sendLimitLabel = new QLabel(tr("发送条数(0为一直循环):"));
     m_sentCountLabel = new QLabel(tr("总计发送命令："));
     m_sentCountDisplayLabel = new QLabel(tr("0"));
@@ -35,8 +36,12 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     m_dataBitsLabel = new QLabel(tr("串口数据位:"));
     m_stopBitsLabel = new QLabel(tr("串口停止位:"));
     m_parityLabel = new QLabel(tr("串口校验位:"));
+
     m_errorCountLabel = new QLabel(tr("返回错误次数:"));
     m_errorCountDisplayLabel = new QLabel(tr("0"));
+    m_errorTimeOutLabel = new QLabel(tr("超时错误次数:"));
+    m_errorTimeOutDisplayLabel = new QLabel(tr("0"));
+
     m_NetWorkLEDLabel = new QLabel(tr("网络连接状态"));
     m_SerialLEDLabel = new QLabel(tr("串口链接状态"));
     m_timePrecisionLabel = new QLabel(tr("显示时间精度:"));
@@ -88,12 +93,14 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     m_serverIpLineEdit = new QLineEdit;
     m_portLineEdit = new QLineEdit;
     m_delayLineEdit = new QLineEdit;
+    m_timeoutLineEdit = new QLineEdit;
     m_sendLimitLineEdit = new QLineEdit;
 
     //设置参数
     m_serverIpLineEdit->setText("127.0.0.1");
     m_portLineEdit->setText("20108");
     m_delayLineEdit->setText("50");
+    m_timeoutLineEdit->setText("50");
     m_sendLimitLineEdit->setText("0");
 
     //初始化按钮
@@ -110,7 +117,7 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     m_sendNetWorkAndReadRecordButton = new QPushButton(tr("发送并保存回读参数Network"));
     m_sendSerialAndReadRecordButton = new QPushButton(tr("发送并保存回读参数Serial"));
 
-    m_sendWithAN3CheckBox = new QCheckBox(tr("使用AN3.0发送"));
+    m_sendWithAN3CheckBox = new QCheckBox(tr("使用HEX发送(AN3.0)"));
     m_tcpNoDelayCheckBox = new QCheckBox(tr("TCP发送禁用nagle算法"));
     m_testPacketLossCheckBox = new QCheckBox(tr("测试接收丢包情况"));
     m_onlySendDataModeCheckBox = new QCheckBox(tr("只发送，不统计错误率"));
@@ -194,39 +201,43 @@ GUI::GUI(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
     m_mainLayout->addWidget(m_baudRateLabel, 4, 4, 1, 1);
     m_mainLayout->addWidget(m_baudRateComboBox, 4, 5, 1, 1);
 
-    m_mainLayout->addWidget(m_testPacketLossCheckBox,5,0,1,1);
-    m_mainLayout->addWidget(m_onlySendDataModeCheckBox, 5, 1, 1, 1);
+    m_mainLayout->addWidget(m_timeoutLabel,5,0,1,1);
+    m_mainLayout->addWidget(m_timeoutLineEdit, 5, 1, 1, 1);
     m_mainLayout->addWidget(m_sentCountLabel, 5, 2, 1, 1);
     m_mainLayout->addWidget(m_sentCountDisplayLabel, 5, 3, 1, 1);
     m_mainLayout->addWidget(m_stopBitsLabel, 5, 4, 1, 1);
     m_mainLayout->addWidget(m_dataBitsComboBox, 5, 5, 1, 1);
 
-    m_mainLayout->addWidget(m_timePrecisionLabel, 6, 0, 1, 1);
-    m_mainLayout->addWidget(m_timePrecisionComboBox, 6, 1, 1, 1);
+    m_mainLayout->addWidget(m_testPacketLossCheckBox,6,0,1,1);
+    m_mainLayout->addWidget(m_onlySendDataModeCheckBox, 6, 1, 1, 1);
     m_mainLayout->addWidget(m_errorCountLabel, 6, 2, 1, 1);
     m_mainLayout->addWidget(m_errorCountDisplayLabel, 6, 3, 1, 1);
     m_mainLayout->addWidget(m_parityLabel, 6, 4, 1, 1);
     m_mainLayout->addWidget(m_parityComboBox, 6, 5, 1, 1);
 
-    m_mainLayout->addWidget(m_sendExcelButton, 7, 0, 1, 1);
-    m_mainLayout->addWidget(m_stopSendExcelButton, 7, 1, 1, 1);
-    m_mainLayout->addWidget(m_sendWithAN3CheckBox,7,2,1,1);
-    m_mainLayout->addWidget(m_tcpNoDelayCheckBox,7,3,1,1);
+    m_mainLayout->addWidget(m_timePrecisionLabel, 7, 0, 1, 1);
+    m_mainLayout->addWidget(m_timePrecisionComboBox, 7, 1, 1, 1);
+    m_mainLayout->addWidget(m_errorTimeOutLabel,7,2,1,1);
+    m_mainLayout->addWidget(m_errorTimeOutDisplayLabel,7,3,1,1);
     m_mainLayout->addWidget(m_dataBitsLabel, 7, 4, 1, 1);
     m_mainLayout->addWidget(m_stopBitsComboBox, 7, 5, 1, 1);
 
-    m_mainLayout->addWidget(m_sendSerialButton, 8, 0, 1, 1);
-    m_mainLayout->addWidget(m_stopSendSerialButton, 8, 1, 1, 1);
-    m_mainLayout->addWidget(m_disconnectButton, 8, 2, 1, 1);
-    m_mainLayout->addWidget(m_connectButton, 8, 3, 1, 1);
-    m_mainLayout->addWidget(m_openSerialButton, 8, 4, 1, 1);
-    m_mainLayout->addWidget(m_closeSerialButton, 8, 5, 1, 1);
+    m_mainLayout->addWidget(m_sendExcelButton, 8, 0, 1, 1);
+    m_mainLayout->addWidget(m_stopSendExcelButton, 8, 1, 1, 1);
+    m_mainLayout->addWidget(m_sendWithAN3CheckBox,8,2,1,1);
+    m_mainLayout->addWidget(m_tcpNoDelayCheckBox,8,3,1,1);
+    m_mainLayout->addWidget(m_serialBufferCheckBox, 8, 4, 1, 2);
 
-    m_mainLayout->addWidget(m_GUIClearButton,9,0,1,2);
-    m_mainLayout->addWidget(m_sendNetWorkAndReadRecordButton,9,2,1,2);
-    m_mainLayout->addWidget(m_sendSerialAndReadRecordButton,9,4,1,2);
+    m_mainLayout->addWidget(m_sendSerialButton, 9, 0, 1, 1);
+    m_mainLayout->addWidget(m_stopSendSerialButton, 9, 1, 1, 1);
+    m_mainLayout->addWidget(m_disconnectButton, 9, 2, 1, 1);
+    m_mainLayout->addWidget(m_connectButton, 9, 3, 1, 1);
+    m_mainLayout->addWidget(m_openSerialButton, 9, 4, 1, 1);
+    m_mainLayout->addWidget(m_closeSerialButton, 9, 5, 1, 1);
 
-    m_mainLayout->addWidget(m_serialBufferCheckBox, 10, 4, 1, 2);
+    m_mainLayout->addWidget(m_GUIClearButton,10,0,1,2);
+    m_mainLayout->addWidget(m_sendNetWorkAndReadRecordButton,10,2,1,2);
+    m_mainLayout->addWidget(m_sendSerialAndReadRecordButton,10,4,1,2);
     // 设置第 0 列和第 1 列可拉伸，比例为 1:1
     m_mainLayout->setColumnStretch(0, 1);
     m_mainLayout->setColumnStretch(1, 1);
@@ -327,6 +338,8 @@ void GUI::onConnectServer()
     connect(this,&GUI::requestInitSaveFile,m_savedataWorker,&saveworker::initWriteFile);
     connect(this,&GUI::requestWriteSaveFile,m_savedataWorker,&saveworker::writeFile);
     connect(this,&GUI::requestCloseSaveFile,m_savedataWorker,&saveworker::closeWriteFile);
+    //链接信号，第二次执行时读取返回值的时候重置发送的位置编号
+    connect(this, &GUI::requestResetTableWrite, m_savedataWorker, &saveworker::resetTableWritePosition);
 
     //子线程启动
     m_networkThread->start();
@@ -432,6 +445,10 @@ void GUI::onStartSendExcel(bool data = false)
 {
     qDebug() << "debug:onStartSendExcel 非阻塞线程启动";
     m_sendAndReadRecordBool = data;
+    //主要目的是为了避免二次获取正确值的时候返回内容不正确
+    if (data) {
+        resetTableForReadRecord();   // 覆盖模式时清空旧数据并重置写入位置
+    }
     // 首先禁止其他按钮状态
     //不允许在点击发送之后还可以读取excel！
     m_disconnectButton->setEnabled(false);
@@ -455,15 +472,25 @@ void GUI::onStartSendExcel(bool data = false)
     //传递要发送的数据到excel发送work
     m_excelSendWorker->m_table = m_excelTableWidget;                                    //传递发送的表格table
     m_excelSendWorker->m_totalRows = m_excelReader->totalRows;                          //传递表格的行数
-    m_excelSendWorker->m_delayMs = m_delayLineEdit->text().toInt();                     //传递延时时间
-    m_excelSendWorker->m_repeatLimit = m_sendLimitLineEdit->text().toInt();             //传递发送次数限制
+    m_excelSendWorker->m_delayMs  = m_delayLineEdit->text().toInt();//传递延时时间
+    m_excelSendWorker->m_timeoutMs = m_timeoutLineEdit->text().toInt();//传递延时时间
     m_excelSendWorker->m_useHexSend = m_sendWithAN3CheckBox->isChecked();               //是否用AN3.0发送
+
+    //如果点击了保存回读参数的按钮
+    if (data) {
+        // 发送并保存回读参数模式：强制发送次数 = 表格总行数
+        m_excelSendWorker->m_repeatLimit = m_excelReader->totalRows;
+    } else {
+        // 普通发送模式：使用用户输入的次数
+        m_excelSendWorker->m_repeatLimit = m_sendLimitLineEdit->text().toInt();
+    }
 
     //移动到子线程当中
     m_excelSendWorker->moveToThread(m_excelSendThread);
 
     //链接信号与槽
     connect(this, &GUI::requestStartSend, m_excelSendWorker, &ExcelSendWorker::startNetworkWork);
+
     // 关键：使用直接连接，让 stopWork 在 GUI 线程被调用
     //    Qt 有几种连接方式（Qt::ConnectionType）：
     //    Qt::AutoConnection（默认）：若发送者与接收者在同一线程，则为直接连接（Qt::DirectConnection）；若在不同线程，则为队列连接（Qt::QueuedConnection）。
@@ -476,6 +503,9 @@ void GUI::onStartSendExcel(bool data = false)
     connect(m_excelSendWorker, &ExcelSendWorker::sentCountChanged, this, &GUI::onUpdateSentCount);
     //接受发送错误数据统计
     connect(m_excelSendWorker, &ExcelSendWorker::commandSent, this, &GUI::onCommandSent);
+    connect(m_excelSendWorker,&ExcelSendWorker::sendTimeOut,this ,&GUI::onErrorTimeOut);
+    //实现方式是将网络收到信息的信号连接到这里
+    connect(m_networkClient, &NetworkClient::displayReceivedData,m_excelSendWorker, &ExcelSendWorker::onExternalResponseReceived,Qt::DirectConnection);
     //子线程启动
     m_excelSendThread->start();
 
@@ -497,6 +527,10 @@ void GUI::onStopSendExcel()
 void GUI::onSendFinished()
 {
     qDebug() << "发送线程结束，开始清理资源";
+    //首先先断开信号链接，主要是
+    if (m_networkClient && m_excelSendWorker) {
+        disconnect(m_networkClient, &NetworkClient::displayReceivedData,m_excelSendWorker, &ExcelSendWorker::onExternalResponseReceived);
+    }
     if (m_excelSendWorker) {
         m_excelSendWorker->deleteLater();
         m_excelSendWorker = nullptr;
@@ -589,6 +623,8 @@ void GUI::onOpenSerial()
     connect(this,&GUI::requestInitSaveFile,m_savedataWorker,&saveworker::initWriteFile);
     connect(this,&GUI::requestWriteSaveFile,m_savedataWorker,&saveworker::writeFile);
     connect(this,&GUI::requestCloseSaveFile,m_savedataWorker,&saveworker::closeWriteFile);
+    //链接信号，第二次执行时读取返回值的时候重置发送的位置编号
+    connect(this, &GUI::requestResetTableWrite, m_savedataWorker, &saveworker::resetTableWritePosition);
 
     // 启动子线程
     m_serialThread->start();
@@ -690,6 +726,9 @@ void GUI::onSerialClosed()
 void GUI::onStartSendSerial(bool data = false){
     qDebug()<<"onStartSendSerial已触发!";
     m_sendAndReadRecordBool = data;
+    if (data) {
+        resetTableForReadRecord();
+    }
     // 首先禁止其他按钮状态
     //不允许在点击发送之后还可以读取excel！
     m_disconnectButton->setEnabled(false);
@@ -713,15 +752,25 @@ void GUI::onStartSendSerial(bool data = false){
     //传递要发送的数据到excel发送work
     m_excelSendWorker->m_table = m_excelTableWidget;                                    //传递发送的表格table
     m_excelSendWorker->m_totalRows = m_excelReader->totalRows;                          //传递表格的行数
-    m_excelSendWorker->m_delayMs = m_delayLineEdit->text().toInt();                     //传递延时时间
-    m_excelSendWorker->m_repeatLimit = m_sendLimitLineEdit->text().toInt();             //传递发送次数限制
+    m_excelSendWorker->m_delayMs  = m_delayLineEdit->text().toInt();//传递延时时间
+    m_excelSendWorker->m_timeoutMs = m_timeoutLineEdit->text().toInt();//传递延时时间
     m_excelSendWorker->m_useHexSend = m_sendWithAN3CheckBox->isChecked();               //是否用AN3.0发送
+
+    //如果点击了保存回读参数的按钮
+    if (data) {
+        // 发送并保存回读参数模式：强制发送次数 = 表格总行数
+        m_excelSendWorker->m_repeatLimit = m_excelReader->totalRows;
+    } else {
+        // 普通发送模式：使用用户输入的次数
+        m_excelSendWorker->m_repeatLimit = m_sendLimitLineEdit->text().toInt();
+    }
 
     //移动到子线程当中
     m_excelSendWorker->moveToThread(m_excelSendThread);
 
     //链接信号与槽
     connect(this, &GUI::requestStartSend, m_excelSendWorker, &ExcelSendWorker::serialStartWork);
+
     // 关键：使用直接连接，让 stopWork 在 GUI 线程被调用
     //    Qt 有几种连接方式（Qt::ConnectionType）：
     //    Qt::AutoConnection（默认）：若发送者与接收者在同一线程，则为直接连接（Qt::DirectConnection）；若在不同线程，则为队列连接（Qt::QueuedConnection）。
@@ -734,6 +783,9 @@ void GUI::onStartSendSerial(bool data = false){
     connect(m_excelSendWorker, &ExcelSendWorker::serialSentCountChanged, this, &GUI::onUpdateSentCount);
     //接受发送错误数据统计
     connect(m_excelSendWorker, &ExcelSendWorker::commandSent, this, &GUI::onCommandSent);
+    connect(m_excelSendWorker,&ExcelSendWorker::sendTimeOut,this ,&GUI::onErrorTimeOut);
+    //实现方式是将网络收到信息的信号连接到这里
+    connect(m_serialWorker, &SerialWorker::displayReceivedData,m_excelSendWorker, &ExcelSendWorker::onExternalResponseReceived,Qt::DirectConnection);
     //子线程启动
     m_excelSendThread->start();
 
@@ -753,6 +805,10 @@ void GUI::onStopSendSerial(){
 
 void GUI::onSerialSendFinished(){
     qDebug()<<"onSerialSendFinished已触发!";
+    //清理信号量链接
+    if (m_serialWorker && m_excelSendWorker) {
+        disconnect(m_serialWorker, &SerialWorker::displayReceivedData,m_excelSendWorker, &ExcelSendWorker::onExternalResponseReceived);
+    }
     //收到停止信号后刷新
     if (m_excelSendWorker) {
         m_excelSendWorker->deleteLater();
@@ -848,6 +904,12 @@ void GUI::onErrorDetected()
     m_errorCountDisplayLabel->setText(QString::number(m_errorCount));
 }
 
+//GUI显示超时错误次数
+void GUI::onErrorTimeOut(){
+    m_errorTimeOut++;
+    m_errorTimeOutDisplayLabel->setText(QString::number(m_errorTimeOut));
+}
+
 //命令发送之后，传递该命令对应的期望返回值，用来做判断错误
 void GUI::onCommandSent(int row, QByteArray expectedResponse)
 {
@@ -869,9 +931,27 @@ void GUI::clearGUI(){
     // 清空期望返回值队列，防止残留数据干扰后续错误判断
     m_errorCount = 0;
     m_errorCountDisplayLabel->setText("0");
+    m_errorTimeOut = 0;
+    m_errorTimeOutDisplayLabel->setText("0");
 
     // 注意：不重置已发送命令计数（m_sentCountDisplayLabel），
     // 因为那是全过程统计，与界面显示区无关
+}
+
+//清理第二列返回正确值，重新获取
+void GUI::resetTableForReadRecord()
+{
+    // 清空表格第二列（返回值列）的所有内容
+    for (int row = 0; row < m_excelTableWidget->rowCount(); ++row) {
+        QTableWidgetItem *item = m_excelTableWidget->item(row, 1);
+        if (item) {
+            item->setText(QString());
+        } else {
+            m_excelTableWidget->setItem(row, 1, new QTableWidgetItem(QString()));
+        }
+    }
+    // 通知 saveworker 重置内部写入行号
+    emit requestResetTableWrite();
 }
 
 //传递信号到工作线程

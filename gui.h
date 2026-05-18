@@ -51,9 +51,10 @@ private:
     ResponseValidator *m_responseValidator; //验证返回值数据是否正确的对象
 
     QQueue<QByteArray> m_expectedResponseQueue;     // 期望返回值队列
-    int m_errorCount = 0;                           // 错误计数
-    int m_maxDisplayItems = 300;                    //限制最大显示条数为300
-    bool m_sendAndReadRecordBool = false;           //发送并接受返回值初始状态为false
+    int m_errorCount = 0;                           // 返回错误计数
+    int m_errorTimeOut = 0;                         // 超时错误计数
+    int m_maxDisplayItems = 300;                    // 限制最大显示条数为300
+    bool m_sendAndReadRecordBool = false;           // 发送并接受返回值初始状态为 false
 
     enum class ConnectionType {
         None,
@@ -110,12 +111,19 @@ private:
     //数据显示框，例如执行了多少次这样的
     QLabel *m_delayLabel;               //命令发送延时提示Label
     QLineEdit *m_delayLineEdit;         //命令发送延时输入框
+
+    QLabel *m_timeoutLabel;               //命令发送超时提示Label
+    QLineEdit *m_timeoutLineEdit;         //命令发送超时输入框
+
     QLabel *m_sendLimitLabel;           //限制发送条数（0一直跑），用于确保数据发送到一定程度自动停止
     QLineEdit *m_sendLimitLineEdit;     //限制的发送次数输入框
     QLabel *m_sentCountLabel;           //统计的发送命令提示Label
     QLabel *m_sentCountDisplayLabel;    //统计的发送命令总数显示Label
+
     QLabel *m_errorCountLabel;          //统计的返回错误数量提示Label
     QLabel *m_errorCountDisplayLabel;   //统计的返回错误数量显示
+    QLabel *m_errorTimeOutLabel;          //统计的返回错误数量提示Label
+    QLabel *m_errorTimeOutDisplayLabel;   //统计的返回错误数量显示
     //使用串口进行通讯
     QLabel *m_serialPortLabel;          //串口Label
     QComboBox *m_serialPortComboBox;    //串口端口号选择
@@ -150,6 +158,8 @@ signals:
     void requestWriteSaveFile(const QString &text);                             //通知保存线程写入XX内容
     void requestCloseSaveFile();                                                //通知保存线程关闭
 
+    void requestResetTableWrite();                                              // 请求 saveworker 重置表格写入行号
+
     // 通知验证器入队新期望
     void requestEnqueueExpected(QByteArray expectedResponse);
     // 通知验证器处理收到的数据
@@ -175,6 +185,7 @@ private slots:
 
     void onCommandSent(int row, QByteArray expectedResponse);                   //命令发送之后，传递该命令对应的期望返回值，用来做判断错误
     void onErrorDetected();                                                     //处理验证器发现的错误
+    void onErrorTimeOut();                                                      //超时错误处理
     void updateValidatorMode();                                                 //辅助槽负责收集两个复选框状态并发射信号
 
     void onOpenSerial();                                                        //打开串口槽
@@ -186,6 +197,7 @@ private slots:
     void onUpdateSentCount(int count);                                          //显示发送了多少条命令
 
     void clearGUI();                                                            //清空发送与接受区域的数据
+    void resetTableForReadRecord();                                             // 清空表格第二列并发出重置信号
 
     void sendNetWorkAndReadRecordSlot();
     void sendSerialAndReadRecordSlot();
