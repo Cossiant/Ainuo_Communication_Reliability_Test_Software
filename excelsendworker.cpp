@@ -2,7 +2,7 @@
 #include <QThread>
 
 ExcelSendWorker::ExcelSendWorker(QObject *parent)
-    : QObject(parent), m_stopFlag(false)
+    : QObject(parent)
 {
 }
 
@@ -35,17 +35,6 @@ static QByteArray stringToHexBytes(const QString &input)
 //    }
 //}
 
-//高精度延时
-void ExcelSendWorker::interruptibleWait(int msec)
-{
-    if (msec <= 0) return;
-    timer.start();
-    while (!m_stopFlag && timer.elapsed() < msec) {
-        //        QThread::msleep(1);   // 睡眠1ms，释放CPU，同时足够细粒度
-        QThread::yieldCurrentThread();
-    }
-}
-
 //阻塞式延时
 //void ExcelSendWorker::interruptibleWait(int msec) {
 //    timer.start();
@@ -54,10 +43,58 @@ void ExcelSendWorker::interruptibleWait(int msec)
 //    }
 //}
 
+//高精度延时
+//void ExcelSendWorker::interruptibleWait(int msec)
+//{
+//    if (msec <= 0) return;
+//    timer.start();
+//    //他的结束条件是m_stopFlag位
+//    while (!m_stopFlag && timer.elapsed() < msec) {
+//        //        QThread::msleep(1);   // 睡眠1ms，释放CPU，同时足够细粒度
+//        QThread::yieldCurrentThread();
+//    }
+//}
+
+//高精度延时（超时延时）
+//void ExcelSendWorker::timeoutWait(int msec)
+//{
+//    if (msec <= 0) return;
+//    timer.start();
+//    while (timer.elapsed() < msec) {
+//        QThread::yieldCurrentThread();
+//        //如果没有超时，那就直接退出了
+//        if(m_timeoutFlag) return;
+//    }
+//    //在这里发超时信号（这里就是超时的情况了）
+
+//}
+
+void ExcelSendWorker::integrationWait(int delay,int timeout){
+    if (delay <= 0) return;
+    if (timeout < delay) return;
+    timer.start();
+    //他的结束条件是m_stopFlag位
+    while (!m_stopFlag && timer.elapsed() < delay) {
+        QThread::yieldCurrentThread();
+    }
+    //如果发送等于超时，表明我要达成精确的发送时间
+    //如果手动停止那个也直接退出
+    if (delay == timeout || m_stopFlag) return;
+    //这种情况表明，发送延时已经满足了，现在进入超时等待环节
+    while (timer.elapsed() < timeout) {
+        //如果最终没有超过超时时间，那就直接退出了
+        if(m_timeoutFlag) return;
+        QThread::yieldCurrentThread();
+    }
+    //在这里发超时信号（这里就是超时的情况了）
+    sendTimeOut();
+}
+
 // 网络 Excel 连续发送函数
 void ExcelSendWorker::startNetworkWork()
 {
     m_stopFlag = false;
+    m_timeoutFlag = false;
     m_sentCount = 0;
     qDebug() << "网络发送函数已触发";
 
@@ -96,9 +133,12 @@ void ExcelSendWorker::startNetworkWork()
                     cmdToSend = cellText.toUtf8();   // 普通文本以 UTF-8 发送
                 }
 
-                emit sendCommand(cmdToSend, m_delayMs);
-                interruptibleWait(m_delayMs);
+                // 发送命令
+                emit sendCommand(cmdToSend);
+                integrationWait(m_delayMs,m_timeoutMs);
                 emit sentCountChanged(++m_sentCount);
+                //每次发送完毕都需要重制超时Flag
+                m_timeoutFlag = false;
             }
         }
     } else {
@@ -129,10 +169,11 @@ void ExcelSendWorker::startNetworkWork()
                 } else {
                     cmdToSend = cellText.toUtf8();
                 }
-                emit sendCommand(cmdToSend, m_delayMs);
-                interruptibleWait(m_delayMs);
+                emit sendCommand(cmdToSend);
+                integrationWait(m_delayMs,m_timeoutMs);
                 emit sentCountChanged(++m_sentCount);
-
+                //每次发送完毕都需要重制超时Flag
+                m_timeoutFlag = false;
             }
         }
     }
@@ -150,6 +191,7 @@ void ExcelSendWorker::stopNetworkWork()
 void ExcelSendWorker::serialStartWork()
 {
     m_stopFlag = false;
+    m_timeoutFlag = false;
     m_sentCount = 0;
     qDebug() << "串口发送函数已触发";
 
@@ -188,9 +230,12 @@ void ExcelSendWorker::serialStartWork()
                     cmdToSend = cellText.toUtf8();
                 }
 
-                emit sendSerialCommand(cmdToSend, m_delayMs);
-                interruptibleWait(m_delayMs);
+                // 发送命令
+                emit sendSerialCommand(cmdToSend);
+                integrationWait(m_delayMs,m_timeoutMs);
                 emit serialSentCountChanged(++m_sentCount);
+                //每次发送完毕都需要重制超时Flag
+                m_timeoutFlag = false;
             }
         }
     } else {
@@ -222,9 +267,12 @@ void ExcelSendWorker::serialStartWork()
                     cmdToSend = cellText.toUtf8();
                 }
 
-                emit sendSerialCommand(cmdToSend, m_delayMs);
-                interruptibleWait(m_delayMs);
+                // 发送命令
+                emit sendSerialCommand(cmdToSend);
+                integrationWait(m_delayMs,m_timeoutMs);
                 emit serialSentCountChanged(++m_sentCount);
+                //每次发送完毕都需要重制超时Flag
+                m_timeoutFlag = false;
             }
         }
     }
@@ -236,4 +284,11 @@ void ExcelSendWorker::serialStopWork()
 {
     qDebug() << "串口发送停止 Flag 设置完成";
     m_stopFlag = true;
+}
+
+// 停止超时（在 WORK 线程调用）
+void ExcelSendWorker::onExternalResponseReceived(const QByteArray &data)
+{
+    Q_UNUSED(data);
+    m_timeoutFlag = true;   // 原子操作，线程安全
 }
