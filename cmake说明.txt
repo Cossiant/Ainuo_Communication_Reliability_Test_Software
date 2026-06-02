@@ -1,0 +1,43 @@
+
+-DCMAKE_BUILD_TYPE=Debug -DQT_SDK_DIR=D:/Apps/Work/Qt/5.15.2/mingw81_64
+
+
+下面是cmakelist的示例
+cmake_minimum_required(VERSION 3.10)
+project(untitled)
+
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+set(CMAKE_AUTOUIC ON)
+
+set(CMAKE_PREFIX_PATH "D:/Apps/Work/Qt/5.15.2/mingw81_64")
+find_package(Qt5 COMPONENTS Core Gui Widgets REQUIRED)
+
+add_subdirectory(../ElaWidgetTools ${CMAKE_BINARY_DIR}/ElaWidgetTools)
+
+add_executable(untitled development/src/main.cpp
+        development/src/ElaWidgetToolsDemo.cpp
+        development/include/ElaWidgetToolsDemo.h
+)
+
+target_link_libraries(untitled
+        Qt5::Core Qt5::Gui Qt5::Widgets
+        ElaWidgetTools
+)
+
+# ① 复制 ElaWidgetTools DLL（如果是动态库）
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:ElaWidgetTools>"
+        "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
+        COMMENT "Copying ElaWidgetTools DLL..."
+)
+
+# ② windeployqt 部署 Qt 依赖
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND "D:/Apps/Work/Qt/5.15.2/mingw81_64/bin/windeployqt.exe"
+        --debug --no-translations
+        "$<TARGET_FILE:${PROJECT_NAME}>"
+        COMMENT "Running windeployqt..."
+)
