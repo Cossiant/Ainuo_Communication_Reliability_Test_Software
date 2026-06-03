@@ -15,6 +15,7 @@
 #include "ElaLineEdit.h"
 #include "ElaToggleSwitch.h"
 #include "ElaApplication.h"
+#include "ElaAcrylicUrlCard.h"
 
 // ═══════════════════════════════════════════════════════════════
 //  构造函数
@@ -72,7 +73,7 @@ void ElaWidgetToolsDemo::initPages()
     aboutTitle->setTextStyle(ElaTextType::Title);
 
     ElaText* aboutInfo = new ElaText(
-        "版本: v3.1.1\n"
+        "版本: v3.1.2\n"
         "作者: Cossiant\n\n"
         "基于 ElaWidgetTools 现代化 UI 框架\n"
         "基于 QXlsx 高性能 excel 读写框架\n"
@@ -130,7 +131,7 @@ void ElaWidgetToolsDemo::initWindow()
     setUserInfoCardTitle("Ainuo 通讯可靠性");
     setUserInfoCardSubTitle("Excel SCPI Sender");
     setUserInfoCardVisible(true);
-    setWindowTitle("Ainuo 通用通讯可靠性测试软件V3.1.1");
+    setWindowTitle("Ainuo 通用通讯可靠性测试软件V3.1.2");
 
     initPages();
     initNavigation();
@@ -621,28 +622,18 @@ void ElaWidgetToolsDemo::createErrorLogPage()
         "每条日志包含时间、行号、期望值和实际值。");
     desc->setTextPixelSize(16);
 
-    // 统计行
-    QHBoxLayout* statsRow = new QHBoxLayout();
-    statsRow->setSpacing(24);
+    // ========== 三张统计卡片 ==========
+    QHBoxLayout* cardRow = new QHBoxLayout();
+    cardRow->setSpacing(16);
 
-    ElaText* errLabel = new ElaText("返回值错误");
-    errLabel->setTextPixelSize(13);
-    ElaText* errCount = new ElaText("0");
-    errCount->setTextPixelSize(13);
-    m_errorCountDisplayLabel = errCount;   // 绑定到成员变量
+    m_errorCard     = new StatCard("返回值错误", "0", _errorLogPage);
+    m_timeoutCard   = new StatCard("超时错误",   "0", _errorLogPage);
+    m_totalSendCard = new StatCard("总计发送",   "0", _errorLogPage);
 
-    ElaText* timeoutLabel = new ElaText("超时错误");
-    timeoutLabel->setTextPixelSize(13);
-    ElaText* timeoutCount = new ElaText("0");
-    timeoutCount->setTextPixelSize(13);
-    m_errorTimeOutDisplayLabel = timeoutCount;  // 绑定到成员变量
-
-    statsRow->addWidget(errLabel);
-    statsRow->addWidget(errCount);
-    statsRow->addSpacing(32);
-    statsRow->addWidget(timeoutLabel);
-    statsRow->addWidget(timeoutCount);
-    statsRow->addStretch();
+    cardRow->addWidget(m_errorCard);
+    cardRow->addWidget(m_timeoutCard);
+    cardRow->addWidget(m_totalSendCard);
+    cardRow->addStretch();
 
     // 日志列表
     ElaText* logLabel = new ElaText("错误详情");
@@ -665,7 +656,7 @@ void ElaWidgetToolsDemo::createErrorLogPage()
 
     layout->addWidget(title);
     layout->addWidget(desc);
-    layout->addLayout(statsRow);
+    layout->addLayout(cardRow);
     layout->addWidget(logLabel);
     layout->addWidget(m_errorLogList, 1);
     layout->addLayout(btnRow);
@@ -1572,7 +1563,17 @@ void ElaWidgetToolsDemo::updateAllErrorDisplayLabels()
     if (m_dataPageErrorTimeOutLabel) {
         m_dataPageErrorTimeOutLabel->setText(toText);
     }
+
+    // ========== 新增：同步三张卡片 ==========
+    // 同步卡片
+    if (m_errorCard)
+        m_errorCard->setValue(QString::number(m_errorCount));
+    if (m_timeoutCard)
+        m_timeoutCard->setValue(QString::number(m_errorTimeOut));
+    if (m_totalSendCard && m_sentCountDisplayLabel)
+        m_totalSendCard->setValue(m_sentCountDisplayLabel->text());
 }
+
 // 更新发送计数
 void ElaWidgetToolsDemo::onUpdateSentCount(int count)
 {

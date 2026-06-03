@@ -2,6 +2,7 @@
 
 #include "ElaWindow.h"
 #include "ElaToggleSwitch.h"
+#include "ElaAcrylicUrlCard.h"
 
 #include <QFileDialog>
 #include <QCloseEvent>
@@ -13,6 +14,7 @@
 #include "saveworker.h"
 #include "led.h"
 #include "responsevalidator.h"
+#include "StatCard.h"
 
 // ========== ElaWidgetTools 组件前向声明 ==========
 class ElaText;
@@ -101,6 +103,9 @@ private:
     ElaText* m_errorCountDisplayLabel   = nullptr;
     ElaText* m_errorTimeOutLabel        = nullptr;
     ElaText* m_errorTimeOutDisplayLabel = nullptr;
+    StatCard* m_errorCard{nullptr};
+    StatCard* m_timeoutCard{nullptr};
+    StatCard* m_totalSendCard{nullptr};
     ElaText* m_NetWorkLEDLabel          = nullptr;
     ElaText* m_SerialLEDLabel           = nullptr;
     ElaText* m_timePrecisionLabel       = nullptr;
