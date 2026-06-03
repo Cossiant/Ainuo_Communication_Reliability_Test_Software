@@ -3,19 +3,8 @@
 #include "ElaWindow.h"
 #include "ElaToggleSwitch.h"
 
-// ========== 旧项目头文件（不变） ==========
-#include <QHostAddress>
-#include <QTableWidget>
-#include <QListWidget>
-#include <QQueue>
-#include <QThread>
-#include <QSerialPort>
-#include <QSerialPortInfo>
 #include <QFileDialog>
-#include <QGroupBox>
-#include <QScrollArea>
-#include <QTime>
-#include <chrono>
+#include <QCloseEvent>
 
 #include "readexceldata.h"
 #include "connectnetwork.h"
@@ -41,32 +30,36 @@ public:
     ElaWidgetToolsDemo(QWidget *parent = nullptr);
     ~ElaWidgetToolsDemo();
 
+protected:
+    virtual void closeEvent(QCloseEvent* event) override;
+
 private:
     // ═════════════ 页面 ═════════
-    QWidget* _dataPage;       // 数据收发页面
-    QWidget* _settingsPage;   // 通讯设置页面
+    QWidget* _dataPage;
+    QWidget* _settingsPage;
     QWidget* _aboutPage;
     QWidget* _debugPage;
+    QWidget* _singleSendPage;
 
-    // ═════════════ 子线程（不变） ═════════
+    // ═════════════ 子线程 ═════════
     QThread *m_networkThread;
     QThread *m_excelSendThread;
     QThread *m_serialThread;
     QThread *m_savedataThread;
     QThread *m_validatorThread;
 
-    // ═════════════ 核心 Worker / 控件（不变） ═════════
+    // ═════════════ 核心 Worker ═════════
     QTableWidget *m_excelTableWidget;
     QListWidget *m_receiveListWidget;
     QListWidget *m_sendListWidget;
-    ExcelReader *m_excelReader;
-    ExcelSendWorker *m_excelSendWorker;
-    NetworkClient *m_networkClient;
-    SerialWorker *m_serialWorker;
-    saveworker *m_savedataWorker;
-    ResponseValidator *m_responseValidator;
+    ExcelSendWorker *m_excelSendWorker = nullptr;
+    NetworkClient *m_networkClient = nullptr;
+    SerialWorker *m_serialWorker = nullptr;
+    saveworker *m_savedataWorker = nullptr;
+    ResponseValidator *m_responseValidator = nullptr;
+    ExcelReader *m_excelReader = nullptr;
 
-    // ═════════════ 数据变量（不变） ═════════
+    // ═════════════ 数据变量 ═════════
     QQueue<QByteArray> m_expectedResponseQueue;
     int m_errorCount = 0;
     int m_errorTimeOut = 0;
@@ -79,7 +72,8 @@ private:
     QFileDialog m_fileDialog;
 
     bool m_debugMode = false;
-    // ═════════════ LED（保持原生 QLabel） ═════════
+
+    // ═════════════ LED ═════════
     QLabel *m_NetWorkLED;
     QLabel *m_SerialLED;
 
@@ -114,6 +108,9 @@ private:
     ElaLineEdit *m_timeoutLineEdit;
     ElaLineEdit *m_sendLimitLineEdit;
 
+    // ═════════════ 单条发送 → ElaLineEdit ═════════
+    ElaLineEdit *m_singleSendInput = nullptr;
+
     // ═════════════ 下拉框 → ElaComboBox ═════════
     ElaComboBox *m_serialPortComboBox;
     ElaComboBox *m_baudRateComboBox;
@@ -143,6 +140,15 @@ private:
     ElaPushButton *m_sendNetWorkAndReadRecordButton;
     ElaPushButton *m_sendSerialAndReadRecordButton;
 
+    // ═════════════ 单条发送按钮 ═════════
+    ElaPushButton *m_singleSendNetBtn = nullptr;
+    ElaPushButton *m_singleSendSerialBtn = nullptr;
+    ElaPushButton *m_singleSendClearBtn = nullptr;
+
+    // ═════════════ 单条发送日志 ═════════
+    QListWidget *m_singleSendLog = nullptr;
+    QListWidget *m_singleRecvLog = nullptr;
+
     // ═════════════ 初始化方法 ═════════
     void initWindow();
     void initPages();
@@ -150,6 +156,7 @@ private:
     void initWindowConfig();
     void createDataPage();
     void createSettingsPage();
+    void createSingleSendPage();
     void createDebugPage();
     void applyDebugMode(bool enabled);
 
@@ -159,7 +166,7 @@ private:
     void setButtonsForNetworkMode();
     void setButtonsForSerialMode();
 
-    // ═════════════ 信号（和原来一模一样） ═════════
+    // ═════════════ 信号 ═════════
 signals:
     void requestNetworkConnect(int port, QHostAddress serverIP);
     void requestSendNetworkData(QByteArray msg, int delayMS = 0);
@@ -181,7 +188,7 @@ signals:
     void requestResetValidator();
     void requestSetValidatorMode(bool testPacketLoss, bool onlySend);
 
-    // ═════════════ 槽函数（和原来一模一样） ═════════
+    // ═════════════ 槽函数 ═════════
 private slots:
     void onOpenExcelClicked();
     void onConnectServer();
@@ -213,4 +220,7 @@ private slots:
     void resetTableForReadRecord();
     void sendNetWorkAndReadRecordSlot();
     void sendSerialAndReadRecordSlot();
+
+    void onSingleSendNetwork();
+    void onSingleSendSerial();
 };

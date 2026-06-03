@@ -1,6 +1,5 @@
 #include "../include/ElaWidgetToolsDemo.h"
 
-#include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGridLayout>
 #include <QGroupBox>
@@ -58,6 +57,7 @@ void ElaWidgetToolsDemo::initPages()
     createDataPage();
     createSettingsPage();
     createDebugPage();
+    createSingleSendPage();
 
     // ──── 关于页面 ────
     _aboutPage = new QWidget();
@@ -88,10 +88,11 @@ void ElaWidgetToolsDemo::initPages()
 // ═══════════════════════════════════════════════════════════════
 void ElaWidgetToolsDemo::initNavigation()
 {
+    addPageNode("单条发送", _singleSendPage, ElaIconType::Terminal);
     addPageNode("数据收发", _dataPage, ElaIconType::PaperPlane);
     addPageNode("通讯设置", _settingsPage, ElaIconType::Gear);
-    addPageNode("关于软件", _aboutPage, ElaIconType::CircleInfo);
     addPageNode("软件调试", _debugPage, ElaIconType::Bug);
+    addPageNode("关于软件", _aboutPage, ElaIconType::CircleInfo);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -507,6 +508,98 @@ void ElaWidgetToolsDemo::createSettingsPage()
             this, &ElaWidgetToolsDemo::updateValidatorMode);
 }
 // ═══════════════════════════════════════════════════════════════
+//  单条发送页面
+// ═══════════════════════════════════════════════════════════════
+void ElaWidgetToolsDemo::createSingleSendPage()
+{
+    _singleSendPage = new QWidget();
+    QVBoxLayout* layout = new QVBoxLayout(_singleSendPage);
+    layout->setSpacing(12);
+    layout->setContentsMargins(20, 16, 20, 16);
+
+    // ──── 标题 ────
+    ElaText* title = new ElaText("单条命令发送");
+    title->setTextPixelSize(20);
+    title->setTextStyle(ElaTextType::Title);
+
+    ElaText* desc = new ElaText(
+        "在此输入单条命令，通过网络或串口发送到设备。\n"
+        "发送和接收的结果将显示在下方日志区域。");
+    desc->setTextPixelSize(13);
+
+    // ──── 输入区域 ────
+    QGroupBox* inputGroup = new QGroupBox("命令输入");
+    QVBoxLayout* inputLayout = new QVBoxLayout(inputGroup);
+    inputLayout->setSpacing(8);
+
+    m_singleSendInput = new ElaLineEdit();
+    m_singleSendInput->setPlaceholderText("在此输入要发送的命令...");
+    m_singleSendInput->setFixedHeight(38);
+
+    QHBoxLayout* btnRow = new QHBoxLayout();
+    btnRow->setSpacing(12);
+
+    m_singleSendNetBtn = new ElaPushButton("通过网络发送");
+    m_singleSendNetBtn->setFixedSize(160, 38);
+    m_singleSendNetBtn->setEnabled(false);
+
+    m_singleSendSerialBtn = new ElaPushButton("通过串口发送");
+    m_singleSendSerialBtn->setFixedSize(160, 38);
+    m_singleSendSerialBtn->setEnabled(false);
+
+    btnRow->addWidget(m_singleSendNetBtn);
+    btnRow->addWidget(m_singleSendSerialBtn);
+    btnRow->addStretch();
+
+    inputLayout->addWidget(m_singleSendInput);
+    inputLayout->addLayout(btnRow);
+
+    // ──── 日志区域 ────
+    QHBoxLayout* logRow = new QHBoxLayout();
+    logRow->setSpacing(12);
+
+    QVBoxLayout* sendArea = new QVBoxLayout();
+    ElaText* sendLabel = new ElaText("发送日志");
+    sendLabel->setTextPixelSize(13);
+    m_singleSendLog = new QListWidget();
+    sendArea->addWidget(sendLabel);
+    sendArea->addWidget(m_singleSendLog);
+
+    QVBoxLayout* recvArea = new QVBoxLayout();
+    ElaText* recvLabel = new ElaText("接收日志");
+    recvLabel->setTextPixelSize(13);
+    m_singleRecvLog = new QListWidget();
+    recvArea->addWidget(recvLabel);
+    recvArea->addWidget(m_singleRecvLog);
+
+    logRow->addLayout(sendArea, 1);
+    logRow->addLayout(recvArea, 1);
+
+    // ──── 清空按钮 ────
+    QHBoxLayout* clearRow = new QHBoxLayout();
+    m_singleSendClearBtn = new ElaPushButton("清空日志");
+    m_singleSendClearBtn->setFixedSize(120, 36);
+    clearRow->addWidget(m_singleSendClearBtn);
+    clearRow->addStretch();
+
+    // ──── 组装 ────
+    layout->addWidget(title);
+    layout->addWidget(desc);
+    layout->addWidget(inputGroup);
+    layout->addLayout(logRow, 1);
+    layout->addLayout(clearRow);
+
+    // ════════════ 信号槽 ════════════
+    connect(m_singleSendNetBtn, &ElaPushButton::clicked,
+            this, &ElaWidgetToolsDemo::onSingleSendNetwork);
+    connect(m_singleSendSerialBtn, &ElaPushButton::clicked,
+            this, &ElaWidgetToolsDemo::onSingleSendSerial);
+    connect(m_singleSendClearBtn, &ElaPushButton::clicked, this, [=]() {
+        m_singleSendLog->clear();
+        m_singleRecvLog->clear();
+    });
+}
+// ═══════════════════════════════════════════════════════════════
 //  软件调试页面
 // ═══════════════════════════════════════════════════════════════
 void ElaWidgetToolsDemo::createDebugPage()
@@ -562,7 +655,6 @@ void ElaWidgetToolsDemo::createDebugPage()
 void ElaWidgetToolsDemo::applyDebugMode(bool enabled)
 {
     if (enabled) {
-        // ===== 强制启用所有数据收发按钮 =====
         m_openExcelButton->setEnabled(true);
         m_sendExcelButton->setEnabled(true);
         m_stopSendExcelButton->setEnabled(true);
@@ -571,9 +663,9 @@ void ElaWidgetToolsDemo::applyDebugMode(bool enabled)
         m_stopSendSerialButton->setEnabled(true);
         m_sendSerialAndReadRecordButton->setEnabled(true);
         m_GUIClearButton->setEnabled(true);
+        m_singleSendNetBtn->setEnabled(true);       // ← 新增
+        m_singleSendSerialBtn->setEnabled(true);    // ← 新增
     } else {
-        // ===== 恢复到正常逻辑 =====
-        // 先全部禁用
         m_openExcelButton->setEnabled(false);
         m_sendExcelButton->setEnabled(false);
         m_stopSendExcelButton->setEnabled(false);
@@ -581,10 +673,10 @@ void ElaWidgetToolsDemo::applyDebugMode(bool enabled)
         m_sendSerialButton->setEnabled(false);
         m_stopSendSerialButton->setEnabled(false);
         m_sendSerialAndReadRecordButton->setEnabled(false);
-        // GUIClearButton 始终可用
         m_GUIClearButton->setEnabled(true);
-        // 根据当前连接状态恢复按钮
-        // 如果有 Excel 数据已读取，且已连接，恢复对应按钮
+        m_singleSendNetBtn->setEnabled(false);      // ← 新增
+        m_singleSendSerialBtn->setEnabled(false);   // ← 新增
+
         if (m_excelReader && m_excelReader->totalRows > 0) {
             if (m_currentConnectionType == ConnectionType::Network) {
                 m_sendExcelButton->setEnabled(true);
@@ -650,6 +742,92 @@ void ElaWidgetToolsDemo::sendSerialAndReadRecordSlot()
     m_sendSerialAndReadRecordButton->setEnabled(false);
     onStartSendSerial(true);
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  单条发送 — 网络
+// ═══════════════════════════════════════════════════════════════
+void ElaWidgetToolsDemo::onSingleSendNetwork()
+{
+    QString text = m_singleSendInput->text().trimmed();
+    if (text.isEmpty()) {
+        return;
+    }
+
+    if (m_currentConnectionType != ConnectionType::Network || !m_networkClient) {
+        QMessageBox::warning(this, "提示", "请先在\"通讯设置\"中连接到网络！");
+        return;
+    }
+
+    QByteArray cmdToSend;
+    if (m_sendWithAN3CheckBox->isChecked()) {
+        QStringList parts = text.split(QRegExp("\\s+"), Qt::SkipEmptyParts);
+        for (const QString& part : parts) {
+            bool ok;
+            quint8 byte = static_cast<quint8>(part.toUInt(&ok, 16));
+            if (ok) {
+                cmdToSend.append(static_cast<char>(byte));
+            }
+        }
+    } else {
+        cmdToSend = text.toUtf8();
+    }
+
+    // ✅ 通过信号发送 → Qt 自动排队到 network 线程
+    emit requestSendNetworkData(cmdToSend);
+
+    // 日志在 GUI 线程更新，安全
+    QString displayText = m_sendWithAN3CheckBox->isChecked()
+        ? toHexDisplay(cmdToSend) : QString::fromUtf8(cmdToSend);
+    m_singleSendLog->addItem("[" + currentTimeString() + "] " + displayText);
+
+    while (m_singleSendLog->count() > m_maxDisplayItems) {
+        delete m_singleSendLog->takeItem(0);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  单条发送 — 串口
+// ═══════════════════════════════════════════════════════════════
+void ElaWidgetToolsDemo::onSingleSendSerial()
+{
+    QString text = m_singleSendInput->text().trimmed();
+    if (text.isEmpty()) {
+        return;
+    }
+
+    if (m_currentConnectionType != ConnectionType::Serial || !m_serialWorker) {
+        QMessageBox::warning(this, "提示", "请先在\"通讯设置\"中打开串口！");
+        return;
+    }
+
+    QByteArray cmdToSend;
+    if (m_sendWithAN3CheckBox->isChecked()) {
+        QStringList parts = text.split(QRegExp("\\s+"), Qt::SkipEmptyParts);
+        for (const QString& part : parts) {
+            bool ok;
+            quint8 byte = static_cast<quint8>(part.toUInt(&ok, 16));
+            if (ok) {
+                cmdToSend.append(static_cast<char>(byte));
+            }
+        }
+    } else {
+        cmdToSend = text.toUtf8();
+    }
+
+    // ✅ 通过 invokeMethod 排队到 serial 线程
+    QMetaObject::invokeMethod(m_serialWorker, "writeData",
+                              Qt::QueuedConnection,
+                              Q_ARG(QByteArray, cmdToSend));
+
+    QString displayText = m_sendWithAN3CheckBox->isChecked()
+        ? toHexDisplay(cmdToSend) : QString::fromUtf8(cmdToSend);
+    m_singleSendLog->addItem("[" + currentTimeString() + "] " + displayText);
+
+    while (m_singleSendLog->count() > m_maxDisplayItems) {
+        delete m_singleSendLog->takeItem(0);
+    }
+}
+
 
 // 连接服务器
 void ElaWidgetToolsDemo::onConnectServer()
@@ -745,10 +923,8 @@ void ElaWidgetToolsDemo::onConnectServer()
 // 连接成功
 void ElaWidgetToolsDemo::successConnectServer()
 {
-    // 这些状态始终需要更新
     m_currentConnectionType = ConnectionType::Network;
     LED::setLED(m_NetWorkLED, 2, 16);
-    // 这些在 debug 模式下跳过
     if (!m_debugMode) {
         m_disconnectButton->setEnabled(true);
         m_connectButton->setEnabled(false);
@@ -758,6 +934,8 @@ void ElaWidgetToolsDemo::successConnectServer()
         m_openSerialButton->setEnabled(false);
         m_tcpNoDelayCheckBox->setEnabled(false);
         m_sendWithAN3CheckBox->setEnabled(false);
+        m_singleSendNetBtn->setEnabled(true);       // ← 新增
+        m_singleSendSerialBtn->setEnabled(false);   // ← 新增
     }
 }
 
@@ -809,6 +987,7 @@ void ElaWidgetToolsDemo::onDisconnectServer()
     m_tcpNoDelayCheckBox->setEnabled(true);
     m_sendWithAN3CheckBox->setEnabled(true);
     m_sendNetWorkAndReadRecordButton->setEnabled(false);
+    m_singleSendNetBtn->setEnabled(false);
     LED::setLED(m_NetWorkLED, 0, 16);
 }
 
@@ -1012,6 +1191,8 @@ void ElaWidgetToolsDemo::onOpenSerial()
     m_openExcelButton->setEnabled(true);
     m_tcpNoDelayCheckBox->setEnabled(false);
     m_sendWithAN3CheckBox->setEnabled(false);
+    m_singleSendNetBtn->setEnabled(false);
+    m_singleSendSerialBtn->setEnabled(true);
     LED::setLED(m_SerialLED, 2, 16);
 }
 
@@ -1074,6 +1255,7 @@ void ElaWidgetToolsDemo::onSerialClosed()
     m_tcpNoDelayCheckBox->setEnabled(true);
     m_sendWithAN3CheckBox->setEnabled(true);
     m_sendSerialAndReadRecordButton->setEnabled(false);
+    m_singleSendSerialBtn->setEnabled(false);
     LED::setLED(m_SerialLED, 0, 16);
 }
 
@@ -1218,6 +1400,12 @@ void ElaWidgetToolsDemo::onDisplayReceivedData(QByteArray data)
         delete m_receiveListWidget->takeItem(0);
     }
 
+    if (m_singleRecvLog) {
+        m_singleRecvLog->addItem("[" + currentTimeString() + "] " + displayText);
+        while (m_singleRecvLog->count() > m_maxDisplayItems) {
+            delete m_singleRecvLog->takeItem(0);
+        }
+    }
     emit requestValidateData(data);
 }
 
@@ -1325,4 +1513,55 @@ QString ElaWidgetToolsDemo::currentTimeString() const
                 .arg(seconds, 2, 10, QChar('0'))
                 .arg(milliseconds, 3, 10, QChar('0'));
     }
+}
+// ═══════════════════════════════════════════════════════════════
+//  窗口关闭事件：确保所有子线程安全退出 只需要重写 closeEvent，在里面做收尾工作，剩下的 Qt 全部自动处理
+// ═══════════════════════════════════════════════════════════════
+void ElaWidgetToolsDemo::closeEvent(QCloseEvent* event)
+{
+    qDebug() << "窗口正在关闭，开始清理子线程...";
+
+    // ──── ① 停止发送线程 ────
+    if (m_excelSendWorker) {
+        // 先设置 stopFlag，让 while(!m_stopFlag) 退出
+        m_excelSendWorker->m_stopFlag = true;
+        // 再通知事件循环退出
+        emit requestStopSend();
+    }
+
+    // ──── ② 断开网络连接 ────
+    if (m_networkClient && m_currentConnectionType == ConnectionType::Network) {
+        emit requestStopSend();
+    }
+
+    // ──── ③ 关闭串口 ────
+    if (m_serialWorker && m_currentConnectionType == ConnectionType::Serial) {
+        emit requestSerialClose();
+    }
+
+    // ──── ④ 等待所有线程退出 ────
+    // 给线程 2 秒时间结束当前循环
+    if (m_excelSendThread && m_excelSendThread->isRunning()) {
+        m_excelSendThread->quit();
+        m_excelSendThread->wait(2000);
+    }
+    if (m_networkThread && m_networkThread->isRunning()) {
+        m_networkThread->quit();
+        m_networkThread->wait(2000);
+    }
+    if (m_serialThread && m_serialThread->isRunning()) {
+        m_serialThread->quit();
+        m_serialThread->wait(2000);
+    }
+    if (m_savedataThread && m_savedataThread->isRunning()) {
+        m_savedataThread->quit();
+        m_savedataThread->wait(2000);
+    }
+    if (m_validatorThread && m_validatorThread->isRunning()) {
+        m_validatorThread->quit();
+        m_validatorThread->wait(2000);
+    }
+
+    qDebug() << "所有子线程已退出，关闭窗口。";
+    event->accept();
 }
