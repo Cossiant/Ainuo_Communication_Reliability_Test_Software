@@ -1114,7 +1114,6 @@ void ElaWidgetToolsDemo::onStartSendExcel(bool data)
 
     m_expectedResponseQueue.clear();
     m_errorCount = 0;
-    m_errorCountDisplayLabel->setText("0");
 
     m_excelSendWorker = new ExcelSendWorker();
     m_excelSendWorker->m_table = m_excelTableWidget;
@@ -1382,7 +1381,6 @@ void ElaWidgetToolsDemo::onStartSendSerial(bool data)
 
     m_expectedResponseQueue.clear();
     m_errorCount = 0;
-    m_errorCountDisplayLabel->setText("0");
 
     m_excelSendWorker = new ExcelSendWorker();
     m_excelSendWorker->m_table = m_excelTableWidget;
@@ -1578,6 +1576,8 @@ void ElaWidgetToolsDemo::updateAllErrorDisplayLabels()
 void ElaWidgetToolsDemo::onUpdateSentCount(int count)
 {
     m_sentCountDisplayLabel->setText(QString::number(count));
+    if (m_totalSendCard && m_sentCountDisplayLabel)
+        m_totalSendCard->setValue(m_sentCountDisplayLabel->text());
 }
 
 // 错误检测
@@ -1590,11 +1590,12 @@ void ElaWidgetToolsDemo::onErrorDetected(QByteArray expected, QByteArray actual)
     QString expectedDisplay = bytesToDisplayText(expected);
     QString actualDisplay   = bytesToDisplayText(actual);
 
-    QString entry = QString("[%1] 第%2行 | 期望:\"%3\" | 实际:\"%4\"")
+    QString entry = QString("[%1] 第%2行 | 期望:\"%3\" | 实际:\"%4\" | 出错前已经发送:%5条")
         .arg(currentTimeString())
         .arg(m_currentRow + 1)     // 用户视角：第1行起
         .arg(expectedDisplay)
-        .arg(actualDisplay);
+        .arg(actualDisplay)
+        .arg(m_sentCountDisplayLabel->text());
 
     if (m_errorLogList) {
         m_errorLogList->addItem(entry);
