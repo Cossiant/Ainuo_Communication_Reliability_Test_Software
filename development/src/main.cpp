@@ -10,7 +10,7 @@ int main(int argc, char *argv[]) {
     qputenv("QT_SCALE_FACTOR","1");
     QApplication a(argc, argv);
     //eApp 是一个全局指针，eApp->init() 负责初始化 ElaWidgetTools 的主题、样式、配置等。必须在使用任何 Ela 控件之前调用
-    eApp->init();
+    ElaApplication::getInstance()->init();
     ElaWidgetToolsDemo w;
     w.show();
     return a.exec();
