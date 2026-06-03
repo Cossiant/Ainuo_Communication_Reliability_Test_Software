@@ -64,12 +64,12 @@ void ElaWidgetToolsDemo::initPages()
     QVBoxLayout* aboutLayout = new QVBoxLayout(_aboutPage);
     aboutLayout->setContentsMargins(30, 30, 30, 30);
 
-    ElaText* aboutTitle = new ElaText("Ainuo 通用通讯可靠性测试软件V3.0");
+    ElaText* aboutTitle = new ElaText("Ainuo 通用通讯可靠性测试软件V3.1.0");
     aboutTitle->setTextPixelSize(24);
     aboutTitle->setTextStyle(ElaTextType::Title);
 
     ElaText* aboutInfo = new ElaText(
-        "版本: v3.0.0\n"
+        "版本: v3.1.0\n"
         "作者: Cossiant\n\n"
         "基于 ElaWidgetTools 现代化 UI 框架\n"
         "支持网络 (TCP) 和串口通讯\n"
@@ -124,7 +124,7 @@ void ElaWidgetToolsDemo::initWindow()
     setUserInfoCardTitle("Ainuo 通讯可靠性");
     setUserInfoCardSubTitle("Excel SCPI Sender");
     setUserInfoCardVisible(true);
-    setWindowTitle("Ainuo 通用通讯可靠性测试软件V3.0.0");
+    setWindowTitle("Ainuo 通用通讯可靠性测试软件V3.1.0");
 
     initPages();
     initNavigation();
