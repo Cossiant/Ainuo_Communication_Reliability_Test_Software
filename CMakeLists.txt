@@ -25,6 +25,7 @@ find_package(Qt5 COMPONENTS
 )
 
 add_subdirectory(./ElaWidgetTools ${CMAKE_BINARY_DIR}/ElaWidgetTools)
+add_subdirectory(./QXlsx/QXlsx)
 
 add_executable(untitled WIN32
         development/src/main.cpp
@@ -53,6 +54,7 @@ target_link_libraries(untitled
         Qt5::SerialPort
         Qt5::Network
         Qt5::AxContainer
+        QXlsx::QXlsx
         ElaWidgetTools
 )
 

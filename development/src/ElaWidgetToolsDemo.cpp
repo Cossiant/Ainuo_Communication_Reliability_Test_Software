@@ -14,6 +14,7 @@
 #include "ElaComboBox.h"
 #include "ElaCheckBox.h"
 #include "ElaLineEdit.h"
+#include "ElaToggleSwitch.h"
 #include "ElaApplication.h"
 
 // ═══════════════════════════════════════════════════════════════
@@ -56,6 +57,7 @@ void ElaWidgetToolsDemo::initPages()
 {
     createDataPage();
     createSettingsPage();
+    createDebugPage();
 
     // ──── 关于页面 ────
     _aboutPage = new QWidget();
@@ -89,6 +91,7 @@ void ElaWidgetToolsDemo::initNavigation()
     addPageNode("数据收发", _dataPage, ElaIconType::PaperPlane);
     addPageNode("通讯设置", _settingsPage, ElaIconType::Gear);
     addPageNode("关于软件", _aboutPage, ElaIconType::CircleInfo);
+    addPageNode("软件调试", _debugPage, ElaIconType::Bug);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -127,19 +130,15 @@ void ElaWidgetToolsDemo::initWindow()
     initNavigation();
     initWindowConfig();
 }
-
-// ═══════════════════════════════════════════════════════════════
-//  创建主页面（核心 UI 搭建）
-// ═══════════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════════
-//  数据收发页面
-// ═══════════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════
 //  数据收发页面
 // ═══════════════════════════════════════════════════════════════
 void ElaWidgetToolsDemo::createDataPage()
 {
     _dataPage = new QWidget();
+    //一定要记得创建excelreader变量！否则就会引发崩溃
+    m_excelReader = new ExcelReader();
+
     QVBoxLayout* layout = new QVBoxLayout(_dataPage);
     layout->setSpacing(10);
     layout->setContentsMargins(16, 12, 16, 12);
@@ -507,7 +506,99 @@ void ElaWidgetToolsDemo::createSettingsPage()
     connect(m_onlySendDataModeCheckBox, &ElaCheckBox::toggled,
             this, &ElaWidgetToolsDemo::updateValidatorMode);
 }
-
+// ═══════════════════════════════════════════════════════════════
+//  软件调试页面
+// ═══════════════════════════════════════════════════════════════
+void ElaWidgetToolsDemo::createDebugPage()
+{
+    _debugPage = new QWidget();
+    QVBoxLayout* layout = new QVBoxLayout(_debugPage);
+    layout->setContentsMargins(30, 30, 30, 30);
+    ElaText* title = new ElaText("软件调试模式");
+    title->setTextPixelSize(24);
+    title->setTextStyle(ElaTextType::Title);
+    ElaText* desc = new ElaText(
+        "开启后，数据收发界面的所有按钮将解除限制，\n"
+        "无需连接网络或串口即可点击操作。\n"
+        "此模式仅用于软件调试，正常使用时请关闭。");
+    desc->setTextPixelSize(14);
+    // 开关行
+    QHBoxLayout* switchRow = new QHBoxLayout();
+    ElaText* switchLabel = new ElaText("调试模式");
+    switchLabel->setTextPixelSize(16);
+    ElaToggleSwitch* debugSwitch = new ElaToggleSwitch();
+    debugSwitch->setIsToggled(false);
+    switchRow->addWidget(switchLabel);
+    switchRow->addSpacing(12);
+    switchRow->addWidget(debugSwitch);
+    switchRow->addStretch();
+    // 状态提示
+    ElaText* statusLabel = new ElaText("当前状态：正常模式");
+    statusLabel->setTextPixelSize(14);
+    statusLabel->setObjectName("DebugStatusLabel");
+    layout->addWidget(title);
+    layout->addSpacing(8);
+    layout->addWidget(desc);
+    layout->addSpacing(20);
+    layout->addLayout(switchRow);
+    layout->addSpacing(8);
+    layout->addWidget(statusLabel);
+    layout->addStretch();
+    // 信号连接
+    connect(debugSwitch, &ElaToggleSwitch::toggled, this, [=](bool checked) {
+        m_debugMode = checked;
+        applyDebugMode(checked);
+        ElaText* label = _debugPage->findChild<ElaText*>("DebugStatusLabel");
+        if (label) {
+            label->setText(checked
+                ? "当前状态：调试模式（所有按钮已解锁）"
+                : "当前状态：正常模式");
+        }
+    });
+}
+// ═══════════════════════════════════════════════════════════════
+//  应用调试模式
+// ═══════════════════════════════════════════════════════════════
+void ElaWidgetToolsDemo::applyDebugMode(bool enabled)
+{
+    if (enabled) {
+        // ===== 强制启用所有数据收发按钮 =====
+        m_openExcelButton->setEnabled(true);
+        m_sendExcelButton->setEnabled(true);
+        m_stopSendExcelButton->setEnabled(true);
+        m_sendNetWorkAndReadRecordButton->setEnabled(true);
+        m_sendSerialButton->setEnabled(true);
+        m_stopSendSerialButton->setEnabled(true);
+        m_sendSerialAndReadRecordButton->setEnabled(true);
+        m_GUIClearButton->setEnabled(true);
+    } else {
+        // ===== 恢复到正常逻辑 =====
+        // 先全部禁用
+        m_openExcelButton->setEnabled(false);
+        m_sendExcelButton->setEnabled(false);
+        m_stopSendExcelButton->setEnabled(false);
+        m_sendNetWorkAndReadRecordButton->setEnabled(false);
+        m_sendSerialButton->setEnabled(false);
+        m_stopSendSerialButton->setEnabled(false);
+        m_sendSerialAndReadRecordButton->setEnabled(false);
+        // GUIClearButton 始终可用
+        m_GUIClearButton->setEnabled(true);
+        // 根据当前连接状态恢复按钮
+        // 如果有 Excel 数据已读取，且已连接，恢复对应按钮
+        if (m_excelReader && m_excelReader->totalRows > 0) {
+            if (m_currentConnectionType == ConnectionType::Network) {
+                m_sendExcelButton->setEnabled(true);
+                m_sendNetWorkAndReadRecordButton->setEnabled(true);
+            } else if (m_currentConnectionType == ConnectionType::Serial) {
+                m_sendSerialButton->setEnabled(true);
+                m_sendSerialAndReadRecordButton->setEnabled(true);
+            }
+        }
+        if (m_currentConnectionType != ConnectionType::None) {
+            m_openExcelButton->setEnabled(true);
+        }
+    }
+}
 // ═══════════════════════════════════════════════════════════════
 //  ============  以下所有业务逻辑方法从原 GUI.cpp 搬运  ==========
 //  ============  只改类名 GUI:: → ElaWidgetToolsDemo::  ==========
@@ -516,12 +607,14 @@ void ElaWidgetToolsDemo::createSettingsPage()
 // 读取 Excel 表格
 void ElaWidgetToolsDemo::onOpenExcelClicked()
 {
+    qDebug()<<"打开excel按钮被触发";
     m_fileDialog.setFileMode(QFileDialog::ExistingFile);
     m_fileDialog.setViewMode(QFileDialog::Detail);
     m_fileDialog.setOption(QFileDialog::ReadOnly, true);
     m_fileDialog.setDirectory("C:/");
     m_fileDialog.setNameFilter("所有文件(*.*);;Microsoft Excel工作表(*.xlsx);;Microsoft Excel 97-2003工作表(*.xls)");
 
+    /*先确保在这里不会崩溃*/
     if (m_fileDialog.exec()) {
         QStringList files = m_fileDialog.selectedFiles();
         for (auto fname : files) {
@@ -529,6 +622,7 @@ void ElaWidgetToolsDemo::onOpenExcelClicked()
                 QMessageBox::information(this, "提示",
                     QStringLiteral("Excel 文件读取完成！\n总行数：")
                     + QString::number(m_excelReader->totalRows));
+                if (m_debugMode) return;   // ← debug 模式不做任何限制
                 if (m_currentConnectionType == ConnectionType::Network) {
                     m_sendExcelButton->setEnabled(true);
                     m_sendNetWorkAndReadRecordButton->setEnabled(true);
@@ -651,16 +745,20 @@ void ElaWidgetToolsDemo::onConnectServer()
 // 连接成功
 void ElaWidgetToolsDemo::successConnectServer()
 {
+    // 这些状态始终需要更新
     m_currentConnectionType = ConnectionType::Network;
-    m_disconnectButton->setEnabled(true);
-    m_connectButton->setEnabled(false);
-    m_portLineEdit->setEnabled(false);
-    m_serverIpLineEdit->setEnabled(false);
-    m_openExcelButton->setEnabled(true);
-    m_openSerialButton->setEnabled(false);
-    m_tcpNoDelayCheckBox->setEnabled(false);
-    m_sendWithAN3CheckBox->setEnabled(false);
     LED::setLED(m_NetWorkLED, 2, 16);
+    // 这些在 debug 模式下跳过
+    if (!m_debugMode) {
+        m_disconnectButton->setEnabled(true);
+        m_connectButton->setEnabled(false);
+        m_portLineEdit->setEnabled(false);
+        m_serverIpLineEdit->setEnabled(false);
+        m_openExcelButton->setEnabled(true);
+        m_openSerialButton->setEnabled(false);
+        m_tcpNoDelayCheckBox->setEnabled(false);
+        m_sendWithAN3CheckBox->setEnabled(false);
+    }
 }
 
 // 断开连接

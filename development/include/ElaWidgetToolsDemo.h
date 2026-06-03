@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ElaWindow.h"
+#include "ElaToggleSwitch.h"
 
 // ========== 旧项目头文件（不变） ==========
 #include <QHostAddress>
@@ -30,6 +31,7 @@ class ElaPushButton;
 class ElaComboBox;
 class ElaCheckBox;
 class ElaLineEdit;
+class ElaToggleSwitch;
 
 class ElaWidgetToolsDemo : public ElaWindow
 {
@@ -44,6 +46,7 @@ private:
     QWidget* _dataPage;       // 数据收发页面
     QWidget* _settingsPage;   // 通讯设置页面
     QWidget* _aboutPage;
+    QWidget* _debugPage;
 
     // ═════════════ 子线程（不变） ═════════
     QThread *m_networkThread;
@@ -75,6 +78,7 @@ private:
 
     QFileDialog m_fileDialog;
 
+    bool m_debugMode = false;
     // ═════════════ LED（保持原生 QLabel） ═════════
     QLabel *m_NetWorkLED;
     QLabel *m_SerialLED;
@@ -146,6 +150,8 @@ private:
     void initWindowConfig();
     void createDataPage();
     void createSettingsPage();
+    void createDebugPage();
+    void applyDebugMode(bool enabled);
 
     // ═════════════ 辅助方法 ═════════
     static QString toHexDisplay(const QByteArray &data);
