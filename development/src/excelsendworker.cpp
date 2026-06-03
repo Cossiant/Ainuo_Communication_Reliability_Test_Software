@@ -11,7 +11,7 @@ static QByteArray stringToHexBytes(const QString &input)
 {
     QByteArray bytes;
     // 按空白字符分割（空格、制表符、换行等）
-    QStringList parts = input.split(QRegExp("\\s+"), Qt::SkipEmptyParts);
+    QStringList parts = input.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
     for (const QString &part : parts) {
         bool ok;
         quint8 byte = static_cast<quint8>(part.toUInt(&ok, 16));

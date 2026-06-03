@@ -64,14 +64,15 @@ void ElaWidgetToolsDemo::initPages()
     QVBoxLayout* aboutLayout = new QVBoxLayout(_aboutPage);
     aboutLayout->setContentsMargins(30, 30, 30, 30);
 
-    ElaText* aboutTitle = new ElaText("Ainuo 通用通讯可靠性测试软件V3.1.0");
+    ElaText* aboutTitle = new ElaText("Ainuo 通用通讯可靠性测试软件V3.1");
     aboutTitle->setTextPixelSize(24);
     aboutTitle->setTextStyle(ElaTextType::Title);
 
     ElaText* aboutInfo = new ElaText(
-        "版本: v3.1.0\n"
+        "版本: v3.1.1\n"
         "作者: Cossiant\n\n"
         "基于 ElaWidgetTools 现代化 UI 框架\n"
+        "基于 QXlsx 高性能 excel 读写框架\n"
         "支持网络 (TCP) 和串口通讯\n"
         "支持 Excel 命令批量发送与返回值验证");
     aboutInfo->setTextPixelSize(14);
@@ -125,7 +126,7 @@ void ElaWidgetToolsDemo::initWindow()
     setUserInfoCardTitle("Ainuo 通讯可靠性");
     setUserInfoCardSubTitle("Excel SCPI Sender");
     setUserInfoCardVisible(true);
-    setWindowTitle("Ainuo 通用通讯可靠性测试软件V3.1.0");
+    setWindowTitle("Ainuo 通用通讯可靠性测试软件V3.1.1");
 
     initPages();
     initNavigation();
@@ -758,24 +759,12 @@ void ElaWidgetToolsDemo::onSingleSendNetwork()
         return;
     }
 
-    QByteArray cmdToSend;
-    if (m_sendWithAN3CheckBox->isChecked()) {
-        QStringList parts = text.split(QRegExp("\\s+"), Qt::SkipEmptyParts);
-        for (const QString& part : parts) {
-            bool ok;
-            quint8 byte = static_cast<quint8>(part.toUInt(&ok, 16));
-            if (ok) {
-                cmdToSend.append(static_cast<char>(byte));
-            }
-        }
-    } else {
-        cmdToSend = text.toUtf8();
-    }
+    QByteArray cmdToSend = m_sendWithAN3CheckBox->isChecked()
+        ? hexStringToBytes(text)   // ← 复用公共方法
+        : text.toUtf8();
 
-    // ✅ 通过信号发送 → Qt 自动排队到 network 线程
     emit requestSendNetworkData(cmdToSend);
 
-    // 日志在 GUI 线程更新，安全
     QString displayText = m_sendWithAN3CheckBox->isChecked()
         ? toHexDisplay(cmdToSend) : QString::fromUtf8(cmdToSend);
     m_singleSendLog->addItem("[" + currentTimeString() + "] " + displayText);
@@ -784,7 +773,6 @@ void ElaWidgetToolsDemo::onSingleSendNetwork()
         delete m_singleSendLog->takeItem(0);
     }
 }
-
 // ═══════════════════════════════════════════════════════════════
 //  单条发送 — 串口
 // ═══════════════════════════════════════════════════════════════
@@ -800,21 +788,10 @@ void ElaWidgetToolsDemo::onSingleSendSerial()
         return;
     }
 
-    QByteArray cmdToSend;
-    if (m_sendWithAN3CheckBox->isChecked()) {
-        QStringList parts = text.split(QRegExp("\\s+"), Qt::SkipEmptyParts);
-        for (const QString& part : parts) {
-            bool ok;
-            quint8 byte = static_cast<quint8>(part.toUInt(&ok, 16));
-            if (ok) {
-                cmdToSend.append(static_cast<char>(byte));
-            }
-        }
-    } else {
-        cmdToSend = text.toUtf8();
-    }
+    QByteArray cmdToSend = m_sendWithAN3CheckBox->isChecked()
+        ? hexStringToBytes(text)   // ← 复用公共方法
+        : text.toUtf8();
 
-    // ✅ 通过 invokeMethod 排队到 serial 线程
     QMetaObject::invokeMethod(m_serialWorker, "writeData",
                               Qt::QueuedConnection,
                               Q_ARG(QByteArray, cmdToSend));
@@ -827,8 +804,6 @@ void ElaWidgetToolsDemo::onSingleSendSerial()
         delete m_singleSendLog->takeItem(0);
     }
 }
-
-
 // 连接服务器
 void ElaWidgetToolsDemo::onConnectServer()
 {
@@ -1417,6 +1392,22 @@ QString ElaWidgetToolsDemo::toHexDisplay(const QByteArray &data)
         result.append(QString("%1 ").arg(byte, 2, 16, QChar('0')).toUpper());
     }
     return result.trimmed();
+}
+// ═══════════════════════════════════════════════════════════════
+//  公共 HEX 转换工具（消除重复代码）
+// ═══════════════════════════════════════════════════════════════
+QByteArray ElaWidgetToolsDemo::hexStringToBytes(const QString& hexText) const
+{
+    QByteArray bytes;
+    QStringList parts = hexText.split(QRegExp("\\s+"), Qt::SkipEmptyParts);
+    for (const QString& part : parts) {
+        bool ok;
+        quint8 byte = static_cast<quint8>(part.toUInt(&ok, 16));
+        if (ok) {
+            bytes.append(static_cast<char>(byte));
+        }
+    }
+    return bytes;
 }
 
 // 更新发送计数
