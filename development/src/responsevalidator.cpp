@@ -43,7 +43,7 @@ void ResponseValidator::onDataReceived(QByteArray data)
     qDebug()<<"expected is:"<<expected;
     // 比对（忽略首尾空白）
     if (data.trimmed() != expected.trimmed()) {
-        emit errorDetected();   // 发现错误，通知 GUI
+        emit errorDetected(expected, data);
     }
 }
 

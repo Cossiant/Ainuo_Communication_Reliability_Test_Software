@@ -54,10 +54,13 @@ ElaWidgetToolsDemo::~ElaWidgetToolsDemo()
 // ═══════════════════════════════════════════════════════════════
 void ElaWidgetToolsDemo::initPages()
 {
-    createDataPage();
     createSettingsPage();
-    createDebugPage();
     createSingleSendPage();
+    createErrorLogPage();
+    //这里createDataPage必须要在createErrorLogPage下面，因为错误统计变量是在createErrorLogPage创建的，而createDataPage只是调用！
+    //如果先createDataPage会出现空指针访问直接闪退！
+    createDataPage();
+    createDebugPage();
 
     // ──── 关于页面 ────
     _aboutPage = new QWidget();
@@ -91,6 +94,7 @@ void ElaWidgetToolsDemo::initNavigation()
 {
     addPageNode("单条发送", _singleSendPage, ElaIconType::Terminal);
     addPageNode("数据收发", _dataPage, ElaIconType::PaperPlane);
+    addPageNode("错误日志", _errorLogPage, ElaIconType::CircleExclamation);
     addPageNode("通讯设置", _settingsPage, ElaIconType::Gear);
     addPageNode("软件调试", _debugPage, ElaIconType::Bug);
     addPageNode("关于软件", _aboutPage, ElaIconType::CircleInfo);
@@ -184,35 +188,33 @@ void ElaWidgetToolsDemo::createDataPage()
 
     // ════════════ 统计信息栏 ════════════
     QHBoxLayout* statsRow = new QHBoxLayout();
-    statsRow->setSpacing(20);
-
+    statsRow->setSpacing(16);
     m_sentCountLabel = new ElaText("总计发送:");
     m_sentCountLabel->setTextPixelSize(13);
     m_sentCountDisplayLabel = new ElaText("0");
     m_sentCountDisplayLabel->setTextPixelSize(13);
-
     m_errorCountLabel = new ElaText("返回错误:");
     m_errorCountLabel->setTextPixelSize(13);
-    m_errorCountDisplayLabel = new ElaText("0");
-    m_errorCountDisplayLabel->setTextPixelSize(13);
-
+    m_dataPageErrorCountLabel = new ElaText("0");      // ← 独立副本
+    m_dataPageErrorCountLabel->setTextPixelSize(13);   //   与发送计数一致
     m_errorTimeOutLabel = new ElaText("超时错误:");
     m_errorTimeOutLabel->setTextPixelSize(13);
-    m_errorTimeOutDisplayLabel = new ElaText("0");
-    m_errorTimeOutDisplayLabel->setTextPixelSize(13);
-
+    m_dataPageErrorTimeOutLabel = new ElaText("0");    // ← 独立副本
+    m_dataPageErrorTimeOutLabel->setTextPixelSize(13); //   与发送计数一致
     m_timePrecisionLabel = new ElaText("时间精度:");
     m_timePrecisionLabel->setTextPixelSize(13);
     m_timePrecisionComboBox = new ElaComboBox();
     m_timePrecisionComboBox->addItems({"毫秒 (hh:mm:ss.zzz)", "微秒 (hh:mm:ss.zzzzzz)"});
     m_timePrecisionComboBox->setCurrentIndex(0);
-
     statsRow->addWidget(m_sentCountLabel);
     statsRow->addWidget(m_sentCountDisplayLabel);
+    statsRow->addSpacing(16);
     statsRow->addWidget(m_errorCountLabel);
-    statsRow->addWidget(m_errorCountDisplayLabel);
+    statsRow->addWidget(m_dataPageErrorCountLabel);        // ← 用新变量
+    statsRow->addSpacing(16);
     statsRow->addWidget(m_errorTimeOutLabel);
-    statsRow->addWidget(m_errorTimeOutDisplayLabel);
+    statsRow->addWidget(m_dataPageErrorTimeOutLabel);      // ← 用新变量
+    statsRow->addSpacing(16);
     statsRow->addWidget(m_timePrecisionLabel);
     statsRow->addWidget(m_timePrecisionComboBox);
     statsRow->addStretch();
@@ -600,6 +602,137 @@ void ElaWidgetToolsDemo::createSingleSendPage()
         m_singleRecvLog->clear();
     });
 }
+// ═══════════════════════════════════════════════════════════════
+//  错误日志页面
+// ═══════════════════════════════════════════════════════════════
+void ElaWidgetToolsDemo::createErrorLogPage()
+{
+    _errorLogPage = new QWidget();
+    QVBoxLayout* layout = new QVBoxLayout(_errorLogPage);
+    layout->setSpacing(12);
+    layout->setContentsMargins(20, 16, 20, 16);
+
+    ElaText* title = new ElaText("错误日志");
+    title->setTextPixelSize(13);
+    title->setTextStyle(ElaTextType::Title);
+
+    ElaText* desc = new ElaText(
+        "记录所有发送过程中出现的返回值错误和超时。\n"
+        "每条日志包含时间、行号、期望值和实际值。");
+    desc->setTextPixelSize(16);
+
+    // 统计行
+    QHBoxLayout* statsRow = new QHBoxLayout();
+    statsRow->setSpacing(24);
+
+    ElaText* errLabel = new ElaText("返回值错误");
+    errLabel->setTextPixelSize(13);
+    ElaText* errCount = new ElaText("0");
+    errCount->setTextPixelSize(13);
+    m_errorCountDisplayLabel = errCount;   // 绑定到成员变量
+
+    ElaText* timeoutLabel = new ElaText("超时错误");
+    timeoutLabel->setTextPixelSize(13);
+    ElaText* timeoutCount = new ElaText("0");
+    timeoutCount->setTextPixelSize(13);
+    m_errorTimeOutDisplayLabel = timeoutCount;  // 绑定到成员变量
+
+    statsRow->addWidget(errLabel);
+    statsRow->addWidget(errCount);
+    statsRow->addSpacing(32);
+    statsRow->addWidget(timeoutLabel);
+    statsRow->addWidget(timeoutCount);
+    statsRow->addStretch();
+
+    // 日志列表
+    ElaText* logLabel = new ElaText("错误详情");
+    logLabel->setTextPixelSize(13);
+    m_errorLogList = new QListWidget();
+    m_errorLogList->setAlternatingRowColors(true);
+
+    // 按钮行
+    QHBoxLayout* btnRow = new QHBoxLayout();
+    btnRow->setSpacing(12);
+
+    m_exportErrorBtn = new ElaPushButton("导出到文件");
+    m_exportErrorBtn->setFixedSize(140, 36);
+    m_clearErrorBtn = new ElaPushButton("清除日志");
+    m_clearErrorBtn->setFixedSize(120, 36);
+
+    btnRow->addWidget(m_exportErrorBtn);
+    btnRow->addWidget(m_clearErrorBtn);
+    btnRow->addStretch();
+
+    layout->addWidget(title);
+    layout->addWidget(desc);
+    layout->addLayout(statsRow);
+    layout->addWidget(logLabel);
+    layout->addWidget(m_errorLogList, 1);
+    layout->addLayout(btnRow);
+
+    connect(m_exportErrorBtn, &ElaPushButton::clicked,
+            this, &ElaWidgetToolsDemo::onExportErrorLog);
+    connect(m_clearErrorBtn, &ElaPushButton::clicked,
+            this, &ElaWidgetToolsDemo::onClearErrorLog);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  导出错误日志
+// ═══════════════════════════════════════════════════════════════
+void ElaWidgetToolsDemo::onExportErrorLog()
+{
+    if (!m_errorLogList || m_errorLogList->count() == 0) {
+        QMessageBox::information(this, "提示", "没有错误日志可导出。");
+        return;
+    }
+
+    QString filePath = QFileDialog::getSaveFileName(
+        this, "导出错误日志",
+        QString("error_log_%1.txt")
+            .arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss")),
+        "文本文件 (*.txt)");
+
+    if (filePath.isEmpty()) return;
+
+    QFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QMessageBox::critical(this, "错误", "无法创建文件:\n" + filePath);
+        return;
+    }
+
+    QTextStream stream(&file);
+    stream.setCodec("UTF-8");
+    stream.setGenerateByteOrderMark(true);
+
+    stream << "===== 错误日志导出 ["
+           << QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss")
+           << "] =====\n\n";
+
+    for (int i = 0; i < m_errorLogList->count(); ++i) {
+        stream << m_errorLogList->item(i)->text() << "\n";
+    }
+
+    stream << "\n===== 共 " << m_errorLogList->count() << " 条错误记录 =====\n";
+    file.close();
+
+    QMessageBox::information(this, "导出成功",
+        QString("已导出 %1 条错误记录到:\n%2")
+            .arg(m_errorLogList->count()).arg(filePath));
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  清除错误日志
+// ═══════════════════════════════════════════════════════════════
+void ElaWidgetToolsDemo::onClearErrorLog()
+{
+    if (m_errorLogList) {
+        m_errorLogList->clear();
+    }
+    m_errorCount = 0;
+    m_errorTimeOut = 0;
+    updateAllErrorDisplayLabels();
+}
+
 // ═══════════════════════════════════════════════════════════════
 //  软件调试页面
 // ═══════════════════════════════════════════════════════════════
@@ -1409,7 +1542,37 @@ QByteArray ElaWidgetToolsDemo::hexStringToBytes(const QString& hexText) const
     }
     return bytes;
 }
+// ═══════════════════════════════════════════════════════════════
+//  根据当前 HEX 模式决定字节如何显示
+// ═══════════════════════════════════════════════════════════════
+QString ElaWidgetToolsDemo::bytesToDisplayText(const QByteArray& data) const
+{
+    if (m_sendWithAN3CheckBox && m_sendWithAN3CheckBox->isChecked()) {
+        return toHexDisplay(data);
+    }
+    return QString::fromUtf8(data);
+}
+// ═══════════════════════════════════════════════════════════════
+//  同步更新所有页面上的错误统计显示
+// ═══════════════════════════════════════════════════════════════
+void ElaWidgetToolsDemo::updateAllErrorDisplayLabels()
+{
+    QString errText = QString::number(m_errorCount);
+    QString toText  = QString::number(m_errorTimeOut);
 
+    if (m_errorCountDisplayLabel) {
+        m_errorCountDisplayLabel->setText(errText);
+    }
+    if (m_errorTimeOutDisplayLabel) {
+        m_errorTimeOutDisplayLabel->setText(toText);
+    }
+    if (m_dataPageErrorCountLabel) {
+        m_dataPageErrorCountLabel->setText(errText);
+    }
+    if (m_dataPageErrorTimeOutLabel) {
+        m_dataPageErrorTimeOutLabel->setText(toText);
+    }
+}
 // 更新发送计数
 void ElaWidgetToolsDemo::onUpdateSentCount(int count)
 {
@@ -1417,25 +1580,64 @@ void ElaWidgetToolsDemo::onUpdateSentCount(int count)
 }
 
 // 错误检测
-void ElaWidgetToolsDemo::onErrorDetected()
+void ElaWidgetToolsDemo::onErrorDetected(QByteArray expected, QByteArray actual)
 {
     m_errorCount++;
-    m_errorCountDisplayLabel->setText(QString::number(m_errorCount));
+    updateAllErrorDisplayLabels();
+
+    // 写入错误详情日志
+    QString expectedDisplay = bytesToDisplayText(expected);
+    QString actualDisplay   = bytesToDisplayText(actual);
+
+    QString entry = QString("[%1] 第%2行 | 期望:\"%3\" | 实际:\"%4\"")
+        .arg(currentTimeString())
+        .arg(m_currentRow + 1)     // 用户视角：第1行起
+        .arg(expectedDisplay)
+        .arg(actualDisplay);
+
+    if (m_errorLogList) {
+        m_errorLogList->addItem(entry);
+        while (m_errorLogList->count() > m_maxDisplayItems) {
+            delete m_errorLogList->takeItem(0);
+        }
+    }
+    // 同时记录到文件
+    emit requestWriteSaveFile("[错误] " + entry);
 }
+
 
 // 超时错误
 void ElaWidgetToolsDemo::onErrorTimeOut()
 {
     m_errorTimeOut++;
-    m_errorTimeOutDisplayLabel->setText(QString::number(m_errorTimeOut));
+    updateAllErrorDisplayLabels();
+
+    QString expectedDisplay = bytesToDisplayText(m_currentExpected);
+
+    QString entry = QString("[%1] 第%2行 | 超时! 期望:\"%3\"")
+        .arg(currentTimeString())
+        .arg(m_currentRow + 1)
+        .arg(expectedDisplay);
+
+    if (m_errorLogList) {
+        m_errorLogList->addItem(entry);
+        while (m_errorLogList->count() > m_maxDisplayItems) {
+            delete m_errorLogList->takeItem(0);
+        }
+    }
+
+    emit requestWriteSaveFile("[超时] " + entry);
 }
+
 
 // 命令发送后传递期望返回值
 void ElaWidgetToolsDemo::onCommandSent(int row, QByteArray expectedResponse)
 {
-    Q_UNUSED(row);
+    m_currentRow = row;
+    m_currentExpected = expectedResponse;
     emit requestEnqueueExpected(expectedResponse);
 }
+
 
 // 清空发送与接收区域
 void ElaWidgetToolsDemo::clearGUI()
@@ -1445,10 +1647,13 @@ void ElaWidgetToolsDemo::clearGUI()
     m_receiveListWidget->clear();
     emit requestResetValidator();
     m_errorCount = 0;
-    m_errorCountDisplayLabel->setText("0");
     m_errorTimeOut = 0;
-    m_errorTimeOutDisplayLabel->setText("0");
+    m_currentRow = -1;
+    m_currentExpected.clear();
+    updateAllErrorDisplayLabels();   // ← 一行搞定
+    if (m_errorLogList) { m_errorLogList->clear(); }
 }
+
 
 // 清理第二列返回值
 void ElaWidgetToolsDemo::resetTableForReadRecord()

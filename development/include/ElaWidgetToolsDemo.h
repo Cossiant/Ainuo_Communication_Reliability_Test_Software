@@ -40,6 +40,7 @@ private:
     QWidget* _aboutPage         = nullptr;
     QWidget* _debugPage         = nullptr;
     QWidget* _singleSendPage    = nullptr;
+    QWidget* _errorLogPage      = nullptr;
 
     // ═════════════ 子线程 ═════════
     QThread* m_networkThread    = nullptr;
@@ -65,6 +66,9 @@ private:
     int m_errorTimeOut      = 0;
     int m_maxDisplayItems   = 300;
     bool m_sendAndReadRecordBool = false;
+
+    int m_currentRow         = -1;
+    QByteArray m_currentExpected;
 
     enum class ConnectionType { None, Network, Serial };
     ConnectionType m_currentConnectionType = ConnectionType::None;
@@ -100,7 +104,8 @@ private:
     ElaText* m_NetWorkLEDLabel          = nullptr;
     ElaText* m_SerialLEDLabel           = nullptr;
     ElaText* m_timePrecisionLabel       = nullptr;
-
+    ElaText* m_dataPageErrorCountLabel      = nullptr;
+    ElaText* m_dataPageErrorTimeOutLabel    = nullptr;
     // ═════════════ 输入框 → ElaLineEdit ═════════
     ElaLineEdit* m_serverIpLineEdit  = nullptr;
     ElaLineEdit* m_portLineEdit      = nullptr;
@@ -112,11 +117,11 @@ private:
     ElaLineEdit* m_singleSendInput = nullptr;
 
     // ═════════════ 下拉框 → ElaComboBox ═════════
-    ElaComboBox* m_serialPortComboBox   = nullptr;
-    ElaComboBox* m_baudRateComboBox     = nullptr;
-    ElaComboBox* m_dataBitsComboBox     = nullptr;
-    ElaComboBox* m_stopBitsComboBox     = nullptr;
-    ElaComboBox* m_parityComboBox       = nullptr;
+    ElaComboBox* m_serialPortComboBox    = nullptr;
+    ElaComboBox* m_baudRateComboBox      = nullptr;
+    ElaComboBox* m_dataBitsComboBox      = nullptr;
+    ElaComboBox* m_stopBitsComboBox      = nullptr;
+    ElaComboBox* m_parityComboBox        = nullptr;
     ElaComboBox* m_timePrecisionComboBox = nullptr;
 
     // ═════════════ 勾选框 → ElaCheckBox ═════════
@@ -149,6 +154,11 @@ private:
     QListWidget* m_singleSendLog = nullptr;
     QListWidget* m_singleRecvLog = nullptr;
 
+    // ═════════════ 错误日志页面 ═════════
+    QListWidget*  m_errorLogList    = nullptr;
+    ElaPushButton* m_exportErrorBtn = nullptr;
+    ElaPushButton* m_clearErrorBtn  = nullptr;
+
     // ═════════════ 初始化方法 ═════════
     void initWindow();
     void initPages();
@@ -157,6 +167,7 @@ private:
     void createDataPage();
     void createSettingsPage();
     void createSingleSendPage();
+    void createErrorLogPage();
     void createDebugPage();
     void applyDebugMode(bool enabled);
 
@@ -164,8 +175,10 @@ private:
     static QString toHexDisplay(const QByteArray &data);
     QString currentTimeString() const;
     QByteArray hexStringToBytes(const QString& hexText) const;
+    QString bytesToDisplayText(const QByteArray& data) const;
     void setButtonsForNetworkMode();
     void setButtonsForSerialMode();
+    void updateAllErrorDisplayLabels();
 
     // ═════════════ 信号 ═════════
 signals:
@@ -205,7 +218,7 @@ private slots:
     void onSerialSendFinished();
 
     void onCommandSent(int row, QByteArray expectedResponse);
-    void onErrorDetected();
+    void onErrorDetected(QByteArray expected, QByteArray actual);
     void onErrorTimeOut();
     void updateValidatorMode();
 
@@ -224,4 +237,7 @@ private slots:
 
     void onSingleSendNetwork();
     void onSingleSendSerial();
+
+    void onExportErrorLog();
+    void onClearErrorLog();
 };
