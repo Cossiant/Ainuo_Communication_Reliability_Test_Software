@@ -20,6 +20,9 @@ public:
 
     QTableWidget *m_table;
 
+    std::atomic<bool> m_stopFlag;            //手动停止位
+    std::atomic<bool> m_timeoutFlag;         //外部线程控制的超时停止位
+
     int m_delayMs;          // 命令之间的延时时间（毫秒）（最小延时）
     int m_repeatLimit;      // 总发送条数限制，0 表示无限循环
     int m_totalRows;        // 发送表格的行数，用于限制其不会跑飞
@@ -49,8 +52,7 @@ public slots:
     void sendTimeOut();                                 //超时信号发送
 
 private:
-    std::atomic<bool> m_stopFlag;            //手动停止位
-    std::atomic<bool> m_timeoutFlag;         //外部线程控制的超时停止位
+
     //高精度延时
     void interruptibleWait(int msec);
     //超时延时

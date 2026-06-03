@@ -2,20 +2,10 @@
 
 #include "ElaWindow.h"
 #include "ElaToggleSwitch.h"
+#include "ElaAcrylicUrlCard.h"
 
-// ========== 旧项目头文件（不变） ==========
-#include <QHostAddress>
-#include <QTableWidget>
-#include <QListWidget>
-#include <QQueue>
-#include <QThread>
-#include <QSerialPort>
-#include <QSerialPortInfo>
 #include <QFileDialog>
-#include <QGroupBox>
-#include <QScrollArea>
-#include <QTime>
-#include <chrono>
+#include <QCloseEvent>
 
 #include "readexceldata.h"
 #include "connectnetwork.h"
@@ -24,6 +14,7 @@
 #include "saveworker.h"
 #include "led.h"
 #include "responsevalidator.h"
+#include "StatCard.h"
 
 // ========== ElaWidgetTools 组件前向声明 ==========
 class ElaText;
@@ -41,107 +32,137 @@ public:
     ElaWidgetToolsDemo(QWidget *parent = nullptr);
     ~ElaWidgetToolsDemo();
 
+protected:
+    virtual void closeEvent(QCloseEvent* event) override;
+
 private:
     // ═════════════ 页面 ═════════
-    QWidget* _dataPage;       // 数据收发页面
-    QWidget* _settingsPage;   // 通讯设置页面
-    QWidget* _aboutPage;
-    QWidget* _debugPage;
+    QWidget* _dataPage          = nullptr;
+    QWidget* _settingsPage      = nullptr;
+    QWidget* _aboutPage         = nullptr;
+    QWidget* _debugPage         = nullptr;
+    QWidget* _singleSendPage    = nullptr;
+    QWidget* _errorLogPage      = nullptr;
 
-    // ═════════════ 子线程（不变） ═════════
-    QThread *m_networkThread;
-    QThread *m_excelSendThread;
-    QThread *m_serialThread;
-    QThread *m_savedataThread;
-    QThread *m_validatorThread;
+    // ═════════════ 子线程 ═════════
+    QThread* m_networkThread    = nullptr;
+    QThread* m_excelSendThread  = nullptr;
+    QThread* m_serialThread     = nullptr;
+    QThread* m_savedataThread   = nullptr;
+    QThread* m_validatorThread  = nullptr;
 
-    // ═════════════ 核心 Worker / 控件（不变） ═════════
-    QTableWidget *m_excelTableWidget;
-    QListWidget *m_receiveListWidget;
-    QListWidget *m_sendListWidget;
-    ExcelReader *m_excelReader;
-    ExcelSendWorker *m_excelSendWorker;
-    NetworkClient *m_networkClient;
-    SerialWorker *m_serialWorker;
-    saveworker *m_savedataWorker;
-    ResponseValidator *m_responseValidator;
+    // ═════════════ 核心 Worker ═════════
+    QTableWidget* m_excelTableWidget          = nullptr;
+    QListWidget*  m_receiveListWidget         = nullptr;
+    QListWidget*  m_sendListWidget            = nullptr;
+    ExcelSendWorker*    m_excelSendWorker     = nullptr;
+    NetworkClient*      m_networkClient       = nullptr;
+    SerialWorker*       m_serialWorker        = nullptr;
+    saveworker*         m_savedataWorker      = nullptr;
+    ResponseValidator*  m_responseValidator   = nullptr;
+    ExcelReader*        m_excelReader         = nullptr;
 
-    // ═════════════ 数据变量（不变） ═════════
+    // ═════════════ 数据变量 ═════════
     QQueue<QByteArray> m_expectedResponseQueue;
-    int m_errorCount = 0;
-    int m_errorTimeOut = 0;
-    int m_maxDisplayItems = 300;
+    int m_errorCount        = 0;
+    int m_errorTimeOut      = 0;
+    int m_maxDisplayItems   = 300;
     bool m_sendAndReadRecordBool = false;
+
+    int m_currentRow         = -1;
+    QByteArray m_currentExpected;
 
     enum class ConnectionType { None, Network, Serial };
     ConnectionType m_currentConnectionType = ConnectionType::None;
 
     QFileDialog m_fileDialog;
+    bool m_debugMode        = false;
+    bool m_shutdownComplete = false;
 
-    bool m_debugMode = false;
-    // ═════════════ LED（保持原生 QLabel） ═════════
-    QLabel *m_NetWorkLED;
-    QLabel *m_SerialLED;
+    // ═════════════ LED ═════════
+    QLabel* m_NetWorkLED = nullptr;
+    QLabel* m_SerialLED  = nullptr;
 
     // ═════════════ 标签 → ElaText ═════════
-    ElaText *m_excelReadLabel;
-    ElaText *m_receiveLabel;
-    ElaText *m_sendLabel;
-    ElaText *m_serverIpLabel;
-    ElaText *m_portLabel;
-    ElaText *m_delayLabel;
-    ElaText *m_timeoutLabel;
-    ElaText *m_sendLimitLabel;
-    ElaText *m_sentCountLabel;
-    ElaText *m_sentCountDisplayLabel;
-    ElaText *m_serialPortLabel;
-    ElaText *m_baudRateLabel;
-    ElaText *m_dataBitsLabel;
-    ElaText *m_stopBitsLabel;
-    ElaText *m_parityLabel;
-    ElaText *m_errorCountLabel;
-    ElaText *m_errorCountDisplayLabel;
-    ElaText *m_errorTimeOutLabel;
-    ElaText *m_errorTimeOutDisplayLabel;
-    ElaText *m_NetWorkLEDLabel;
-    ElaText *m_SerialLEDLabel;
-    ElaText *m_timePrecisionLabel;
-
+    ElaText* m_excelReadLabel           = nullptr;
+    ElaText* m_receiveLabel             = nullptr;
+    ElaText* m_sendLabel                = nullptr;
+    ElaText* m_serverIpLabel            = nullptr;
+    ElaText* m_portLabel                = nullptr;
+    ElaText* m_delayLabel               = nullptr;
+    ElaText* m_timeoutLabel             = nullptr;
+    ElaText* m_sendLimitLabel           = nullptr;
+    ElaText* m_sentCountLabel           = nullptr;
+    ElaText* m_sentCountDisplayLabel    = nullptr;
+    ElaText* m_serialPortLabel          = nullptr;
+    ElaText* m_baudRateLabel            = nullptr;
+    ElaText* m_dataBitsLabel            = nullptr;
+    ElaText* m_stopBitsLabel            = nullptr;
+    ElaText* m_parityLabel              = nullptr;
+    ElaText* m_errorCountLabel          = nullptr;
+    ElaText* m_errorCountDisplayLabel   = nullptr;
+    ElaText* m_errorTimeOutLabel        = nullptr;
+    ElaText* m_errorTimeOutDisplayLabel = nullptr;
+    StatCard* m_errorCard{nullptr};
+    StatCard* m_timeoutCard{nullptr};
+    StatCard* m_totalSendCard{nullptr};
+    ElaText* m_NetWorkLEDLabel          = nullptr;
+    ElaText* m_SerialLEDLabel           = nullptr;
+    ElaText* m_timePrecisionLabel       = nullptr;
+    ElaText* m_dataPageErrorCountLabel      = nullptr;
+    ElaText* m_dataPageErrorTimeOutLabel    = nullptr;
     // ═════════════ 输入框 → ElaLineEdit ═════════
-    ElaLineEdit *m_serverIpLineEdit;
-    ElaLineEdit *m_portLineEdit;
-    ElaLineEdit *m_delayLineEdit;
-    ElaLineEdit *m_timeoutLineEdit;
-    ElaLineEdit *m_sendLimitLineEdit;
+    ElaLineEdit* m_serverIpLineEdit  = nullptr;
+    ElaLineEdit* m_portLineEdit      = nullptr;
+    ElaLineEdit* m_delayLineEdit     = nullptr;
+    ElaLineEdit* m_timeoutLineEdit   = nullptr;
+    ElaLineEdit* m_sendLimitLineEdit = nullptr;
+
+    // ═════════════ 单条发送输入框 ═════════
+    ElaLineEdit* m_singleSendInput = nullptr;
 
     // ═════════════ 下拉框 → ElaComboBox ═════════
-    ElaComboBox *m_serialPortComboBox;
-    ElaComboBox *m_baudRateComboBox;
-    ElaComboBox *m_dataBitsComboBox;
-    ElaComboBox *m_stopBitsComboBox;
-    ElaComboBox *m_parityComboBox;
-    ElaComboBox *m_timePrecisionComboBox;
+    ElaComboBox* m_serialPortComboBox    = nullptr;
+    ElaComboBox* m_baudRateComboBox      = nullptr;
+    ElaComboBox* m_dataBitsComboBox      = nullptr;
+    ElaComboBox* m_stopBitsComboBox      = nullptr;
+    ElaComboBox* m_parityComboBox        = nullptr;
+    ElaComboBox* m_timePrecisionComboBox = nullptr;
 
     // ═════════════ 勾选框 → ElaCheckBox ═════════
-    ElaCheckBox *m_sendWithAN3CheckBox;
-    ElaCheckBox *m_tcpNoDelayCheckBox;
-    ElaCheckBox *m_testPacketLossCheckBox;
-    ElaCheckBox *m_onlySendDataModeCheckBox;
-    ElaCheckBox *m_serialBufferCheckBox;
+    ElaCheckBox* m_sendWithAN3CheckBox       = nullptr;
+    ElaCheckBox* m_tcpNoDelayCheckBox        = nullptr;
+    ElaCheckBox* m_testPacketLossCheckBox    = nullptr;
+    ElaCheckBox* m_onlySendDataModeCheckBox  = nullptr;
+    ElaCheckBox* m_serialBufferCheckBox      = nullptr;
 
     // ═════════════ 按钮 → ElaPushButton ═════════
-    ElaPushButton *m_openExcelButton;
-    ElaPushButton *m_sendExcelButton;
-    ElaPushButton *m_stopSendExcelButton;
-    ElaPushButton *m_sendSerialButton;
-    ElaPushButton *m_stopSendSerialButton;
-    ElaPushButton *m_disconnectButton;
-    ElaPushButton *m_connectButton;
-    ElaPushButton *m_openSerialButton;
-    ElaPushButton *m_closeSerialButton;
-    ElaPushButton *m_GUIClearButton;
-    ElaPushButton *m_sendNetWorkAndReadRecordButton;
-    ElaPushButton *m_sendSerialAndReadRecordButton;
+    ElaPushButton* m_openExcelButton                  = nullptr;
+    ElaPushButton* m_sendExcelButton                  = nullptr;
+    ElaPushButton* m_stopSendExcelButton              = nullptr;
+    ElaPushButton* m_sendSerialButton                 = nullptr;
+    ElaPushButton* m_stopSendSerialButton             = nullptr;
+    ElaPushButton* m_disconnectButton                 = nullptr;
+    ElaPushButton* m_connectButton                    = nullptr;
+    ElaPushButton* m_openSerialButton                 = nullptr;
+    ElaPushButton* m_closeSerialButton                = nullptr;
+    ElaPushButton* m_GUIClearButton                   = nullptr;
+    ElaPushButton* m_sendNetWorkAndReadRecordButton   = nullptr;
+    ElaPushButton* m_sendSerialAndReadRecordButton    = nullptr;
+
+    // ═════════════ 单条发送按钮 ═════════
+    ElaPushButton* m_singleSendNetBtn    = nullptr;
+    ElaPushButton* m_singleSendSerialBtn = nullptr;
+    ElaPushButton* m_singleSendClearBtn  = nullptr;
+
+    // ═════════════ 单条发送日志 ═════════
+    QListWidget* m_singleSendLog = nullptr;
+    QListWidget* m_singleRecvLog = nullptr;
+
+    // ═════════════ 错误日志页面 ═════════
+    QListWidget*  m_errorLogList    = nullptr;
+    ElaPushButton* m_exportErrorBtn = nullptr;
+    ElaPushButton* m_clearErrorBtn  = nullptr;
 
     // ═════════════ 初始化方法 ═════════
     void initWindow();
@@ -150,16 +171,21 @@ private:
     void initWindowConfig();
     void createDataPage();
     void createSettingsPage();
+    void createSingleSendPage();
+    void createErrorLogPage();
     void createDebugPage();
     void applyDebugMode(bool enabled);
 
     // ═════════════ 辅助方法 ═════════
     static QString toHexDisplay(const QByteArray &data);
     QString currentTimeString() const;
+    QByteArray hexStringToBytes(const QString& hexText) const;
+    QString bytesToDisplayText(const QByteArray& data) const;
     void setButtonsForNetworkMode();
     void setButtonsForSerialMode();
+    void updateAllErrorDisplayLabels();
 
-    // ═════════════ 信号（和原来一模一样） ═════════
+    // ═════════════ 信号 ═════════
 signals:
     void requestNetworkConnect(int port, QHostAddress serverIP);
     void requestSendNetworkData(QByteArray msg, int delayMS = 0);
@@ -181,7 +207,7 @@ signals:
     void requestResetValidator();
     void requestSetValidatorMode(bool testPacketLoss, bool onlySend);
 
-    // ═════════════ 槽函数（和原来一模一样） ═════════
+    // ═════════════ 槽函数 ═════════
 private slots:
     void onOpenExcelClicked();
     void onConnectServer();
@@ -197,7 +223,7 @@ private slots:
     void onSerialSendFinished();
 
     void onCommandSent(int row, QByteArray expectedResponse);
-    void onErrorDetected();
+    void onErrorDetected(QByteArray expected, QByteArray actual);
     void onErrorTimeOut();
     void updateValidatorMode();
 
@@ -213,4 +239,10 @@ private slots:
     void resetTableForReadRecord();
     void sendNetWorkAndReadRecordSlot();
     void sendSerialAndReadRecordSlot();
+
+    void onSingleSendNetwork();
+    void onSingleSendSerial();
+
+    void onExportErrorLog();
+    void onClearErrorLog();
 };

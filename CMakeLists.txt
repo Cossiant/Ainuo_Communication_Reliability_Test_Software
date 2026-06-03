@@ -31,6 +31,7 @@ add_executable(untitled WIN32
         development/src/main.cpp
         development/src/ElaWidgetToolsDemo.cpp
         development/include/ElaWidgetToolsDemo.h
+        development/ico/app.rc
         development/src/connectnetwork.cpp
         development/include/connectnetwork.h
         development/src/excelsendworker.cpp
@@ -45,6 +46,8 @@ add_executable(untitled WIN32
         development/include/saveworker.h
         development/src/serialworker.cpp
         development/include/serialworker.h
+        development/src/StatCard.cpp
+        development/include/StatCard.h
 )
 
 target_link_libraries(untitled
