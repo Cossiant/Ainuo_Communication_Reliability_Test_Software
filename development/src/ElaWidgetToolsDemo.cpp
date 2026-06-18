@@ -37,7 +37,13 @@ ElaWidgetToolsDemo::ElaWidgetToolsDemo(QWidget *parent)
     m_savedataThread = new QThread(this);
     m_validatorThread = new QThread(this);
 
-    initWindow();
+    m_mainPage = new MainPage(this ,this);
+    m_serialPage = new SerialPage(this, this);
+    m_networkPage = new NetworkPage(this,this);
+    m_CANPage = new CANPage(this,this);
+    m_GPIBPage = new GPIBPage(this);
+    m_USERPage = new USERPage(this,this);
+    // initWindow();
 }
 
 ElaWidgetToolsDemo::~ElaWidgetToolsDemo()

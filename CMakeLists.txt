@@ -7,6 +7,8 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 set(CMAKE_PREFIX_PATH "D:/Apps/Work/Qt/5.15.2/mingw81_64")
+add_subdirectory(./QXlsx/QXlsx)
+add_subdirectory(./ElaWidgetTools ${CMAKE_BINARY_DIR}/ElaWidgetTools)
 
 # ===== 修复：告诉 CMake MinGW 系统库的位置 =====
 list(APPEND CMAKE_LIBRARY_PATH
@@ -23,9 +25,6 @@ find_package(Qt5 COMPONENTS
         AxContainer
         REQUIRED
 )
-
-add_subdirectory(./ElaWidgetTools ${CMAKE_BINARY_DIR}/ElaWidgetTools)
-add_subdirectory(./QXlsx/QXlsx)
 
 add_executable(untitled WIN32
         development/src/main.cpp
@@ -48,6 +47,18 @@ add_executable(untitled WIN32
         development/include/serialworker.h
         development/src/StatCard.cpp
         development/include/StatCard.h
+        development/Serial_T/SerialPage.cpp
+        development/Serial_T/SerialPage.h
+        development/Network_T/NetworkPage.cpp
+        development/Network_T/NetworkPage.h
+        development/CAN_T/CANPage.cpp
+        development/CAN_T/CANPage.h
+        development/GPIB_T/GPIBPage.cpp
+        development/GPIB_T/GPIBPage.h
+        development/USER_T/USERPage.cpp
+        development/USER_T/USERPage.h
+        development/Other_T/MainPage.cpp
+        development/Other_T/MainPage.h
 )
 
 target_link_libraries(untitled
