@@ -35,8 +35,8 @@ add_executable(untitled WIN32
         development/include/connectnetwork.h
         development/src/excelsendworker.cpp
         development/include/excelsendworker.h
-        development/src/led.cpp
-        development/include/led.h
+        development/Other_T/LED.cpp
+        development/Other_T/LED.h
         development/src/readexceldata.cpp
         development/include/readexceldata.h
         development/src/responsevalidator.cpp
@@ -45,8 +45,8 @@ add_executable(untitled WIN32
         development/include/saveworker.h
         development/src/serialworker.cpp
         development/include/serialworker.h
-        development/src/StatCard.cpp
-        development/include/StatCard.h
+        development/Other_T/StatCard.cpp
+        development/Other_T/StatCard.h
         development/Serial_T/SerialPage.cpp
         development/Serial_T/SerialPage.h
         development/Network_T/NetworkPage.cpp
@@ -59,6 +59,10 @@ add_executable(untitled WIN32
         development/USER_T/USERPage.h
         development/Other_T/MainPage.cpp
         development/Other_T/MainPage.h
+        development/Serial_T/SerialWork.cpp
+        development/Serial_T/SerialWork.h
+        development/Serial_T/SerialThread.cpp
+        development/Serial_T/SerialThread.h
 )
 
 target_link_libraries(untitled
