@@ -5,20 +5,172 @@
 #include "SerialPage.h"
 #include "ElaWindow.h"       // 需要完整定义来调用 addExpanderNode / addPageNode
 #include "ElaText.h"
+#include "QMessageBox"
 #include "ElaIcon.h"
+
+// SerialPage.cpp 构造函数（关键改动部分）
 
 SerialPage::SerialPage(ElaWindow *mainWindow, QObject *parent)
     : QObject(parent),
-      m_mainWindow(mainWindow) {
+      m_mainWindow(mainWindow)
+{
     initSerialPage();
     initNavigation();
     initwindowConfig();
 
-    //初始化SerialWork
-    m_serialWork = new SerialWork(this, this);
-    //初始化SerialFunction
+    // ═══════════════════════════════════════════════════════
+    //  创建 SerialWork（无多线程：直接在主线程，parent = this）
+    // ═══════════════════════════════════════════════════════
+    m_serialWork = new SerialWork(this);
+
+    // ═══════════════════════════════════════════════════════
+    //  连接 UI 控件 → SerialWork
+    // ═══════════════════════════════════════════════════════
+
+    // ① 打开串口按钮
+    connect(m_openSerialButton, &ElaPushButton::clicked, this, [this]() {
+        QString portName = m_serialPortComboBox->currentText();
+        if (portName.isEmpty() || portName == "无可用串口") {
+            QMessageBox::warning(m_mainWindow, "警告", "请选择有效的串口端口！");
+            return;
+        }
+
+        int baudRate = m_baudRateComboBox->currentText().toInt();
+
+        // 数据位
+        QSerialPort::DataBits dataBits;
+        QString db = m_dataBitsComboBox->currentText();
+        if (db == "5")      dataBits = QSerialPort::Data5;
+        else if (db == "6") dataBits = QSerialPort::Data6;
+        else if (db == "7") dataBits = QSerialPort::Data7;
+        else                dataBits = QSerialPort::Data8;
+
+        // 停止位
+        QSerialPort::StopBits stopBits;
+        QString sb = m_stopBitsComboBox->currentText();
+        if (sb == "1.5")    stopBits = QSerialPort::OneAndHalfStop;
+        else if (sb == "2") stopBits = QSerialPort::TwoStop;
+        else                stopBits = QSerialPort::OneStop;
+
+        // 校验位
+        QSerialPort::Parity parity;
+        QString pa = m_parityComboBox->currentText();
+        if (pa == "Even")      parity = QSerialPort::EvenParity;
+        else if (pa == "Odd")   parity = QSerialPort::OddParity;
+        else if (pa == "Space") parity = QSerialPort::SpaceParity;
+        else if (pa == "Mark")  parity = QSerialPort::MarkParity;
+        else                    parity = QSerialPort::NoParity;
+
+        bool buffered = m_serialBufferCheckBox->isChecked();
+
+        // 更新 HEX 显示模式
+        m_serialWork->setHexDisplayMode(m_serialHexSendCheckBox->isChecked());
+
+        // 直接调用 slot（同线程，DirectConnection）
+        m_serialWork->openSerialPort(portName, baudRate,
+                                     dataBits, parity, stopBits, buffered);
+    });
+
+    // ② 关闭串口按钮
+    connect(m_closeSerialButton, &ElaPushButton::clicked,
+            m_serialWork, &SerialWork::closeSerialPort);
+
+    // ③ 单条发送按钮
+    connect(m_singleSendBtn, &ElaPushButton::clicked, this, [this]() {
+        QString text = m_singleSendInput->text();
+        bool hexMode = m_serialHexSendCheckBox->isChecked();
+        m_serialWork->sendString(text, hexMode);
+    });
+
+    // ④ HEX 勾选框变化 → 同步到 SerialWork
+    connect(m_serialHexSendCheckBox, &ElaCheckBox::toggled,
+            m_serialWork, &SerialWork::setHexDisplayMode);
+
+    // ═══════════════════════════════════════════════════════
+    //  连接 SerialWork 信号 → UI 更新
+    // ═══════════════════════════════════════════════════════
+
+    // ⑤ 串口打开
+    connect(m_serialWork, &SerialWork::serialOpened, this, [this]() {
+        m_openSerialButton->setEnabled(false);
+        m_closeSerialButton->setEnabled(true);
+
+        m_serialPortComboBox->setEnabled(false);
+        m_baudRateComboBox->setEnabled(false);
+        m_dataBitsComboBox->setEnabled(false);
+        m_stopBitsComboBox->setEnabled(false);
+        m_parityComboBox->setEnabled(false);
+
+        m_singleSendBtn->setEnabled(true);
+        m_excelOpenBtn->setEnabled(true);
+
+        LED::setLED(m_serialLED, 2, 16);   // 绿色
+    });
+
+    // ⑥ 串口关闭
+    connect(m_serialWork, &SerialWork::serialClosed, this, [this]() {
+        m_openSerialButton->setEnabled(true);
+        m_closeSerialButton->setEnabled(false);
+
+        m_serialPortComboBox->setEnabled(true);
+        m_baudRateComboBox->setEnabled(true);
+        m_dataBitsComboBox->setEnabled(true);
+        m_stopBitsComboBox->setEnabled(true);
+        m_parityComboBox->setEnabled(true);
+
+        m_singleSendBtn->setEnabled(false);
+        m_excelOpenBtn->setEnabled(false);
+        m_excelCaptureBtn->setEnabled(false);
+        m_excelSendBtn->setEnabled(false);
+
+        LED::setLED(m_serialLED, 0, 16);   // 灰色
+    });
+
+    // ⑦ 错误提示
+    connect(m_serialWork, &SerialWork::errorOccurred, this, [this](const QString &msg) {
+        QMessageBox::critical(m_mainWindow, "串口错误", msg);
+    });
+
+    // ⑧ 发送日志 → 写入两个 QListWidget
+    connect(m_serialWork, &SerialWork::sendLogLine, this, [this](const QString &line) {
+        if (m_singleSendLog) {
+            m_singleSendLog->addItem(line);
+            while (m_singleSendLog->count() > 200)
+                delete m_singleSendLog->takeItem(0);
+        }
+        if (m_logSendList) {
+            m_logSendList->addItem(line);
+            while (m_logSendList->count() > 200)
+                delete m_logSendList->takeItem(0);
+        }
+    });
+
+    // ⑨ 接收日志 → 写入两个 QListWidget
+    connect(m_serialWork, &SerialWork::recvLogLine, this, [this](const QString &line) {
+        if (m_singleRecvLog) {
+            m_singleRecvLog->addItem(line);
+            while (m_singleRecvLog->count() > 200)
+                delete m_singleRecvLog->takeItem(0);
+        }
+        if (m_logRecvList) {
+            m_logRecvList->addItem(line);
+            while (m_logRecvList->count() > 200)
+                delete m_logRecvList->takeItem(0);
+        }
+    });
+
+    // ⑩ 接收计数更新
+    connect(m_serialWork, &SerialWork::recvCountChanged, this, [this](int count) {
+        if (m_logRecvCountCard)
+            m_logRecvCountCard->setValue(QString::number(count));
+    });
+
+    // ═══════════════════════════════════════════════════════
+    //  创建 SerialExcel（仍然持有 SerialWork 的指针）
+    // ═══════════════════════════════════════════════════════
     m_serialFunc = new SerialExcel(this, this);
 }
+
 
 SerialPage::~SerialPage() = default;
 

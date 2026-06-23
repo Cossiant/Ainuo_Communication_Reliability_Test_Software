@@ -1,54 +1,50 @@
-//
-// Created by Cossiant on 2026/6/22.
-//
+// SerialWork.cpp
+// 重写版实现
 
 #include "SerialWork.h"
-#include "SerialPage.h"
-#include "ElaWindow.h"
-#include "../Other_T/LED.h"
-
-#include <QMessageBox>
 #include <QDebug>
 #include <QDateTime>
+#include <QThread>
 
-static const int MAX_LOG_LINES = 200;
-
-SerialWork::SerialWork(SerialPage *serialPage, QObject *parent)
-    : QObject(parent),
-      m_serialPage(serialPage),
-      m_mainWindow(serialPage->m_mainWindow)
+// ═══════════════════════════════════════════════════════════════
+//  构造 / 析构
+// ═══════════════════════════════════════════════════════════════
+SerialWork::SerialWork(QObject *parent)
+    : QObject(parent)
 {
-    connect(m_serialPage->m_openSerialButton,  &ElaPushButton::clicked,
-            this, &SerialWork::onOpenSerial);
-    connect(m_serialPage->m_closeSerialButton, &ElaPushButton::clicked,
-            this, &SerialWork::onCloseSerial);
-
-    connect(m_serialPage->m_singleSendBtn, &ElaPushButton::clicked, [this]() {
-        QString text = m_serialPage->m_singleSendInput->text();
-        this->sendString(text);
-    });
-
+    // 缓冲区定时器
     m_bufferTimer = new QTimer(this);
     m_bufferTimer->setSingleShot(true);
-    connect(m_bufferTimer, &QTimer::timeout, this, &SerialWork::onBufferTimeout);
+    connect(m_bufferTimer, &QTimer::timeout,
+            this, &SerialWork::onBufferTimeout);
 
-    qDebug() << "串口初始化完成！";
+    qDebug() << "SerialWork: 初始化完成"
+             << "(线程:" << QThread::currentThreadId() << ")";
 }
 
 SerialWork::~SerialWork()
 {
-    if (m_serialPort) {
-        disconnect(m_serialPort, &QSerialPort::readyRead,
-                   this, &SerialWork::onReadyRead);
-        m_serialPort->close();
-        delete m_serialPort;
-        m_serialPort = nullptr;
-    }
+    closeSerialPort();
+    qDebug() << "SerialWork: 已销毁";
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  查询 / 设置 接口
+// ═══════════════════════════════════════════════════════════════
 bool SerialWork::isOpen() const
 {
     return m_serialPort && m_serialPort->isOpen();
+}
+
+int SerialWork::totalRecvCount() const
+{
+    return m_totalRecv;
+}
+
+void SerialWork::resetRecvCount()
+{
+    m_totalRecv = 0;
+    emit recvCountChanged(0);
 }
 
 void SerialWork::setExpectedResponse(const QByteArray &expected)
@@ -56,130 +52,132 @@ void SerialWork::setExpectedResponse(const QByteArray &expected)
     m_expectedResponse = expected;
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  发送字符串（自动判断 HEX / ASCII）
-// ═══════════════════════════════════════════════════════════════
-void SerialWork::sendString(const QString &text)
+QByteArray SerialWork::expectedResponse() const
 {
-    if (!isOpen() || text.isEmpty())
-        return;
+    return m_expectedResponse;
+}
 
-    QByteArray data;
-    QString displayText;
-
-    if (m_serialPage->m_serialHexSendCheckBox->isChecked()) {
-        QString hex = text;
-        hex.remove(' ');
-        data = QByteArray::fromHex(hex.toLatin1());
-        displayText = data.toHex(' ').toUpper();
-    } else {
-        data = text.toUtf8();
-        displayText = text;
-    }
-
-    sendBytes(data, displayText);
+void SerialWork::setHexDisplayMode(bool hexMode)
+{
+    m_hexDisplay = hexMode;
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  发送原始字节
+//  打开串口（slot，可在任意线程调用）
 // ═══════════════════════════════════════════════════════════════
-void SerialWork::sendBytes(const QByteArray &data, const QString &displayText)
+void SerialWork::openSerialPort(const QString &portName,
+                                int baudRate,
+                                QSerialPort::DataBits dataBits,
+                                QSerialPort::Parity parity,
+                                QSerialPort::StopBits stopBits,
+                                bool buffered)
+{
+    // 如果已打开，先关闭
+    if (m_serialPort) {
+        closeSerialPort();
+    }
+
+    m_buffered = buffered;
+
+    m_serialPort = new QSerialPort(this);
+
+    m_serialPort->setPortName(portName);
+    m_serialPort->setBaudRate(baudRate);
+    m_serialPort->setDataBits(dataBits);
+    m_serialPort->setParity(parity);
+    m_serialPort->setStopBits(stopBits);
+    m_serialPort->setFlowControl(QSerialPort::NoFlowControl);
+
+    if (!m_serialPort->open(QIODevice::ReadWrite)) {
+        QString err = m_serialPort->errorString();
+        emit errorOccurred(QString("无法打开 %1: %2").arg(portName, err));
+
+        delete m_serialPort;
+        m_serialPort = nullptr;
+        return;
+    }
+
+    // 连接内部信号（这些连接始终在 SerialWork 所在线程）
+    connect(m_serialPort, &QSerialPort::readyRead,
+            this, &SerialWork::onReadyRead);
+    connect(m_serialPort, &QSerialPort::errorOccurred,
+            this, &SerialWork::onSerialError);
+
+    emit serialOpened();
+
+    qDebug() << "SerialWork: 串口已打开" << portName << baudRate
+             << "(线程:" << QThread::currentThreadId() << ")";
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  关闭串口（slot，可在任意线程调用）
+// ═══════════════════════════════════════════════════════════════
+void SerialWork::closeSerialPort()
+{
+    if (m_serialPort) {
+        // 断开所有信号，防止关闭过程中触发 readyRead
+        disconnect(m_serialPort, nullptr, this, nullptr);
+
+        m_serialPort->close();
+        delete m_serialPort;
+        m_serialPort = nullptr;
+    }
+
+    m_bufferTimer->stop();
+    m_recvBuffer.clear();
+
+    emit serialClosed();
+
+    qDebug() << "SerialWork: 串口已关闭"
+             << "(线程:" << QThread::currentThreadId() << ")";
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  发送原始字节（slot）
+// ═══════════════════════════════════════════════════════════════
+void SerialWork::sendData(const QByteArray &data)
 {
     if (!isOpen() || data.isEmpty())
         return;
 
     qint64 written = m_serialPort->write(data);
     if (written == -1) {
-        qDebug() << "SerialWork: 发送失败:" << m_serialPort->errorString();
+        emit errorOccurred(QString("发送失败: %1").arg(m_serialPort->errorString()));
         return;
     }
     if (written < data.size()) {
         qDebug() << "SerialWork: 部分发送" << written << "/" << data.size();
     }
 
-    QString text = displayText.isEmpty()
-                       ? data.toHex(' ').toUpper()
-                       : displayText;
-    logSend(text);
+    // 生成发送日志
+    QString timeStr = QDateTime::currentDateTime().toString("HH:mm:ss.zzz");
+    QString display = formatByteArray(data);
+    emit sendLogLine(QString("[%1] TX → %2").arg(timeStr, display));
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  打开串口
+//  发送字符串（slot）—— 根据 hexMode 自动转换
 // ═══════════════════════════════════════════════════════════════
-void SerialWork::onOpenSerial()
+void SerialWork::sendString(const QString &text, bool hexMode)
 {
-    qDebug() << "打开串口按钮被点击！";
-
-    QString portName = m_serialPage->m_serialPortComboBox->currentText();
-    if (portName.isEmpty() || portName == "无可用串口") {
-        QMessageBox::warning(m_mainWindow, "警告", "请选择有效的串口端口！");
+    if (!isOpen() || text.isEmpty())
         return;
+
+    QByteArray data;
+    if (hexMode) {
+        // HEX 模式：去除空格后转换
+        QString hex = text;
+        hex.remove(' ');
+        data = QByteArray::fromHex(hex.toLatin1());
+    } else {
+        data = text.toUtf8();
     }
 
-    qint32 baudRate = m_serialPage->m_baudRateComboBox->currentText().toInt();
-
-    QSerialPort::DataBits dataBits;
-    QString db = m_serialPage->m_dataBitsComboBox->currentText();
-    if (db == "5")      dataBits = QSerialPort::Data5;
-    else if (db == "6") dataBits = QSerialPort::Data6;
-    else if (db == "7") dataBits = QSerialPort::Data7;
-    else                dataBits = QSerialPort::Data8;
-
-    QSerialPort::StopBits stopBits;
-    QString sb = m_serialPage->m_stopBitsComboBox->currentText();
-    if (sb == "1.5") stopBits = QSerialPort::OneAndHalfStop;
-    else if (sb == "2") stopBits = QSerialPort::TwoStop;
-    else                stopBits = QSerialPort::OneStop;
-
-    QSerialPort::Parity parity;
-    QString pa = m_serialPage->m_parityComboBox->currentText();
-    if (pa == "Even")      parity = QSerialPort::EvenParity;
-    else if (pa == "Odd")   parity = QSerialPort::OddParity;
-    else if (pa == "Space") parity = QSerialPort::SpaceParity;
-    else if (pa == "Mark")  parity = QSerialPort::MarkParity;
-    else                    parity = QSerialPort::NoParity;
-
-    QSerialPort::FlowControl flow = QSerialPort::NoFlowControl;
-
-    m_serialPort = new QSerialPort(this);
-    m_serialPort->setPortName(portName);
-    m_serialPort->setBaudRate(baudRate);
-    m_serialPort->setDataBits(dataBits);
-    m_serialPort->setStopBits(stopBits);
-    m_serialPort->setParity(parity);
-    m_serialPort->setFlowControl(flow);
-
-    if (!m_serialPort->open(QIODevice::ReadWrite)) {
-        QMessageBox::critical(m_mainWindow, "错误",
-                              "无法打开串口 " + portName + ":\n" + m_serialPort->errorString());
-        delete m_serialPort;
-        m_serialPort = nullptr;
-        return;
-    }
-
-    connect(m_serialPort, &QSerialPort::readyRead,
-            this, &SerialWork::onReadyRead);
-
-    updateUIForOpened(true);
-    qDebug() << "SerialWork: 串口已打开" << portName << baudRate;
+    sendData(data);
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  关闭串口
-// ═══════════════════════════════════════════════════════════════
-void SerialWork::onCloseSerial()
-{
-    if (m_serialPort) {
-        m_serialPort->close();
-        delete m_serialPort;
-        m_serialPort = nullptr;
-    }
-    updateUIForOpened(false);
-    qDebug() << "SerialWork: 串口已关闭";
-}
-
-// ═══════════════════════════════════════════════════════════════
-//  接收数据
+//  处理 readyRead（内部槽，在线程内被 QSerialPort 触发）
 // ═══════════════════════════════════════════════════════════════
 void SerialWork::onReadyRead()
 {
@@ -188,114 +186,91 @@ void SerialWork::onReadyRead()
 
     QByteArray chunk = m_serialPort->readAll();
 
-    if (m_serialPage->m_serialBufferCheckBox->isChecked()) {
+    if (m_buffered) {
+        // 缓冲模式：合并 20ms 内的数据
         m_recvBuffer.append(chunk);
         m_bufferTimer->start(20);
     } else {
-        logRecv(chunk);
+        // 直接模式：立刻输出
+        emitData(chunk);
     }
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  缓冲区超时
+//  缓冲区超时 —— 合并完成，输出
 // ═══════════════════════════════════════════════════════════════
 void SerialWork::onBufferTimeout()
 {
     if (!m_recvBuffer.isEmpty()) {
-        logRecv(m_recvBuffer);
+        emitData(m_recvBuffer);
         m_recvBuffer.clear();
     }
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  UI 状态切换
+//  处理串口错误（内部槽）
 // ═══════════════════════════════════════════════════════════════
-void SerialWork::updateUIForOpened(bool opened)
+void SerialWork::onSerialError(QSerialPort::SerialPortError error)
 {
-    m_serialPage->m_openSerialButton->setEnabled(!opened);
-    m_serialPage->m_closeSerialButton->setEnabled(opened);
+    if (error == QSerialPort::NoError)
+        return;
 
-    m_serialPage->m_serialPortComboBox->setEnabled(!opened);
-    m_serialPage->m_baudRateComboBox->setEnabled(!opened);
-    m_serialPage->m_dataBitsComboBox->setEnabled(!opened);
-    m_serialPage->m_stopBitsComboBox->setEnabled(!opened);
-    m_serialPage->m_parityComboBox->setEnabled(!opened);
-
-    m_serialPage->m_singleSendBtn->setEnabled(opened);
-
-    m_serialPage->m_excelOpenBtn->setEnabled(opened);
-
-    if (!opened) {
-        m_serialPage->m_excelCaptureBtn->setEnabled(false);
-        m_serialPage->m_excelSendBtn->setEnabled(false);
+    QString msg;
+    switch (error) {
+    case QSerialPort::ResourceError:
+        msg = "串口设备被移除或断开";
+        // 设备拔出后自动关闭
+        closeSerialPort();
+        break;
+    case QSerialPort::TimeoutError:
+        msg = "串口操作超时";
+        break;
+    case QSerialPort::ReadError:
+        msg = "串口读取错误";
+        break;
+    case QSerialPort::WriteError:
+        msg = "串口写入错误";
+        break;
+    default:
+        msg = m_serialPort ? m_serialPort->errorString()
+                           : "未知串口错误";
+        break;
     }
 
-    LED::setLED(m_serialPage->m_serialLED, opened ? 2 : 0, 16);
+    emit errorOccurred(msg);
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  记录发送日志
+//  内部：统一的数据输出入口
 // ═══════════════════════════════════════════════════════════════
-void SerialWork::logSend(const QString &displayText)
+void SerialWork::emitData(const QByteArray &data)
 {
+    // 生成接收日志
     QString timeStr = QDateTime::currentDateTime().toString("HH:mm:ss.zzz");
-    QString line = QString("[%1] TX → %2").arg(timeStr, displayText);
+    QString display = formatByteArray(data);
+    emit recvLogLine(QString("[%1] RX ← %2").arg(timeStr, display));
 
-    if (m_serialPage->m_singleSendLog) {
-        m_serialPage->m_singleSendLog->addItem(line);
-        while (m_serialPage->m_singleSendLog->count() > MAX_LOG_LINES)
-            delete m_serialPage->m_singleSendLog->takeItem(0);
-    }
-    if (m_serialPage->m_logSendList) {
-        m_serialPage->m_logSendList->addItem(line);
-        while (m_serialPage->m_logSendList->count() > MAX_LOG_LINES)
-            delete m_serialPage->m_logSendList->takeItem(0);
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════
-//  记录接收日志
-// ═══════════════════════════════════════════════════════════════
-void SerialWork::logRecv(const QByteArray &data)
-{
-    QString timeStr = QDateTime::currentDateTime().toString("HH:mm:ss.zzz");
-    QString displayText;
-
-    if (m_serialPage->m_serialHexSendCheckBox->isChecked()) {
-        displayText = data.toHex(' ').toUpper();
-    } else {
-        QString text = QString::fromUtf8(data);
-        if (!text.isEmpty()) {
-            displayText = text;
-        } else {
-            displayText = data.toHex(' ').toUpper();
-        }
-    }
-
-    QString line = QString("[%1] RX ← %2").arg(timeStr, displayText);
-
-    if (m_serialPage->m_singleRecvLog) {
-        m_serialPage->m_singleRecvLog->addItem(line);
-        while (m_serialPage->m_singleRecvLog->count() > MAX_LOG_LINES)
-            delete m_serialPage->m_singleRecvLog->takeItem(0);
-    }
-    if (m_serialPage->m_logRecvList) {
-        m_serialPage->m_logRecvList->addItem(line);
-        while (m_serialPage->m_logRecvList->count() > MAX_LOG_LINES)
-            delete m_serialPage->m_logRecvList->takeItem(0);
-    }
-
+    // 更新计数
     m_totalRecv++;
-    if (m_serialPage->m_logRecvCountCard)
-        m_serialPage->m_logRecvCountCard->setValue(QString::number(m_totalRecv));
+    emit recvCountChanged(m_totalRecv);
 
+    // 原始数据通知（给 Excel 比对用）
+    emit dataReceived(data);
     emit responseReceived(data);
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  重置接收计数
+//  内部：根据 hexMode 格式化字节数组
 // ═══════════════════════════════════════════════════════════════
-void SerialWork::resetRecvCount()
+QString SerialWork::formatByteArray(const QByteArray &data) const
 {
-    m_totalRecv = 0;
+    if (m_hexDisplay) {
+        return data.toHex(' ').toUpper();
+    } else {
+        QString text = QString::fromUtf8(data);
+        if (!text.isEmpty())
+            return text;
+        else
+            return data.toHex(' ').toUpper();  // 不可显示字符降级为 HEX
+    }
 }

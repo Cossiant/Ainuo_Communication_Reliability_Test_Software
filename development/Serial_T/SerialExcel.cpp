@@ -147,7 +147,7 @@ void SerialExcel::onTrySendNext()
     m_work->setExpectedResponse(m_expectData);
 
     // 发送
-    m_work->sendString(cmdText);
+    m_work->sendString(cmdText, hexMode);
     m_totalSent++;
     m_page->m_logSentCountCard->setValue(QString::number(m_totalSent));
 
