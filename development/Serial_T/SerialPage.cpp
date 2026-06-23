@@ -19,12 +19,23 @@ SerialPage::SerialPage(ElaWindow *mainWindow, QObject *parent)
     initwindowConfig();
 
     // ═══════════════════════════════════════════════════════
-    //  创建 SerialWork（无多线程：直接在主线程，parent = this）
+    //  ★ 多线程：创建线程 + 将 SerialWork 移入工作线程
     // ═══════════════════════════════════════════════════════
-    m_serialWork = new SerialWork(this);
+    m_serialThread = new QThread(this);          // ① 创建线程
+    m_serialWork   = new SerialWork();           // ② 创建 Worker（无 parent！）
+
+    m_serialWork->moveToThread(m_serialThread);  // ③ 移入工作线程
+
+    // ④ 线程结束时自动删除 Worker
+    connect(m_serialThread, &QThread::finished,
+            m_serialWork,   &QObject::deleteLater);
+
+    m_serialThread->start();                     // ⑤ 启动线程的事件循环
+
+    qDebug() << "SerialPage: 工作线程已启动，ID =" << m_serialThread;
 
     // ═══════════════════════════════════════════════════════
-    //  连接 UI 控件 → SerialWork
+    //  连接 UI 控件 → SerialWork（★ 全部使用 invokeMethod）
     // ═══════════════════════════════════════════════════════
 
     // ① 打开串口按钮
@@ -37,7 +48,6 @@ SerialPage::SerialPage(ElaWindow *mainWindow, QObject *parent)
 
         int baudRate = m_baudRateComboBox->currentText().toInt();
 
-        // 数据位
         QSerialPort::DataBits dataBits;
         QString db = m_dataBitsComboBox->currentText();
         if (db == "5")      dataBits = QSerialPort::Data5;
@@ -45,14 +55,12 @@ SerialPage::SerialPage(ElaWindow *mainWindow, QObject *parent)
         else if (db == "7") dataBits = QSerialPort::Data7;
         else                dataBits = QSerialPort::Data8;
 
-        // 停止位
         QSerialPort::StopBits stopBits;
         QString sb = m_stopBitsComboBox->currentText();
         if (sb == "1.5")    stopBits = QSerialPort::OneAndHalfStop;
         else if (sb == "2") stopBits = QSerialPort::TwoStop;
         else                stopBits = QSerialPort::OneStop;
 
-        // 校验位
         QSerialPort::Parity parity;
         QString pa = m_parityComboBox->currentText();
         if (pa == "Even")      parity = QSerialPort::EvenParity;
@@ -62,35 +70,52 @@ SerialPage::SerialPage(ElaWindow *mainWindow, QObject *parent)
         else                    parity = QSerialPort::NoParity;
 
         bool buffered = m_serialBufferCheckBox->isChecked();
+        bool hexMode  = m_serialHexSendCheckBox->isChecked();
 
-        // 更新 HEX 显示模式
-        m_serialWork->setHexDisplayMode(m_serialHexSendCheckBox->isChecked());
-
-        // 直接调用 slot（同线程，DirectConnection）
-        m_serialWork->openSerialPort(portName, baudRate,
-                                     dataBits, parity, stopBits, buffered);
+        // ★ 跨线程调用：setHexDisplayMode 先于 openSerialPort
+        QMetaObject::invokeMethod(m_serialWork, "setHexDisplayMode",
+                                  Qt::QueuedConnection,
+                                  Q_ARG(bool, hexMode));
+        QMetaObject::invokeMethod(m_serialWork, "openSerialPort",
+                                  Qt::QueuedConnection,
+                                  Q_ARG(QString, portName),
+                                  Q_ARG(int, baudRate),
+                                  Q_ARG(QSerialPort::DataBits, dataBits),
+                                  Q_ARG(QSerialPort::Parity, parity),
+                                  Q_ARG(QSerialPort::StopBits, stopBits),
+                                  Q_ARG(bool, buffered));
     });
 
     // ② 关闭串口按钮
-    connect(m_closeSerialButton, &ElaPushButton::clicked,
-            m_serialWork, &SerialWork::closeSerialPort);
+    connect(m_closeSerialButton, &ElaPushButton::clicked, this, [this]() {
+        QMetaObject::invokeMethod(m_serialWork, "closeSerialPort",
+                                  Qt::QueuedConnection);
+    });
 
     // ③ 单条发送按钮
     connect(m_singleSendBtn, &ElaPushButton::clicked, this, [this]() {
         QString text = m_singleSendInput->text();
         bool hexMode = m_serialHexSendCheckBox->isChecked();
-        m_serialWork->sendString(text, hexMode);
+        QMetaObject::invokeMethod(m_serialWork, "sendString",
+                                  Qt::QueuedConnection,
+                                  Q_ARG(QString, text),
+                                  Q_ARG(bool, hexMode));
     });
 
-    // ④ HEX 勾选框变化 → 同步到 SerialWork
-    connect(m_serialHexSendCheckBox, &ElaCheckBox::toggled,
-            m_serialWork, &SerialWork::setHexDisplayMode);
+    // ④ HEX 勾选框 → 同步显示模式
+    connect(m_serialHexSendCheckBox, &ElaCheckBox::toggled, this, [this](bool checked) {
+        QMetaObject::invokeMethod(m_serialWork, "setHexDisplayMode",
+                                  Qt::QueuedConnection,
+                                  Q_ARG(bool, checked));
+    });
 
-    // ═══════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════
     //  连接 SerialWork 信号 → UI 更新
-    // ═══════════════════════════════════════════════════════
+    //  ★ 跨线程：SerialWork 在工作线程 emit，主线程接收
+    //  ★ Qt 自动检测跨线程并升级为 QueuedConnection，安全
+    // ═══════════════════════════════════════════════════════════
 
-    // ⑤ 串口打开
+    // ⑤ 串口打开成功
     connect(m_serialWork, &SerialWork::serialOpened, this, [this]() {
         m_openSerialButton->setEnabled(false);
         m_closeSerialButton->setEnabled(true);
@@ -103,6 +128,11 @@ SerialPage::SerialPage(ElaWindow *mainWindow, QObject *parent)
 
         m_singleSendBtn->setEnabled(true);
         m_excelOpenBtn->setEnabled(true);
+
+        // Excel 表格按钮：有数据 + 串口打开 → 可用
+        bool hasData = (m_excelTableWidget->rowCount() > 0);
+        m_excelCaptureBtn->setEnabled(hasData);
+        m_excelSendBtn->setEnabled(hasData);
 
         LED::setLED(m_serialLED, 2, 16);   // 绿色
     });
@@ -131,7 +161,7 @@ SerialPage::SerialPage(ElaWindow *mainWindow, QObject *parent)
         QMessageBox::critical(m_mainWindow, "串口错误", msg);
     });
 
-    // ⑧ 发送日志 → 写入两个 QListWidget
+    // ⑧ 发送日志行 → 写入两个 QListWidget
     connect(m_serialWork, &SerialWork::sendLogLine, this, [this](const QString &line) {
         if (m_singleSendLog) {
             m_singleSendLog->addItem(line);
@@ -145,7 +175,7 @@ SerialPage::SerialPage(ElaWindow *mainWindow, QObject *parent)
         }
     });
 
-    // ⑨ 接收日志 → 写入两个 QListWidget
+    // ⑨ 接收日志行 → 写入两个 QListWidget
     connect(m_serialWork, &SerialWork::recvLogLine, this, [this](const QString &line) {
         if (m_singleRecvLog) {
             m_singleRecvLog->addItem(line);
@@ -165,14 +195,42 @@ SerialPage::SerialPage(ElaWindow *mainWindow, QObject *parent)
             m_logRecvCountCard->setValue(QString::number(count));
     });
 
+    // ⑪ 清空按钮相关
+    connect(m_logClearBtn, &ElaPushButton::clicked, this, [this]() {
+        if (m_singleSendLog)   m_singleSendLog->clear();
+        if (m_singleRecvLog)   m_singleRecvLog->clear();
+        if (m_logSendList)     m_logSendList->clear();
+        if (m_logRecvList)     m_logRecvList->clear();
+        m_serialWork->resetRecvCount();    // ★ 跨线程：invokeMethod
+        QMetaObject::invokeMethod(m_serialWork, "resetRecvCount",
+                                  Qt::QueuedConnection);
+    });
+
     // ═══════════════════════════════════════════════════════
-    //  创建 SerialExcel（仍然持有 SerialWork 的指针）
+    //  创建 SerialExcel
     // ═══════════════════════════════════════════════════════
     m_serialFunc = new SerialExcel(this, this);
 }
 
+SerialPage::~SerialPage()
+{
+    // ★ 先通过 invokeMethod 排队关闭串口
+    if (m_serialWork) {
+        QMetaObject::invokeMethod(m_serialWork, "closeSerialPort",
+                                  Qt::QueuedConnection);
+    }
 
-SerialPage::~SerialPage() = default;
+    // ★ 退出线程事件循环
+    m_serialThread->quit();
+
+    // ★ 等待线程真正结束（最多 3 秒）
+    if (!m_serialThread->wait(3000)) {
+        qWarning() << "SerialPage: 工作线程未能在 3 秒内退出，强制终止";
+        m_serialThread->terminate();
+        m_serialThread->wait();
+    }
+    // m_serialWork 会被 deleteLater 自动删除，无需手动 delete
+}
 
 // ═══════════════════════════════════════════════════════════════
 //  初始化：页面创建

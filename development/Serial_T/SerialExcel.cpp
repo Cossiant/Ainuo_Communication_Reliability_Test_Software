@@ -20,20 +20,21 @@ SerialExcel::SerialExcel(SerialPage* page, QObject *parent)
     connect(m_page->m_excelSendBtn,        &ElaPushButton::clicked, this, &SerialExcel::onStartSend);
     connect(m_page->m_excelStopBtn,        &ElaPushButton::clicked, this, &SerialExcel::onStopSend);
 
-    m_delayTimer = new QTimer(this);
-    m_delayTimer->setSingleShot(true);
-    connect(m_delayTimer, &QTimer::timeout, this, &SerialExcel::onMinDelayDone);
-
+    // 全局超时定时器（仍在主线程，超时不需要高精度）
     m_timeoutTimer = new QTimer(this);
     m_timeoutTimer->setSingleShot(true);
+    m_timeoutTimer->setTimerType(Qt::PreciseTimer);   // 顺手也精确化
     connect(m_timeoutTimer, &QTimer::timeout, this, &SerialExcel::onGlobalTimeout);
 
+    // ★ responseReceived 来自工作线程，自动 QueuedConnection
     connect(m_work, &SerialWork::responseReceived, this, &SerialExcel::onResponseReceived);
+
+    // ★ 命令间隔延时到期（来自工作线程，自动 QueuedConnection）
+    connect(m_work, &SerialWork::interCmdDelayFinished, this, &SerialExcel::onInterCmdDelayFinished);
 }
 
 SerialExcel::~SerialExcel()
 {
-    m_delayTimer->stop();
     m_timeoutTimer->stop();
     m_isRunning = false;
 }
@@ -56,7 +57,7 @@ void SerialExcel::onCapture()
     if (m_page->m_excelTableWidget->rowCount() == 0) return;
     setRunning(true);
     m_currentRow  = 0;
-    m_repeatLeft  = 1;                 // 只跑一遍
+    m_repeatLeft  = 1;
     m_totalSent   = 0;
     m_pendingStop = false;
     m_page->m_logStartTimeCard->setValue(QDateTime::currentDateTime().toString("HH:mm:ss"));
@@ -70,7 +71,7 @@ void SerialExcel::onStartSend()
     if (m_page->m_excelTableWidget->rowCount() == 0) return;
 
     int count = m_page->m_excelRepeatCount->text().toInt();
-    if (count <= 0) count = -1;       // -1 = 无限
+    if (count <= 0) count = -1;
 
     setRunning(true);
     m_currentRow  = 0;
@@ -85,10 +86,14 @@ void SerialExcel::onStartSend()
 // ═══════════════════════════════════════════════ 停止 ═══
 void SerialExcel::onStopSend()
 {
-    m_delayTimer->stop();
     m_timeoutTimer->stop();
     m_waiting = false;
-    m_work->setExpectedResponse(QByteArray());
+
+    // 清除期望值（跨线程）
+    QMetaObject::invokeMethod(m_work, "setExpectedResponse",
+                              Qt::QueuedConnection,
+                              Q_ARG(QByteArray, QByteArray()));
+
     setRunning(false);
     qDebug() << "SerialExcel: 发送已停止，总计" << m_totalSent << "条";
 }
@@ -102,20 +107,17 @@ void SerialExcel::onTrySendNext()
     int rowCount = table->rowCount();
     if (rowCount == 0) { onStopSend(); return; }
 
-    // 如果上次发送的是最后一条 → 停止
     if (m_pendingStop) {
         onStopSend();
         qDebug() << "SerialExcel: 发送完成，总计" << m_totalSent << "条";
         return;
     }
 
-    // 循环到下一行
     if (m_currentRow >= rowCount) m_currentRow = 0;
 
-    // 递减计数（-1=无限，不减）
     if (m_repeatLeft > 0) {
         m_repeatLeft--;
-        if (m_repeatLeft <= 0) m_pendingStop = true;  // 本条是最后一条
+        if (m_repeatLeft <= 0) m_pendingStop = true;
     }
 
     // 读表格
@@ -134,7 +136,7 @@ void SerialExcel::onTrySendNext()
     m_currentRow++;
 
     if (cmdText.isEmpty()) {
-        onTrySendNext();   // 空行跳过
+        onTrySendNext();
         return;
     }
 
@@ -144,10 +146,16 @@ void SerialExcel::onTrySendNext()
                    : hexMode ? QByteArray::fromHex(expectedStr.toLatin1())
                              : expectedStr.toUtf8();
     m_lastCmd = cmdText;
-    m_work->setExpectedResponse(m_expectData);
 
-    // 发送
-    m_work->sendString(cmdText, hexMode);
+    // ★ 方案三：一次 invokeMethod 完成"发送 + 期望值 + 工作线程精确延时"
+    // 消除了原先两次 invokeMethod + 主线程定时器抖动的开销
+    QMetaObject::invokeMethod(m_work, "sendStringWithDelay",
+                              Qt::QueuedConnection,
+                              Q_ARG(QString, cmdText),
+                              Q_ARG(bool, hexMode),
+                              Q_ARG(QByteArray, m_expectData),
+                              Q_ARG(int, delayMs));
+
     m_totalSent++;
     m_page->m_logSentCountCard->setValue(QString::number(m_totalSent));
 
@@ -155,7 +163,8 @@ void SerialExcel::onTrySendNext()
     m_waiting    = true;
     m_gotReply   = false;
     m_minDelayOk = false;
-    m_delayTimer->start(delayMs);
+
+    // 全局超时仍在主线程计时
     m_timeoutTimer->start(globalTimeout);
 }
 
@@ -172,13 +181,15 @@ void SerialExcel::onResponseReceived(QByteArray data)
         m_page->addContentError(m_lastCmd, m_expectData, data);
     }
 
-    // 最小延时已过 → 立刻下一条
+    // 延时已过 → 立刻下一条
     if (m_minDelayOk) finalizeAndNext();
 }
 
-// ═══════════════════════════════════════════════ C列延时到期 ═══
-void SerialExcel::onMinDelayDone()
+// ═══════════════════════════════════════════════ ★ 工作线程精确延时到期 ═══
+void SerialExcel::onInterCmdDelayFinished()
 {
+    if (!m_waiting) return;
+
     m_minDelayOk = true;
     // 如果已经收到回复 → 发下一条
     if (m_gotReply) finalizeAndNext();
@@ -188,6 +199,8 @@ void SerialExcel::onMinDelayDone()
 void SerialExcel::onGlobalTimeout()
 {
     if (!m_waiting) return;
+
+    // 超时前还没收到回复但有期望值 → 记录超时错误
     if (!m_gotReply && !m_expectData.isEmpty()) {
         m_page->addTimeoutError(m_lastCmd, m_expectData);
     }
@@ -197,10 +210,14 @@ void SerialExcel::onGlobalTimeout()
 // ═══════════════════════════════════════════════ 结算 → 下一条 ═══
 void SerialExcel::finalizeAndNext()
 {
-    m_delayTimer->stop();
     m_timeoutTimer->stop();
     m_waiting = false;
-    m_work->setExpectedResponse(QByteArray());
+
+    // 清除期望值（跨线程）
+    QMetaObject::invokeMethod(m_work, "setExpectedResponse",
+                              Qt::QueuedConnection,
+                              Q_ARG(QByteArray, QByteArray()));
+
     onTrySendNext();
 }
 

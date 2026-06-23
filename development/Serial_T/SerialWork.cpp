@@ -1,5 +1,5 @@
 // SerialWork.cpp
-// 重写版实现
+// 方案三实现
 
 #include "SerialWork.h"
 #include <QDebug>
@@ -12,11 +12,18 @@
 SerialWork::SerialWork(QObject *parent)
     : QObject(parent)
 {
-    // 缓冲区定时器
+    // 缓冲区合并定时器
     m_bufferTimer = new QTimer(this);
     m_bufferTimer->setSingleShot(true);
     connect(m_bufferTimer, &QTimer::timeout,
             this, &SerialWork::onBufferTimeout);
+
+    // ★ 命令间隔精确延时定时器（工作线程内）
+    m_interCmdTimer = new QTimer(this);
+    m_interCmdTimer->setSingleShot(true);
+    m_interCmdTimer->setTimerType(Qt::PreciseTimer);   // ★ 1ms 精度
+    connect(m_interCmdTimer, &QTimer::timeout,
+            this, &SerialWork::onInterCmdDelay);
 
     qDebug() << "SerialWork: 初始化完成"
              << "(线程:" << QThread::currentThreadId() << ")";
@@ -33,7 +40,7 @@ SerialWork::~SerialWork()
 // ═══════════════════════════════════════════════════════════════
 bool SerialWork::isOpen() const
 {
-    return m_serialPort && m_serialPort->isOpen();
+    return m_opened.loadRelaxed() != 0;
 }
 
 int SerialWork::totalRecvCount() const
@@ -63,7 +70,7 @@ void SerialWork::setHexDisplayMode(bool hexMode)
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  打开串口（slot，可在任意线程调用）
+//  打开串口
 // ═══════════════════════════════════════════════════════════════
 void SerialWork::openSerialPort(const QString &portName,
                                 int baudRate,
@@ -72,7 +79,6 @@ void SerialWork::openSerialPort(const QString &portName,
                                 QSerialPort::StopBits stopBits,
                                 bool buffered)
 {
-    // 如果已打开，先关闭
     if (m_serialPort) {
         closeSerialPort();
     }
@@ -97,12 +103,12 @@ void SerialWork::openSerialPort(const QString &portName,
         return;
     }
 
-    // 连接内部信号（这些连接始终在 SerialWork 所在线程）
     connect(m_serialPort, &QSerialPort::readyRead,
             this, &SerialWork::onReadyRead);
     connect(m_serialPort, &QSerialPort::errorOccurred,
             this, &SerialWork::onSerialError);
 
+    m_opened.storeRelaxed(1);
     emit serialOpened();
 
     qDebug() << "SerialWork: 串口已打开" << portName << baudRate
@@ -110,12 +116,13 @@ void SerialWork::openSerialPort(const QString &portName,
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  关闭串口（slot，可在任意线程调用）
+//  关闭串口
 // ═══════════════════════════════════════════════════════════════
 void SerialWork::closeSerialPort()
 {
+    m_interCmdTimer->stop();   // ★ 停止命令间隔定时器
+
     if (m_serialPort) {
-        // 断开所有信号，防止关闭过程中触发 readyRead
         disconnect(m_serialPort, nullptr, this, nullptr);
 
         m_serialPort->close();
@@ -126,6 +133,7 @@ void SerialWork::closeSerialPort()
     m_bufferTimer->stop();
     m_recvBuffer.clear();
 
+    m_opened.storeRelaxed(0);
     emit serialClosed();
 
     qDebug() << "SerialWork: 串口已关闭"
@@ -133,7 +141,7 @@ void SerialWork::closeSerialPort()
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  发送原始字节（slot）
+//  发送原始字节
 // ═══════════════════════════════════════════════════════════════
 void SerialWork::sendData(const QByteArray &data)
 {
@@ -149,14 +157,13 @@ void SerialWork::sendData(const QByteArray &data)
         qDebug() << "SerialWork: 部分发送" << written << "/" << data.size();
     }
 
-    // 生成发送日志
     QString timeStr = QDateTime::currentDateTime().toString("HH:mm:ss.zzz");
     QString display = formatByteArray(data);
     emit sendLogLine(QString("[%1] TX → %2").arg(timeStr, display));
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  发送字符串（slot）—— 根据 hexMode 自动转换
+//  发送字符串
 // ═══════════════════════════════════════════════════════════════
 void SerialWork::sendString(const QString &text, bool hexMode)
 {
@@ -165,7 +172,6 @@ void SerialWork::sendString(const QString &text, bool hexMode)
 
     QByteArray data;
     if (hexMode) {
-        // HEX 模式：去除空格后转换
         QString hex = text;
         hex.remove(' ');
         data = QByteArray::fromHex(hex.toLatin1());
@@ -177,7 +183,59 @@ void SerialWork::sendString(const QString &text, bool hexMode)
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  处理 readyRead（内部槽，在线程内被 QSerialPort 触发）
+//  ★ 方案三核心：发送命令 + 工作线程内精确延时
+// ═══════════════════════════════════════════════════════════════
+void SerialWork::sendStringWithDelay(const QString &text, bool hexMode,
+                                     const QByteArray &expectedResponse,
+                                     int delayMs)
+{
+    if (!isOpen() || text.isEmpty())
+        return;
+
+    // 1. 设置期望返回值
+    m_expectedResponse = expectedResponse;
+
+    // 2. 编码并发送
+    QByteArray data;
+    if (hexMode) {
+        QString hex = text;
+        hex.remove(' ');
+        data = QByteArray::fromHex(hex.toLatin1());
+    } else {
+        data = text.toUtf8();
+    }
+
+    qint64 written = m_serialPort->write(data);
+    if (written == -1) {
+        emit errorOccurred(QString("发送失败: %1").arg(m_serialPort->errorString()));
+        return;
+    }
+
+    // 3. 发送日志
+    QString timeStr = QDateTime::currentDateTime().toString("HH:mm:ss.zzz");
+    QString display = formatByteArray(data);
+    emit sendLogLine(QString("[%1] TX → %2").arg(timeStr, display));
+
+    // 4. ★ 在工作线程内启动精确延时（消除主线程定时器抖动 + 跨线程排队）
+    if (delayMs > 0) {
+        m_interCmdTimer->start(delayMs);
+    } else {
+        // 无延时，立刻通知
+        emit interCmdDelayFinished();
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  ★ 精确延时到期（工作线程内触发）
+// ═══════════════════════════════════════════════════════════════
+void SerialWork::onInterCmdDelay()
+{
+    // 从工作线程发射信号 → 主线程通过 QueuedConnection 接收
+    emit interCmdDelayFinished();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  处理 readyRead
 // ═══════════════════════════════════════════════════════════════
 void SerialWork::onReadyRead()
 {
@@ -187,17 +245,15 @@ void SerialWork::onReadyRead()
     QByteArray chunk = m_serialPort->readAll();
 
     if (m_buffered) {
-        // 缓冲模式：合并 20ms 内的数据
         m_recvBuffer.append(chunk);
         m_bufferTimer->start(20);
     } else {
-        // 直接模式：立刻输出
         emitData(chunk);
     }
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  缓冲区超时 —— 合并完成，输出
+//  缓冲区超时
 // ═══════════════════════════════════════════════════════════════
 void SerialWork::onBufferTimeout()
 {
@@ -208,7 +264,7 @@ void SerialWork::onBufferTimeout()
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  处理串口错误（内部槽）
+//  处理串口错误
 // ═══════════════════════════════════════════════════════════════
 void SerialWork::onSerialError(QSerialPort::SerialPortError error)
 {
@@ -219,7 +275,6 @@ void SerialWork::onSerialError(QSerialPort::SerialPortError error)
     switch (error) {
     case QSerialPort::ResourceError:
         msg = "串口设备被移除或断开";
-        // 设备拔出后自动关闭
         closeSerialPort();
         break;
     case QSerialPort::TimeoutError:
@@ -245,22 +300,19 @@ void SerialWork::onSerialError(QSerialPort::SerialPortError error)
 // ═══════════════════════════════════════════════════════════════
 void SerialWork::emitData(const QByteArray &data)
 {
-    // 生成接收日志
     QString timeStr = QDateTime::currentDateTime().toString("HH:mm:ss.zzz");
     QString display = formatByteArray(data);
     emit recvLogLine(QString("[%1] RX ← %2").arg(timeStr, display));
 
-    // 更新计数
     m_totalRecv++;
     emit recvCountChanged(m_totalRecv);
 
-    // 原始数据通知（给 Excel 比对用）
     emit dataReceived(data);
     emit responseReceived(data);
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  内部：根据 hexMode 格式化字节数组
+//  内部：格式化字节数组
 // ═══════════════════════════════════════════════════════════════
 QString SerialWork::formatByteArray(const QByteArray &data) const
 {
@@ -271,6 +323,6 @@ QString SerialWork::formatByteArray(const QByteArray &data) const
         if (!text.isEmpty())
             return text;
         else
-            return data.toHex(' ').toUpper();  // 不可显示字符降级为 HEX
+            return data.toHex(' ').toUpper();
     }
 }

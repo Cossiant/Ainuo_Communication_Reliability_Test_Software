@@ -21,7 +21,7 @@ private slots:
     void onStopSend();
     void onTrySendNext();               // 尝试发下一条（统一入口）
     void onResponseReceived(QByteArray data);
-    void onMinDelayDone();
+    void onInterCmdDelayFinished();     // ★ 工作线程精确延时到期
     void onGlobalTimeout();
 
 private:
@@ -45,8 +45,7 @@ private:
     QByteArray m_lastRecvData;
     QString    m_lastCmd;
     QByteArray m_expectData;
-    bool      m_minDelayOk  = false;
+    bool      m_minDelayOk  = false;    // ★ 由 interCmdDelayFinished 设置
 
-    QTimer* m_delayTimer   = nullptr;   // C列最小延时
-    QTimer* m_timeoutTimer = nullptr;   // 全局超时
+    QTimer* m_timeoutTimer = nullptr;   // 全局超时（仍在主线程）
 };

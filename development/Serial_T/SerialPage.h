@@ -18,6 +18,8 @@
 #include <QTableWidget>
 #include <QByteArray>
 #include <QHeaderView>
+#include <QThread>
+#include <QDebug>
 
 #include "ElaComboBox.h"
 #include "ElaLineEdit.h"
@@ -55,6 +57,8 @@ private:
     ElaWindow* m_mainWindow;
     SerialWork* m_serialWork = nullptr; // ← 内部持有 SerialWork
     SerialExcel* m_serialFunc = nullptr; // ← 内部持有 SerialFunction
+
+    QThread*     m_serialThread  = nullptr;   // ★ 工作线程
     // ═════════════ 页面 ═════════
     QWidget *_SerialSettingPage = nullptr;
     QWidget *_SerialSendPage = nullptr;
