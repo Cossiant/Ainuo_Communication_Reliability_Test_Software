@@ -13,6 +13,11 @@ SerialPage::SerialPage(ElaWindow *mainWindow, QObject *parent)
     initSerialPage();
     initNavigation();
     initwindowConfig();
+
+    //初始化SerialWork
+    m_serialWork = new SerialWork(this, this);
+    //初始化SerialFunction
+    m_serialFunc = new SerialExcel(this, this);
 }
 
 SerialPage::~SerialPage() = default;
@@ -155,17 +160,22 @@ void SerialPage::createSettingsPage() {
     grid->addWidget(statusLabel,         2, 2);
     grid->addWidget(m_serialLED,         2, 3);
 
-    // ──── 第 3 行：打开/关闭按钮 | 缓冲区勾选框 ────
+    // ──── 第 3 行：勾选框 ────
+    m_serialBufferCheckBox = new ElaCheckBox("合并串口接收数据（20ms 超时）");
+    m_serialBufferCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
+    m_serialHexSendCheckBox = new ElaCheckBox("以HEX格式发送（AN3.0）");
+    m_serialHexSendCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
+    grid->addWidget(m_serialBufferCheckBox,   3, 0, 1, 2);   // 左半边
+    grid->addWidget(m_serialHexSendCheckBox,  3, 2, 1, 2);   // 右半边
+
+    // ──── 第 4 行：打开/关闭按钮 ────
     m_openSerialButton = new ElaPushButton("打开串口");
     m_openSerialButton->setFixedHeight(35);
     m_closeSerialButton = new ElaPushButton("关闭串口");
     m_closeSerialButton->setFixedHeight(35);
-    m_closeSerialButton->setEnabled(false);    // 初始禁用
-    m_serialBufferCheckBox = new ElaCheckBox("合并串口接收数据（20ms 超时）");
-
-    grid->addWidget(m_openSerialButton,       3, 0);
-    grid->addWidget(m_closeSerialButton,      3, 1);
-    grid->addWidget(m_serialBufferCheckBox,   3, 2, 1, 2);  // 跨 2 列
+    m_closeSerialButton->setEnabled(false);
+    grid->addWidget(m_openSerialButton,       4, 0);
+    grid->addWidget(m_closeSerialButton,      4, 1);
 
     _SerialSettingLayout1->addWidget(_SerialSettingGroup);
     _SerialSettingLayout1->addStretch();
@@ -246,6 +256,9 @@ void SerialPage::createSendPage() {
     logRow->addLayout(sendArea, 1);   // stretch = 1，等宽
     logRow->addLayout(recvArea, 1);
     _SerialSendLayout->addLayout(logRow, 1);      // stretch = 1，日志区占据剩余空间
+
+    connect(m_singleSendClearBtn, &ElaPushButton::clicked,
+            this, &SerialPage::clearSingleSendLog);
 }
 
 void SerialPage::createExcelSendPage()
@@ -255,13 +268,11 @@ void SerialPage::createExcelSendPage()
     layout->setSpacing(16);
     layout->setContentsMargins(30, 30, 30, 30);
 
-    // ──── 标题 ────
     ElaText* title = new ElaText("串口 Excel 表格发送");
     title->setTextPixelSize(24);
     title->setTextStyle(ElaTextType::Title);
     layout->addWidget(title);
 
-    // ──── 描述 ────
     ElaText* desc = new ElaText(
         "通过 Excel 表格批量加载命令，逐条通过串口发送到设备。\n"
         "支持自动比对返回值并统计发送结果。");
@@ -269,9 +280,6 @@ void SerialPage::createExcelSendPage()
     desc->setWordWrap(true);
     layout->addWidget(desc);
 
-    // ════════════════════════════════════════════════════════
-    //  Excel 数据表格（全宽）
-    // ════════════════════════════════════════════════════════
     ElaText* tableLabel = new ElaText("读取到的 Excel 表格数据");
     tableLabel->setTextPixelSize(15);
     tableLabel->setTextStyle(ElaTextType::Subtitle);
@@ -280,9 +288,7 @@ void SerialPage::createExcelSendPage()
     m_excelTableWidget = new QTableWidget();
     m_excelTableWidget->setColumnCount(3);
     m_excelTableWidget->setHorizontalHeaderLabels({
-        "发送的命令",
-        "正确的返回值",
-        "到下一条命令的时间ms"
+        "发送的命令", "正确的返回值", "到下一条命令的时间ms"
     });
     m_excelTableWidget->setColumnWidth(0, 250);
     m_excelTableWidget->setColumnWidth(1, 250);
@@ -290,49 +296,80 @@ void SerialPage::createExcelSendPage()
     m_excelTableWidget->setRowCount(8);
     m_excelTableWidget->setItem(0, 0, new QTableWidgetItem("等待读取 Excel 表格"));
     m_excelTableWidget->setAlternatingRowColors(true);
+    layout->addWidget(m_excelTableWidget, 1);
 
-    layout->addWidget(m_excelTableWidget, 1);   // stretch=1，填充剩余空间
+    // ═══════════ 底部 ═══════════
+    QVBoxLayout* bottomArea = new QVBoxLayout();
+    bottomArea->setSpacing(12);
 
-    // ════════════════════════════════════════════════════════
-    //  按钮区
-    // ════════════════════════════════════════════════════════
+    // 发送次数
+    QHBoxLayout* repeatRow = new QHBoxLayout();
+    repeatRow->setSpacing(8);
+    ElaText* repeatLabel = new ElaText("发送次数:");
+    repeatLabel->setTextPixelSize(15);
+    m_excelRepeatCount = new ElaLineEdit();
+    m_excelRepeatCount->setFixedSize(400, 36);
+    m_excelRepeatCount->setPlaceholderText("0 = 无限循环");
+    m_excelRepeatCount->setText("0");
+    ElaText* repeatHint = new ElaText("（0 表示一直循环发送，直到点击停止）");
+    repeatHint->setTextPixelSize(15);
+    repeatHint->setWordWrap(false);
+    repeatHint->setStyleSheet("color: gray;");
+    repeatRow->addWidget(repeatLabel);
+    repeatRow->addWidget(m_excelRepeatCount);
+    repeatRow->addWidget(repeatHint);
+    repeatRow->addStretch();
+    bottomArea->addLayout(repeatRow);
+
+    // ──── 超时时间（新增） ────
+    QHBoxLayout* timeoutRow = new QHBoxLayout();
+    timeoutRow->setSpacing(8);
+    ElaText* timeoutLabel = new ElaText("超时时间:");
+    timeoutLabel->setTextPixelSize(15);
+    m_excelTimeoutMs = new ElaLineEdit();
+    m_excelTimeoutMs->setFixedSize(400, 36);
+    m_excelTimeoutMs->setPlaceholderText("超时ms");
+    m_excelTimeoutMs->setText("500");
+    ElaText* timeoutHint = new ElaText("（超过此时间未收到回复则判定超时，发送下一条）");
+    timeoutHint->setTextPixelSize(15);
+    timeoutHint->setWordWrap(false);
+    timeoutHint->setStyleSheet("color: gray;");
+    timeoutRow->addWidget(timeoutLabel);
+    timeoutRow->addWidget(m_excelTimeoutMs);
+    timeoutRow->addWidget(timeoutHint);
+    timeoutRow->addStretch();
+    bottomArea->addLayout(timeoutRow);
+
+    // 按钮行
     QHBoxLayout* btnRow = new QHBoxLayout();
     btnRow->setSpacing(16);
 
-    // ──── ① 文件准备 ────
     QGroupBox* fileGroup = new QGroupBox("① 文件准备");
     fileGroup->setStyleSheet("QGroupBox { font-size: 15px; font-weight: bold; }");
     QHBoxLayout* fileLayout = new QHBoxLayout(fileGroup);
     fileLayout->setSpacing(10);
-
     m_excelOpenBtn = new ElaPushButton("打开 Excel 并读取");
     m_excelOpenBtn->setFixedSize(180, 40);
-
+    m_excelOpenBtn->setEnabled(false);
     m_excelDownloadTplBtn = new ElaPushButton("下载示例模板");
     m_excelDownloadTplBtn->setFixedSize(160, 40);
-
     fileLayout->addWidget(m_excelOpenBtn);
     fileLayout->addWidget(m_excelDownloadTplBtn);
     fileLayout->addStretch();
 
-    // ──── ② 发送控制 ────
     QGroupBox* sendGroup = new QGroupBox("② 发送控制");
     sendGroup->setStyleSheet("QGroupBox { font-size: 15px; font-weight: bold; }");
     QHBoxLayout* sendLayout = new QHBoxLayout(sendGroup);
     sendLayout->setSpacing(10);
-
     m_excelCaptureBtn = new ElaPushButton("读取返回值");
     m_excelCaptureBtn->setFixedSize(140, 40);
-    m_excelCaptureBtn->setEnabled(false);        // 未加载表格/未连接串口时禁用
-
+    m_excelCaptureBtn->setEnabled(false);
     m_excelSendBtn = new ElaPushButton("开始发送");
     m_excelSendBtn->setFixedSize(140, 40);
     m_excelSendBtn->setEnabled(false);
-
     m_excelStopBtn = new ElaPushButton("停止发送");
     m_excelStopBtn->setFixedSize(140, 40);
     m_excelStopBtn->setEnabled(false);
-
     sendLayout->addWidget(m_excelCaptureBtn);
     sendLayout->addWidget(m_excelSendBtn);
     sendLayout->addWidget(m_excelStopBtn);
@@ -341,8 +378,8 @@ void SerialPage::createExcelSendPage()
     btnRow->addWidget(fileGroup);
     btnRow->addWidget(sendGroup);
     btnRow->addStretch();
-
-    layout->addLayout(btnRow);
+    bottomArea->addLayout(btnRow);
+    layout->addLayout(bottomArea);
 }
 
 void SerialPage::createLogPage()
@@ -371,10 +408,16 @@ void SerialPage::createLogPage()
     m_logSentCountCard = new StatCard("总计发送", "0");
     m_logRecvCountCard = new StatCard("总计接收", "0");
     m_logStartTimeCard = new StatCard("开始时间", "--:--:--");
+
     cardRow->addWidget(m_logSentCountCard);
     cardRow->addWidget(m_logRecvCountCard);
     cardRow->addWidget(m_logStartTimeCard);
     cardRow->addStretch();
+
+    m_logClearBtn = new ElaPushButton("清空日志");
+    m_logClearBtn->setFixedSize(120, 38);
+    cardRow->addWidget(m_logClearBtn);
+
     layout->addLayout(cardRow);
     // ════════════════════════════════════════════════════════
     //  发送日志 + 接收日志（左右分栏）
@@ -402,15 +445,10 @@ void SerialPage::createLogPage()
     logRow->addLayout(sendArea, 1);
     logRow->addLayout(recvArea, 1);
     layout->addLayout(logRow, 1);
-    // ════════════════════════════════════════════════════════
-    //  清空按钮
-    // ════════════════════════════════════════════════════════
-    QHBoxLayout* clearRow = new QHBoxLayout();
-    m_logClearBtn = new ElaPushButton("清空日志");
-    m_logClearBtn->setFixedSize(120, 38);
-    clearRow->addWidget(m_logClearBtn);
-    clearRow->addStretch();
-    layout->addLayout(clearRow);
+
+    connect(m_logClearBtn, &ElaPushButton::clicked,
+        this, &SerialPage::clearExcelSendLog);
+
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -510,6 +548,25 @@ void SerialPage::createErrorLogPage()
     // ──── 信号连接 ────
     connect(m_errorClearBtn, &ElaPushButton::clicked, this, &SerialPage::clearErrors);
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  字节数组 → 错误日志显示文本（HEX或UTF8，跟随HEX勾选框）
+// ═══════════════════════════════════════════════════════════════
+static QString bytesToDisplayText(const QByteArray &data, bool isHexMode)
+{
+    if (data.isEmpty())
+        return QString("—");
+    if (isHexMode) {
+        return data.toHex(' ').toUpper();
+    } else {
+        QString text = QString::fromUtf8(data);
+        if (!text.isEmpty())
+            return text;
+        else
+            return data.toHex(' ').toUpper();   // 不可显示字符降级
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════
 //  添加超时错误
 // ═══════════════════════════════════════════════════════════════
@@ -517,34 +574,45 @@ void SerialPage::addTimeoutError(const QString &command, const QByteArray &expec
 {
     ++m_errorSeq;
     ++m_timeoutCount;
+
     int total = m_timeoutCount + m_contentCount;
     m_errorTotalCard->setValue(QString::number(total));
     m_errorTimeoutCard->setValue(QString::number(m_timeoutCount));
+
     if (m_errorTable->rowCount() == 1
         && m_errorTable->item(0, 1)
         && m_errorTable->item(0, 1)->text() == "尚未记录错误")
     {
         m_errorTable->setRowCount(0);
     }
+
     int row = m_errorTable->rowCount();
     m_errorTable->insertRow(row);
+
     QString timeStr = QDateTime::currentDateTime().toString("HH:mm:ss.zzz");
+
+    // 判断当前是否 HEX 模式
+    bool hexMode = m_serialHexSendCheckBox && m_serialHexSendCheckBox->isChecked();
+
     m_errorTable->setItem(row, 0, new QTableWidgetItem(QString::number(m_errorSeq)));
     m_errorTable->setItem(row, 1, new QTableWidgetItem(timeStr));
     m_errorTable->setItem(row, 2, new QTableWidgetItem("超时"));
     m_errorTable->setItem(row, 3, new QTableWidgetItem(command));
-    m_errorTable->setItem(row, 4, new QTableWidgetItem(
-        expected.isEmpty() ? QString("—") : QString(expected.toHex(' ').toUpper())));
+    m_errorTable->setItem(row, 4, new QTableWidgetItem(bytesToDisplayText(expected, hexMode)));
     m_errorTable->setItem(row, 5, new QTableWidgetItem("(无返回)"));
+
     for (int c = 0; c < 6; ++c) {
         QTableWidgetItem* it = m_errorTable->item(row, c);
         if (it) it->setForeground(QColor("#f39c12"));
     }
+
     while (m_errorTable->rowCount() > 1000)
         m_errorTable->removeRow(0);
+
     if (m_errorAutoScroll->getIsToggled())
         m_errorTable->scrollToBottom();
 }
+
 // ═══════════════════════════════════════════════════════════════
 //  添加内容错误
 // ═══════════════════════════════════════════════════════════════
@@ -554,35 +622,44 @@ void SerialPage::addContentError(const QString &command,
 {
     ++m_errorSeq;
     ++m_contentCount;
+
     int total = m_timeoutCount + m_contentCount;
     m_errorTotalCard->setValue(QString::number(total));
     m_errorContentCard->setValue(QString::number(m_contentCount));
+
     if (m_errorTable->rowCount() == 1
         && m_errorTable->item(0, 1)
         && m_errorTable->item(0, 1)->text() == "尚未记录错误")
     {
         m_errorTable->setRowCount(0);
     }
+
     int row = m_errorTable->rowCount();
     m_errorTable->insertRow(row);
+
     QString timeStr = QDateTime::currentDateTime().toString("HH:mm:ss.zzz");
+
+    bool hexMode = m_serialHexSendCheckBox && m_serialHexSendCheckBox->isChecked();
+
     m_errorTable->setItem(row, 0, new QTableWidgetItem(QString::number(m_errorSeq)));
     m_errorTable->setItem(row, 1, new QTableWidgetItem(timeStr));
     m_errorTable->setItem(row, 2, new QTableWidgetItem("内容错误"));
     m_errorTable->setItem(row, 3, new QTableWidgetItem(command));
-    m_errorTable->setItem(row, 4, new QTableWidgetItem(
-        expected.isEmpty() ? QString("—") : QString(expected.toHex(' ').toUpper())));
-    m_errorTable->setItem(row, 5, new QTableWidgetItem(
-        actual.isEmpty() ? QString("—") : QString(actual.toHex(' ').toUpper())));
+    m_errorTable->setItem(row, 4, new QTableWidgetItem(bytesToDisplayText(expected, hexMode)));
+    m_errorTable->setItem(row, 5, new QTableWidgetItem(bytesToDisplayText(actual,   hexMode)));
+
     for (int c = 0; c < 6; ++c) {
         QTableWidgetItem* it = m_errorTable->item(row, c);
         if (it) it->setForeground(QColor("#e74c3c"));
     }
+
     while (m_errorTable->rowCount() > 1000)
         m_errorTable->removeRow(0);
+
     if (m_errorAutoScroll->getIsToggled())
         m_errorTable->scrollToBottom();
 }
+
 // ═══════════════════════════════════════════════════════════════
 //  清空错误记录
 // ═══════════════════════════════════════════════════════════════
@@ -600,3 +677,31 @@ void SerialPage::clearErrors()
     m_errorTable->setItem(0, 1, new QTableWidgetItem("尚未记录错误"));
     m_errorTable->setSpan(0, 1, 1, 5);
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  清空单条发送日志
+// ═══════════════════════════════════════════════════════════════
+void SerialPage::clearSingleSendLog()
+{
+    m_singleSendLog->clear();
+    m_singleRecvLog->clear();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  清空表格发送日志 + 重置卡片
+// ═══════════════════════════════════════════════════════════════
+void SerialPage::clearExcelSendLog()
+{
+    // 清空日志列表
+    m_logSendList->clear();
+    m_logRecvList->clear();
+
+    // 重置统计卡片
+    m_logSentCountCard->setValue("0");
+    m_logRecvCountCard->setValue("0");
+    m_logStartTimeCard->setValue("--:--:--");
+
+    if (m_serialWork)
+        m_serialWork->resetRecvCount();
+}
+

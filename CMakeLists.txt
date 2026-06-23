@@ -25,8 +25,8 @@ find_package(Qt5 COMPONENTS
         AxContainer
         REQUIRED
 )
-
-add_executable(untitled WIN32
+# 这里需要在编译的时候加上WIN32，如果是debug需要去掉，否则不显示qdebug内容！
+add_executable(untitled
         development/src/main.cpp
         development/src/ElaWidgetToolsDemo.cpp
         development/include/ElaWidgetToolsDemo.h
@@ -63,6 +63,8 @@ add_executable(untitled WIN32
         development/Serial_T/SerialWork.h
         development/Serial_T/SerialThread.cpp
         development/Serial_T/SerialThread.h
+        development/Serial_T/SerialExcel.cpp
+        development/Serial_T/SerialExcel.h
 )
 
 target_link_libraries(untitled

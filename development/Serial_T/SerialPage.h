@@ -26,7 +26,10 @@
 #include "ElaToggleSwitch.h"
 #include "../Other_T/LED.h"
 #include "../Other_T/StatCard.h"
+#include "SerialExcel.h"
+#include "SerialWork.h"
 
+class SerialWork;
 class QTableWidget;
 class QListWidget;
 class StatCard;
@@ -44,11 +47,14 @@ class ElaToggleSwitch;
 class SerialPage : public QObject {
     Q_OBJECT
     friend class SerialWork;
+    friend class SerialExcel;
 public:
     explicit SerialPage(ElaWindow* mainWindow, QObject *parent = nullptr);
     ~SerialPage();
 private:
     ElaWindow* m_mainWindow;
+    SerialWork* m_serialWork = nullptr; // ← 内部持有 SerialWork
+    SerialExcel* m_serialFunc = nullptr; // ← 内部持有 SerialFunction
     // ═════════════ 页面 ═════════
     QWidget *_SerialSettingPage = nullptr;
     QWidget *_SerialSendPage = nullptr;
@@ -66,6 +72,7 @@ private:
     ElaComboBox*  m_stopBitsComboBox   = nullptr;
     ElaComboBox*  m_parityComboBox     = nullptr;
     ElaCheckBox*  m_serialBufferCheckBox = nullptr;
+    ElaCheckBox*  m_serialHexSendCheckBox  = nullptr;
     ElaPushButton* m_openSerialButton  = nullptr;
     ElaPushButton* m_closeSerialButton = nullptr;
     QLabel*        m_serialLED         = nullptr;
@@ -83,6 +90,8 @@ private:
     ElaPushButton* m_excelSendBtn        = nullptr;
     ElaPushButton* m_excelStopBtn        = nullptr;
     ElaPushButton* m_excelCaptureBtn = nullptr;   // 读取返回值（预扫）
+    ElaLineEdit*   m_excelRepeatCount = nullptr;  // ← 新增：发送次数
+    ElaLineEdit*   m_excelTimeoutMs   = nullptr;
     QTableWidget*  m_excelTableWidget    = nullptr;
 
     // ═════════════ 发送日志控件 ═════════
@@ -121,7 +130,8 @@ private:
     void addTimeoutError(const QString &command, const QByteArray &expected);
     void addContentError(const QString &command, const QByteArray &expected, const QByteArray &actual);
     void clearErrors();
-
+    void clearSingleSendLog();
+    void clearExcelSendLog();
 };
 
 

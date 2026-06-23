@@ -1,39 +1,57 @@
-#pragma once
+//
+// Created by Cossiant on 2026/6/22.
+//
+
+#ifndef UNTITLED_SERIALWORK_H
+#define UNTITLED_SERIALWORK_H
 
 #include <QObject>
-#include <QThread>
 #include <QSerialPort>
+#include <QByteArray>
+#include <QTimer>
 
 class SerialPage;
-class SerialThread;
 class ElaWindow;
 
-class SerialWork : public QObject
-{
+class SerialWork : public QObject {
     Q_OBJECT
 
 public:
-    explicit SerialWork(SerialPage *serialPage, QObject *parent = nullptr);
+    explicit SerialWork(SerialPage* serialPage, QObject *parent = nullptr);
     ~SerialWork();
 
-    bool isSerialOpen() const;
-    void sendData(const QByteArray &data);
+    void sendString(const QString &text);
+    void sendBytes(const QByteArray &data, const QString &displayText = QString());
+    bool isOpen() const;
+    void resetRecvCount();
+
+    void setExpectedResponse(const QByteArray &expected);
+    QByteArray expectedResponse() const { return m_expectedResponse; }
+
+    signals:
+        void responseReceived(QByteArray data);
 
 private slots:
     void onOpenSerial();
     void onCloseSerial();
-    void onSerialClosed();
-    void onWorkerError(const QString &errorMessage);
+    void onReadyRead();
+    void onBufferTimeout();
 
 private:
-    void cleanupThread();
     void updateUIForOpened(bool opened);
 
-    SerialPage  *m_serialPage = nullptr;
-    ElaWindow   *m_mainWindow = nullptr;
+    void logSend(const QString &displayText);
+    void logRecv(const QByteArray &data);
 
-    QThread      *m_thread   = nullptr;
-    SerialThread *m_worker   = nullptr;    // ← 类型改为 SerialThread
+    SerialPage*  m_serialPage = nullptr;
+    ElaWindow*   m_mainWindow = nullptr;
+    QSerialPort* m_serialPort = nullptr;
 
-    bool          m_isOpening = false;
+    QByteArray m_recvBuffer;
+    QTimer*    m_bufferTimer    = nullptr;
+    int        m_totalRecv      = 0;
+
+    QByteArray m_expectedResponse;
 };
+
+#endif //UNTITLED_SERIALWORK_H
