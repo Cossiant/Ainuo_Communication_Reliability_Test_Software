@@ -61,10 +61,12 @@ add_executable(untitled
         development/Other_T/MainPage.h
         development/Serial_T/SerialWork.cpp
         development/Serial_T/SerialWork.h
-        development/Serial_T/SerialThread.cpp
-        development/Serial_T/SerialThread.h
         development/Serial_T/SerialExcel.cpp
         development/Serial_T/SerialExcel.h
+        development/Network_T/NetWorkWork.cpp
+        development/Network_T/NetWorkWork.h
+        development/Network_T/NetworkExcel.cpp
+        development/Network_T/NetworkExcel.h
 )
 
 target_link_libraries(untitled

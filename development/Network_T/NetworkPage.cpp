@@ -5,17 +5,223 @@
 #include "NetworkPage.h"
 #include "ElaWindow.h"
 #include "ElaText.h"
+#include "QMessageBox"
 #include "ElaIcon.h"
+
+// NetworkPage.cpp 构造函数
 
 NetworkPage::NetworkPage(ElaWindow *mainWindow, QObject *parent)
     : QObject(parent),
-      m_mainWindow(mainWindow) {
+      m_mainWindow(mainWindow)
+{
     initNetworkPage();
     initNavigation();
     initwindowConfig();
+
+    // ═══════════════════════════════════════════════════════
+    //  ★ 多线程：创建线程 + 将 NetworkWork 移入工作线程
+    // ═══════════════════════════════════════════════════════
+    m_networkThread = new QThread(this);
+    m_networkWork   = new NetworkWork();
+
+    m_networkWork->moveToThread(m_networkThread);
+
+    connect(m_networkThread, &QThread::finished,
+            m_networkWork,   &QObject::deleteLater);
+
+    m_networkThread->start();
+
+    qDebug() << "NetworkPage: 工作线程已启动，ID =" << m_networkThread;
+
+    // ═══════════════════════════════════════════════════════
+    //  ★ 连接超时定时器（主线程，3 秒）
+    // ═══════════════════════════════════════════════════════
+    m_connectTimeoutTimer = new QTimer(this);
+    m_connectTimeoutTimer->setSingleShot(true);
+    connect(m_connectTimeoutTimer, &QTimer::timeout, this, [this]() {
+        QMessageBox::warning(m_mainWindow, "网络连接超时",
+                             "网络连接超时，请检查网络。\n"
+                             "请确认 IP 地址和端口号是否正确，目标设备是否在线。");
+        // 触发断开（跨线程）
+        QMetaObject::invokeMethod(m_networkWork, "disconnectFromHost",
+                                  Qt::QueuedConnection);
+    });
+
+    // ═══════════════════════════════════════════════════════
+    //  连接 UI 控件 → NetworkWork（★ 全部使用 invokeMethod）
+    // ═══════════════════════════════════════════════════════
+
+    // ① 连接网络按钮（★ 传递 Nagle 勾选状态 + 启动超时定时器）
+    connect(m_openNetworkButton, &ElaPushButton::clicked, this, [this]() {
+        QString ipAddress = m_ipAddressEdit->text().trimmed();
+        if (ipAddress.isEmpty()) {
+            QMessageBox::warning(m_mainWindow, "警告", "请输入有效的 IP 地址！");
+            return;
+        }
+
+        bool portOk = false;
+        quint16 port = static_cast<quint16>(m_portEdit->text().toUInt(&portOk));
+        if (!portOk || port == 0) {
+            QMessageBox::warning(m_mainWindow, "警告", "请输入有效的端口号（1-65535）！");
+            return;
+        }
+
+        bool hexMode      = m_networkHexSendCheckBox->isChecked();
+        bool disableNagle = m_nagleCheckBox->isChecked();
+
+        // ★ 启动 3 秒连接超时定时器
+        m_connectTimeoutTimer->start(3000);
+
+        QMetaObject::invokeMethod(m_networkWork, "setHexDisplayMode",
+                                  Qt::QueuedConnection,
+                                  Q_ARG(bool, hexMode));
+        QMetaObject::invokeMethod(m_networkWork, "connectToHost",
+                                  Qt::QueuedConnection,
+                                  Q_ARG(QString, ipAddress),
+                                  Q_ARG(quint16, port),
+                                  Q_ARG(bool, disableNagle));
+    });
+
+    // ② 断开网络按钮
+    connect(m_closeNetworkButton, &ElaPushButton::clicked, this, [this]() {
+        m_connectTimeoutTimer->stop();   // ★ 停止超时定时器
+        QMetaObject::invokeMethod(m_networkWork, "disconnectFromHost",
+                                  Qt::QueuedConnection);
+    });
+
+    // ③ 单条发送按钮
+    connect(m_singleSendBtn, &ElaPushButton::clicked, this, [this]() {
+        QString text = m_singleSendInput->text();
+        bool hexMode = m_networkHexSendCheckBox->isChecked();
+        QMetaObject::invokeMethod(m_networkWork, "sendString",
+                                  Qt::QueuedConnection,
+                                  Q_ARG(QString, text),
+                                  Q_ARG(bool, hexMode));
+    });
+
+    // ④ HEX 勾选框 → 同步显示模式
+    connect(m_networkHexSendCheckBox, &ElaCheckBox::toggled, this, [this](bool checked) {
+        QMetaObject::invokeMethod(m_networkWork, "setHexDisplayMode",
+                                  Qt::QueuedConnection,
+                                  Q_ARG(bool, checked));
+    });
+
+    // ═══════════════════════════════════════════════════════════
+    //  连接 NetworkWork 信号 → UI 更新
+    // ═══════════════════════════════════════════════════════════
+
+    // ⑤ 网络连接成功 → 停止超时定时器
+    connect(m_networkWork, &NetworkWork::networkConnected, this, [this]() {
+        m_connectTimeoutTimer->stop();   // ★ 停止超时定时器
+
+        m_openNetworkButton->setEnabled(false);
+        m_closeNetworkButton->setEnabled(true);
+
+        m_ipAddressEdit->setEnabled(false);
+        m_portEdit->setEnabled(false);
+
+        m_singleSendBtn->setEnabled(true);
+        m_excelOpenBtn->setEnabled(true);
+
+        // ★ 改回原行为：表格有数据就启用发送/捕获按钮
+        bool hasData = (m_excelTableWidget->rowCount() > 0);
+        m_excelCaptureBtn->setEnabled(hasData);
+        m_excelSendBtn->setEnabled(hasData);
+
+        LED::setLED(m_networkLED, 2, 16);   // 绿色
+    });
+
+    // ⑥ 网络断开
+    connect(m_networkWork, &NetworkWork::networkDisconnected, this, [this]() {
+        m_connectTimeoutTimer->stop();   // ★ 停止超时定时器
+
+        m_openNetworkButton->setEnabled(true);
+        m_closeNetworkButton->setEnabled(false);
+
+        m_ipAddressEdit->setEnabled(true);
+        m_portEdit->setEnabled(true);
+
+        m_singleSendBtn->setEnabled(false);
+        m_excelOpenBtn->setEnabled(false);
+        m_excelCaptureBtn->setEnabled(false);
+        m_excelSendBtn->setEnabled(false);
+
+        LED::setLED(m_networkLED, 0, 16);   // 灰色
+    });
+
+    // ⑦ 错误提示 + 停止超时定时器
+    connect(m_networkWork, &NetworkWork::errorOccurred, this, [this](const QString &msg) {
+        m_connectTimeoutTimer->stop();   // ★ 停止超时定时器
+        QMessageBox::critical(m_mainWindow, "网络错误", msg);
+    });
+
+    // ⑧ 发送日志行 → 写入两个 QListWidget
+    connect(m_networkWork, &NetworkWork::sendLogLine, this, [this](const QString &line) {
+        if (m_singleSendLog) {
+            m_singleSendLog->addItem(line);
+            while (m_singleSendLog->count() > 200)
+                delete m_singleSendLog->takeItem(0);
+        }
+        if (m_logSendList) {
+            m_logSendList->addItem(line);
+            while (m_logSendList->count() > 200)
+                delete m_logSendList->takeItem(0);
+        }
+    });
+
+    // ⑨ 接收日志行 → 写入两个 QListWidget
+    connect(m_networkWork, &NetworkWork::recvLogLine, this, [this](const QString &line) {
+        if (m_singleRecvLog) {
+            m_singleRecvLog->addItem(line);
+            while (m_singleRecvLog->count() > 200)
+                delete m_singleRecvLog->takeItem(0);
+        }
+        if (m_logRecvList) {
+            m_logRecvList->addItem(line);
+            while (m_logRecvList->count() > 200)
+                delete m_logRecvList->takeItem(0);
+        }
+    });
+
+    // ⑩ 接收计数更新
+    connect(m_networkWork, &NetworkWork::recvCountChanged, this, [this](int count) {
+        if (m_logRecvCountCard)
+            m_logRecvCountCard->setValue(QString::number(count));
+    });
+
+    // ⑪ 清空按钮相关
+    connect(m_logClearBtn, &ElaPushButton::clicked, this, [this]() {
+        if (m_singleSendLog)   m_singleSendLog->clear();
+        if (m_singleRecvLog)   m_singleRecvLog->clear();
+        if (m_logSendList)     m_logSendList->clear();
+        if (m_logRecvList)     m_logRecvList->clear();
+        QMetaObject::invokeMethod(m_networkWork, "resetRecvCount",
+                                  Qt::QueuedConnection);
+    });
+
+    // ═══════════════════════════════════════════════════════
+    //  创建 NetworkExcel
+    // ═══════════════════════════════════════════════════════
+    m_networkFunc = new NetworkExcel(this, this);
 }
 
-NetworkPage::~NetworkPage() = default;
+NetworkPage::~NetworkPage()
+{
+    m_connectTimeoutTimer->stop();
+
+    if (m_networkWork) {
+        QMetaObject::invokeMethod(m_networkWork, "disconnectFromHost",
+                                  Qt::QueuedConnection);
+    }
+
+    m_networkThread->quit();
+
+    if (!m_networkThread->wait(3000)) {
+        qWarning() << "NetworkPage: 工作线程未能在 3 秒内退出，强制终止";
+        m_networkThread->terminate();
+        m_networkThread->wait();
+    }
+}
 
 // ═══════════════════════════════════════════════════════════════
 //  初始化：页面创建
@@ -42,9 +248,6 @@ void NetworkPage::initNavigation()
     m_mainWindow->addPageNode("错误统计", _NetworkErrorLogPage,  NetworkMainPageKey, ElaIconType::CircleExclamation);
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  初始化：窗口外观配置
-// ═══════════════════════════════════════════════════════════════
 void NetworkPage::initwindowConfig() {
     m_mainWindow->setNavigationBarDisplayMode(ElaNavigationType::Auto);
     m_mainWindow->setNavigationBarWidth(300);
@@ -62,69 +265,566 @@ void NetworkPage::initwindowConfig() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  页面创建
+//  页面：网络设置（★ Nagle 勾选框 + HEX 勾选框 并列）
 // ═══════════════════════════════════════════════════════════════
 void NetworkPage::createSettingsPage() {
     _NetworkSettingPage = new QWidget();
-    QVBoxLayout *_NetworkSettingLayout = new QVBoxLayout(_NetworkSettingPage);
-    _NetworkSettingLayout->setContentsMargins(30, 30, 30, 30);
+    QVBoxLayout *_NetworkSettingLayout1 = new QVBoxLayout(_NetworkSettingPage);
+    _NetworkSettingLayout1->setContentsMargins(30, 30, 30, 30);
 
     ElaText *_NetworkSettingTitle = new ElaText("网络设置界面");
     _NetworkSettingTitle->setTextPixelSize(24);
     _NetworkSettingTitle->setTextStyle(ElaTextType::Title);
 
-    _NetworkSettingLayout->addWidget(_NetworkSettingTitle);
-    _NetworkSettingLayout->addStretch();
+    _NetworkSettingLayout1->addWidget(_NetworkSettingTitle);
+
+    QGroupBox* _NetworkSettingGroup = new QGroupBox("网络参数");
+    QGridLayout* grid = new QGridLayout(_NetworkSettingGroup);
+    grid->setSpacing(10);
+    grid->setContentsMargins(30, 30, 30, 30);
+
+    // ──── 第 0 行：IP 地址 | 端口号 ────
+    ElaText* ipLabel = new ElaText("IP 地址:");
+    ipLabel->setTextPixelSize(15);
+    m_ipAddressEdit = new ElaLineEdit();
+    m_ipAddressEdit->setPlaceholderText("例如: 192.168.1.100");
+    m_ipAddressEdit->setText("192.168.1.100");
+
+    ElaText* portLabel = new ElaText("端口号:");
+    portLabel->setTextPixelSize(15);
+    m_portEdit = new ElaLineEdit();
+    m_portEdit->setPlaceholderText("例如: 5025");
+    m_portEdit->setText("5025");
+
+    grid->addWidget(ipLabel,               0, 0);
+    grid->addWidget(m_ipAddressEdit,       0, 1);
+    grid->addWidget(portLabel,             0, 2);
+    grid->addWidget(m_portEdit,            0, 3);
+
+    // ──── 第 1 行：网络状态 LED ────
+    ElaText* statusLabel = new ElaText("网络状态:");
+    statusLabel->setTextPixelSize(15);
+    m_networkLED = new QLabel();
+    LED::setLED(m_networkLED, 0, 16);
+
+    grid->addWidget(statusLabel,           1, 0);
+    grid->addWidget(m_networkLED,          1, 1);
+
+    // ──── 第 2 行：HEX 勾选框 | 禁用 Nagle 勾选框 ────
+    m_networkHexSendCheckBox = new ElaCheckBox("以HEX格式发送（AN3.0）");
+    m_networkHexSendCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
+    m_nagleCheckBox = new ElaCheckBox("禁用 Nagle 算法");
+    m_nagleCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
+    grid->addWidget(m_networkHexSendCheckBox,  2, 0, 1, 2);
+    grid->addWidget(m_nagleCheckBox,           2, 2, 1, 2);
+
+    // ──── 第 3 行：连接/断开按钮 ────
+    m_openNetworkButton = new ElaPushButton("连接网络");
+    m_openNetworkButton->setFixedHeight(35);
+    m_closeNetworkButton = new ElaPushButton("断开网络");
+    m_closeNetworkButton->setFixedHeight(35);
+    m_closeNetworkButton->setEnabled(false);
+    grid->addWidget(m_openNetworkButton,       3, 0);
+    grid->addWidget(m_closeNetworkButton,      3, 1);
+
+    _NetworkSettingLayout1->addWidget(_NetworkSettingGroup);
+    _NetworkSettingLayout1->addStretch();
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  页面：单条发送
+// ═══════════════════════════════════════════════════════════════
 void NetworkPage::createSendPage() {
     _NetworkSendPage = new QWidget();
     QVBoxLayout *_NetworkSendLayout = new QVBoxLayout(_NetworkSendPage);
     _NetworkSendLayout->setContentsMargins(30, 30, 30, 30);
 
-    ElaText *_NetworkSendTitle = new ElaText("网口单条发送界面");
-    _NetworkSendTitle->setTextPixelSize(24);
-    _NetworkSendTitle->setTextStyle(ElaTextType::Title);
+    ElaText* title = new ElaText("网口单条命令发送");
+    title->setTextPixelSize(24);
+    title->setTextStyle(ElaTextType::Title);
+    _NetworkSendLayout->addWidget(title);
 
-    _NetworkSendLayout->addWidget(_NetworkSendTitle);
-    _NetworkSendLayout->addStretch();
+    ElaText* desc = new ElaText(
+        "在此输入单条命令，通过网口发送到设备。\n"
+        "发送和接收的结果将显示在下方日志区域。");
+    desc->setTextPixelSize(15);
+    desc->setWordWrap(true);
+    _NetworkSendLayout->addWidget(desc);
+
+    QGroupBox* inputGroup = new QGroupBox("命令输入");
+    QVBoxLayout* inputLayout = new QVBoxLayout(inputGroup);
+    inputLayout->setSpacing(10);
+    inputLayout->setContentsMargins(16, 20, 16, 16);
+
+    m_singleSendInput = new ElaLineEdit();
+    m_singleSendInput->setPlaceholderText("在此输入要发送的命令...");
+    m_singleSendInput->setFixedHeight(42);
+
+    QHBoxLayout* btnRow = new QHBoxLayout();
+    btnRow->setSpacing(12);
+
+    m_singleSendBtn = new ElaPushButton("通过网口发送");
+    m_singleSendBtn->setFixedSize(160, 42);
+    m_singleSendBtn->setEnabled(false);
+
+    m_singleSendClearBtn = new ElaPushButton("清空发送日志");
+    m_singleSendClearBtn->setFixedSize(120, 38);
+
+    btnRow->addWidget(m_singleSendBtn);
+    btnRow->addWidget(m_singleSendClearBtn);
+    btnRow->addStretch();
+    inputLayout->addWidget(m_singleSendInput);
+    inputLayout->addLayout(btnRow);
+    _NetworkSendLayout->addWidget(inputGroup);
+
+    QHBoxLayout* logRow = new QHBoxLayout();
+    logRow->setSpacing(12);
+    QVBoxLayout* sendArea = new QVBoxLayout();
+    ElaText* sendLabel = new ElaText("发送日志");
+    sendLabel->setTextPixelSize(15);
+    sendLabel->setTextStyle(ElaTextType::Subtitle);
+    m_singleSendLog = new QListWidget();
+    m_singleSendLog->setAlternatingRowColors(true);
+    sendArea->addWidget(sendLabel);
+    sendArea->addWidget(m_singleSendLog);
+
+    QVBoxLayout* recvArea = new QVBoxLayout();
+    ElaText* recvLabel = new ElaText("接收日志");
+    recvLabel->setTextPixelSize(15);
+    recvLabel->setTextStyle(ElaTextType::Subtitle);
+    m_singleRecvLog = new QListWidget();
+    m_singleRecvLog->setAlternatingRowColors(true);
+    recvArea->addWidget(recvLabel);
+    recvArea->addWidget(m_singleRecvLog);
+    logRow->addLayout(sendArea, 1);
+    logRow->addLayout(recvArea, 1);
+    _NetworkSendLayout->addLayout(logRow, 1);
+
+    connect(m_singleSendClearBtn, &ElaPushButton::clicked,
+            this, &NetworkPage::clearSingleSendLog);
 }
 
-void NetworkPage::createExcelSendPage() {
+// ═══════════════════════════════════════════════════════════════
+//  页面：Excel 表格发送（★ 恢复占位数据，改回原行为）
+// ═══════════════════════════════════════════════════════════════
+void NetworkPage::createExcelSendPage()
+{
     _NetworkExcelSendPage = new QWidget();
-    QVBoxLayout *_NetworkExcelSendLayout = new QVBoxLayout(_NetworkExcelSendPage);
-    _NetworkExcelSendLayout->setContentsMargins(30, 30, 30, 30);
+    QVBoxLayout* layout = new QVBoxLayout(_NetworkExcelSendPage);
+    layout->setSpacing(16);
+    layout->setContentsMargins(30, 30, 30, 30);
 
-    ElaText *_NetworkExcelSendTitle = new ElaText("网口Excel发送界面");
-    _NetworkExcelSendTitle->setTextPixelSize(24);
-    _NetworkExcelSendTitle->setTextStyle(ElaTextType::Title);
+    ElaText* title = new ElaText("网口 Excel 表格发送");
+    title->setTextPixelSize(24);
+    title->setTextStyle(ElaTextType::Title);
+    layout->addWidget(title);
 
-    _NetworkExcelSendLayout->addWidget(_NetworkExcelSendTitle);
-    _NetworkExcelSendLayout->addStretch();
+    ElaText* desc = new ElaText(
+        "通过 Excel 表格批量加载命令，逐条通过网口发送到设备。\n"
+        "支持自动比对返回值并统计发送结果。");
+    desc->setTextPixelSize(15);
+    desc->setWordWrap(true);
+    layout->addWidget(desc);
+
+    ElaText* tableLabel = new ElaText("读取到的 Excel 表格数据");
+    tableLabel->setTextPixelSize(15);
+    tableLabel->setTextStyle(ElaTextType::Subtitle);
+    layout->addWidget(tableLabel);
+
+    m_excelTableWidget = new QTableWidget();
+    m_excelTableWidget->setColumnCount(3);
+    m_excelTableWidget->setHorizontalHeaderLabels({
+        "发送的命令", "正确的返回值", "到下一条命令的时间ms"
+    });
+    m_excelTableWidget->setColumnWidth(0, 250);
+    m_excelTableWidget->setColumnWidth(1, 250);
+    m_excelTableWidget->setColumnWidth(2, 200);
+    // ★ 恢复占位数据
+    m_excelTableWidget->setRowCount(8);
+    m_excelTableWidget->setItem(0, 0, new QTableWidgetItem("等待读取 Excel 表格"));
+    m_excelTableWidget->setAlternatingRowColors(true);
+    layout->addWidget(m_excelTableWidget, 1);
+
+    // ═══════════ 底部 ═══════════
+    QVBoxLayout* bottomArea = new QVBoxLayout();
+    bottomArea->setSpacing(12);
+
+    // 发送次数
+    QHBoxLayout* repeatRow = new QHBoxLayout();
+    repeatRow->setSpacing(8);
+    ElaText* repeatLabel = new ElaText("发送次数:");
+    repeatLabel->setTextPixelSize(15);
+    m_excelRepeatCount = new ElaLineEdit();
+    m_excelRepeatCount->setFixedSize(400, 36);
+    m_excelRepeatCount->setPlaceholderText("0 = 无限循环");
+    m_excelRepeatCount->setText("0");
+    ElaText* repeatHint = new ElaText("（0 表示一直循环发送，直到点击停止）");
+    repeatHint->setTextPixelSize(15);
+    repeatHint->setWordWrap(false);
+    repeatHint->setStyleSheet("color: gray;");
+    repeatRow->addWidget(repeatLabel);
+    repeatRow->addWidget(m_excelRepeatCount);
+    repeatRow->addWidget(repeatHint);
+    repeatRow->addStretch();
+    bottomArea->addLayout(repeatRow);
+
+    // ──── 超时时间 ────
+    QHBoxLayout* timeoutRow = new QHBoxLayout();
+    timeoutRow->setSpacing(8);
+    ElaText* timeoutLabel = new ElaText("超时时间:");
+    timeoutLabel->setTextPixelSize(15);
+    m_excelTimeoutMs = new ElaLineEdit();
+    m_excelTimeoutMs->setFixedSize(400, 36);
+    m_excelTimeoutMs->setPlaceholderText("超时ms");
+    m_excelTimeoutMs->setText("500");
+    ElaText* timeoutHint = new ElaText("（超过此时间未收到回复则判定超时，发送下一条）");
+    timeoutHint->setTextPixelSize(15);
+    timeoutHint->setWordWrap(false);
+    timeoutHint->setStyleSheet("color: gray;");
+    timeoutRow->addWidget(timeoutLabel);
+    timeoutRow->addWidget(m_excelTimeoutMs);
+    timeoutRow->addWidget(timeoutHint);
+    timeoutRow->addStretch();
+    bottomArea->addLayout(timeoutRow);
+
+    // 按钮行
+    QHBoxLayout* btnRow = new QHBoxLayout();
+    btnRow->setSpacing(16);
+
+    QGroupBox* fileGroup = new QGroupBox("① 文件准备");
+    fileGroup->setStyleSheet("QGroupBox { font-size: 15px; font-weight: bold; }");
+    QHBoxLayout* fileLayout = new QHBoxLayout(fileGroup);
+    fileLayout->setSpacing(10);
+    m_excelOpenBtn = new ElaPushButton("打开 Excel 并读取");
+    m_excelOpenBtn->setFixedSize(180, 40);
+    m_excelOpenBtn->setEnabled(false);
+    m_excelDownloadTplBtn = new ElaPushButton("下载示例模板");
+    m_excelDownloadTplBtn->setFixedSize(160, 40);
+    fileLayout->addWidget(m_excelOpenBtn);
+    fileLayout->addWidget(m_excelDownloadTplBtn);
+    fileLayout->addStretch();
+
+    QGroupBox* sendGroup = new QGroupBox("② 发送控制");
+    sendGroup->setStyleSheet("QGroupBox { font-size: 15px; font-weight: bold; }");
+    QHBoxLayout* sendLayout = new QHBoxLayout(sendGroup);
+    sendLayout->setSpacing(10);
+    m_excelCaptureBtn = new ElaPushButton("读取返回值");
+    m_excelCaptureBtn->setFixedSize(140, 40);
+    m_excelCaptureBtn->setEnabled(false);
+    m_excelSendBtn = new ElaPushButton("开始发送");
+    m_excelSendBtn->setFixedSize(140, 40);
+    m_excelSendBtn->setEnabled(false);
+    m_excelStopBtn = new ElaPushButton("停止发送");
+    m_excelStopBtn->setFixedSize(140, 40);
+    m_excelStopBtn->setEnabled(false);
+    sendLayout->addWidget(m_excelCaptureBtn);
+    sendLayout->addWidget(m_excelSendBtn);
+    sendLayout->addWidget(m_excelStopBtn);
+    sendLayout->addStretch();
+
+    btnRow->addWidget(fileGroup);
+    btnRow->addWidget(sendGroup);
+    btnRow->addStretch();
+    bottomArea->addLayout(btnRow);
+    layout->addLayout(bottomArea);
 }
 
-void NetworkPage::createLogPage() {
+// ═══════════════════════════════════════════════════════════════
+//  页面：发送日志
+// ═══════════════════════════════════════════════════════════════
+void NetworkPage::createLogPage()
+{
     _NetworkLogPage = new QWidget();
-    QVBoxLayout *_NetworkLogLayout = new QVBoxLayout(_NetworkLogPage);
-    _NetworkLogLayout->setContentsMargins(30, 30, 30, 30);
+    QVBoxLayout* layout = new QVBoxLayout(_NetworkLogPage);
+    layout->setSpacing(16);
+    layout->setContentsMargins(30, 30, 30, 30);
 
-    ElaText *_NetworkLogTitle = new ElaText("网口发送日志界面");
-    _NetworkLogTitle->setTextPixelSize(24);
-    _NetworkLogTitle->setTextStyle(ElaTextType::Title);
+    ElaText* title = new ElaText("网口 Excel 发送日志");
+    title->setTextPixelSize(24);
+    title->setTextStyle(ElaTextType::Title);
+    layout->addWidget(title);
+    ElaText* desc = new ElaText(
+        "记录每次 Excel 表格发送的详细过程。\n"
+        "包含发送的命令、设备返回值及时间戳。");
+    desc->setTextPixelSize(15);
+    desc->setWordWrap(true);
+    layout->addWidget(desc);
 
-    _NetworkLogLayout->addWidget(_NetworkLogTitle);
-    _NetworkLogLayout->addStretch();
+    QHBoxLayout* cardRow = new QHBoxLayout();
+    cardRow->setSpacing(16);
+    m_logSentCountCard = new StatCard("总计发送", "0");
+    m_logRecvCountCard = new StatCard("总计接收", "0");
+    m_logStartTimeCard = new StatCard("开始时间", "--:--:--");
+
+    cardRow->addWidget(m_logSentCountCard);
+    cardRow->addWidget(m_logRecvCountCard);
+    cardRow->addWidget(m_logStartTimeCard);
+    cardRow->addStretch();
+
+    m_logClearBtn = new ElaPushButton("清空日志");
+    m_logClearBtn->setFixedSize(120, 38);
+    cardRow->addWidget(m_logClearBtn);
+
+    layout->addLayout(cardRow);
+
+    QHBoxLayout* logRow = new QHBoxLayout();
+    logRow->setSpacing(12);
+    QVBoxLayout* sendArea = new QVBoxLayout();
+    ElaText* sendLabel = new ElaText("发送日志");
+    sendLabel->setTextPixelSize(15);
+    sendLabel->setTextStyle(ElaTextType::Subtitle);
+    m_logSendList = new QListWidget();
+    m_logSendList->setAlternatingRowColors(true);
+    sendArea->addWidget(sendLabel);
+    sendArea->addWidget(m_logSendList);
+    QVBoxLayout* recvArea = new QVBoxLayout();
+    ElaText* recvLabel = new ElaText("接收日志");
+    recvLabel->setTextPixelSize(15);
+    recvLabel->setTextStyle(ElaTextType::Subtitle);
+    m_logRecvList = new QListWidget();
+    m_logRecvList->setAlternatingRowColors(true);
+    recvArea->addWidget(recvLabel);
+    recvArea->addWidget(m_logRecvList);
+    logRow->addLayout(sendArea, 1);
+    logRow->addLayout(recvArea, 1);
+    layout->addLayout(logRow, 1);
+
+    connect(m_logClearBtn, &ElaPushButton::clicked,
+        this, &NetworkPage::clearExcelSendLog);
 }
 
-void NetworkPage::createErrorLogPage() {
+// ═══════════════════════════════════════════════════════════════
+//  页面：错误日志
+// ═══════════════════════════════════════════════════════════════
+void NetworkPage::createErrorLogPage()
+{
     _NetworkErrorLogPage = new QWidget();
-    QVBoxLayout *_NetworkErrorLayout = new QVBoxLayout(_NetworkErrorLogPage);
-    _NetworkErrorLayout->setContentsMargins(30, 30, 30, 30);
+    QVBoxLayout* root = new QVBoxLayout(_NetworkErrorLogPage);
+    root->setContentsMargins(28, 24, 28, 24);
+    root->setSpacing(14);
+    auto createCard = [](QWidget* parent) -> QWidget* {
+        QWidget* card = new QWidget(parent);
+        card->setObjectName("errorCard");
+        card->setStyleSheet(
+            "QWidget#errorCard {"
+            "  background: transparent;"
+            "  border: 1px solid rgba(130,130,130,55);"
+            "  border-radius: 10px;"
+            "}"
+        );
+        return card;
+    };
+    auto cardTitle = [](const QString& text, QWidget* parent) -> ElaText* {
+        ElaText* t = new ElaText(text, parent);
+        t->setTextPixelSize(15);
+        t->setTextStyle(ElaTextType::BodyStrong);
+        return t;
+    };
+    ElaText* pageTitle = new ElaText("网口错误日志");
+    pageTitle->setTextPixelSize(24);
+    pageTitle->setTextStyle(ElaTextType::Title);
+    root->addWidget(pageTitle);
 
-    ElaText *_NetworkErrorLogTitle = new ElaText("网口错误统计界面");
-    _NetworkErrorLogTitle->setTextPixelSize(24);
-    _NetworkErrorLogTitle->setTextStyle(ElaTextType::Title);
+    QWidget* statsCard = createCard(_NetworkErrorLogPage);
+    QHBoxLayout* statsLayout = new QHBoxLayout(statsCard);
+    statsLayout->setContentsMargins(24, 20, 24, 20);
+    statsLayout->setSpacing(16);
+    m_errorTotalCard   = new StatCard("总错误",   "0");
+    m_errorTimeoutCard = new StatCard("超时错误", "0");
+    m_errorContentCard = new StatCard("内容错误", "0");
+    statsLayout->addWidget(m_errorTotalCard);
+    statsLayout->addWidget(m_errorTimeoutCard);
+    statsLayout->addWidget(m_errorContentCard);
+    statsLayout->addStretch();
+    m_errorClearBtn = new ElaPushButton("清空记录");
+    m_errorClearBtn->setFixedWidth(120);
+    m_errorClearBtn->setMinimumHeight(36);
+    statsLayout->addWidget(m_errorClearBtn);
+    root->addWidget(statsCard);
 
-    _NetworkErrorLayout->addWidget(_NetworkErrorLogTitle);
-    _NetworkErrorLayout->addStretch();
+    QWidget* tableCard = createCard(_NetworkErrorLogPage);
+    QVBoxLayout* tableCardLayout = new QVBoxLayout(tableCard);
+    tableCardLayout->setContentsMargins(20, 16, 20, 16);
+    tableCardLayout->setSpacing(10);
+    QHBoxLayout* tableHeader = new QHBoxLayout();
+    tableHeader->addWidget(cardTitle("错误列表", tableCard));
+    tableHeader->addStretch();
+    ElaText* autoScrollLabel = new ElaText("自动滚动：");
+    autoScrollLabel->setTextPixelSize(13);
+    autoScrollLabel->setTextStyle(ElaTextType::Body);
+    m_errorAutoScroll = new ElaToggleSwitch();
+    m_errorAutoScroll->setIsToggled(true);
+    tableHeader->addWidget(autoScrollLabel);
+    tableHeader->addWidget(m_errorAutoScroll);
+    tableCardLayout->addLayout(tableHeader);
+    m_errorTable = new QTableWidget();
+    m_errorTable->setColumnCount(6);
+    m_errorTable->setHorizontalHeaderLabels(
+        QStringList() << "序号" << "时间" << "错误类型"
+                      << "发送命令" << "期望值" << "实际值");
+    QHeaderView* hHeader = m_errorTable->horizontalHeader();
+    m_errorTable->setColumnWidth(0, 50);
+    m_errorTable->setColumnWidth(1, 100);
+    m_errorTable->setColumnWidth(2, 80);
+    hHeader->setSectionResizeMode(3, QHeaderView::Stretch);
+    hHeader->setSectionResizeMode(4, QHeaderView::Stretch);
+    hHeader->setSectionResizeMode(5, QHeaderView::Stretch);
+    m_errorTable->setAlternatingRowColors(true);
+    m_errorTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    m_errorTable->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_errorTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_errorTable->setShowGrid(true);
+    m_errorTable->verticalHeader()->setVisible(false);
+    m_errorTable->setRowCount(1);
+    m_errorTable->setItem(0, 0, new QTableWidgetItem("—"));
+    m_errorTable->setItem(0, 1, new QTableWidgetItem("尚未记录错误"));
+    m_errorTable->setSpan(0, 1, 1, 5);
+    tableCardLayout->addWidget(m_errorTable, 1);
+    root->addWidget(tableCard, 1);
+
+    connect(m_errorClearBtn, &ElaPushButton::clicked, this, &NetworkPage::clearErrors);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  字节数组 → 错误日志显示文本
+// ═══════════════════════════════════════════════════════════════
+static QString bytesToDisplayText(const QByteArray &data, bool isHexMode)
+{
+    if (data.isEmpty())
+        return QString("—");
+    if (isHexMode) {
+        return data.toHex(' ').toUpper();
+    } else {
+        QString text = QString::fromUtf8(data);
+        if (!text.isEmpty())
+            return text;
+        else
+            return data.toHex(' ').toUpper();
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  添加超时错误
+// ═══════════════════════════════════════════════════════════════
+void NetworkPage::addTimeoutError(const QString &command, const QByteArray &expected)
+{
+    ++m_errorSeq;
+    ++m_timeoutCount;
+
+    int total = m_timeoutCount + m_contentCount;
+    m_errorTotalCard->setValue(QString::number(total));
+    m_errorTimeoutCard->setValue(QString::number(m_timeoutCount));
+
+    if (m_errorTable->rowCount() == 1
+        && m_errorTable->item(0, 1)
+        && m_errorTable->item(0, 1)->text() == "尚未记录错误")
+    {
+        m_errorTable->setRowCount(0);
+    }
+
+    int row = m_errorTable->rowCount();
+    m_errorTable->insertRow(row);
+
+    QString timeStr = QDateTime::currentDateTime().toString("HH:mm:ss.zzz");
+
+    bool hexMode = m_networkHexSendCheckBox && m_networkHexSendCheckBox->isChecked();
+
+    m_errorTable->setItem(row, 0, new QTableWidgetItem(QString::number(m_errorSeq)));
+    m_errorTable->setItem(row, 1, new QTableWidgetItem(timeStr));
+    m_errorTable->setItem(row, 2, new QTableWidgetItem("超时"));
+    m_errorTable->setItem(row, 3, new QTableWidgetItem(command));
+    m_errorTable->setItem(row, 4, new QTableWidgetItem(bytesToDisplayText(expected, hexMode)));
+    m_errorTable->setItem(row, 5, new QTableWidgetItem("(无返回)"));
+
+    for (int c = 0; c < 6; ++c) {
+        QTableWidgetItem* it = m_errorTable->item(row, c);
+        if (it) it->setForeground(QColor("#f39c12"));
+    }
+
+    while (m_errorTable->rowCount() > 1000)
+        m_errorTable->removeRow(0);
+
+    if (m_errorAutoScroll->getIsToggled())
+        m_errorTable->scrollToBottom();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  添加内容错误
+// ═══════════════════════════════════════════════════════════════
+void NetworkPage::addContentError(const QString &command,
+                                  const QByteArray &expected,
+                                  const QByteArray &actual)
+{
+    ++m_errorSeq;
+    ++m_contentCount;
+
+    int total = m_timeoutCount + m_contentCount;
+    m_errorTotalCard->setValue(QString::number(total));
+    m_errorContentCard->setValue(QString::number(m_contentCount));
+
+    if (m_errorTable->rowCount() == 1
+        && m_errorTable->item(0, 1)
+        && m_errorTable->item(0, 1)->text() == "尚未记录错误")
+    {
+        m_errorTable->setRowCount(0);
+    }
+
+    int row = m_errorTable->rowCount();
+    m_errorTable->insertRow(row);
+
+    QString timeStr = QDateTime::currentDateTime().toString("HH:mm:ss.zzz");
+
+    bool hexMode = m_networkHexSendCheckBox && m_networkHexSendCheckBox->isChecked();
+
+    m_errorTable->setItem(row, 0, new QTableWidgetItem(QString::number(m_errorSeq)));
+    m_errorTable->setItem(row, 1, new QTableWidgetItem(timeStr));
+    m_errorTable->setItem(row, 2, new QTableWidgetItem("内容错误"));
+    m_errorTable->setItem(row, 3, new QTableWidgetItem(command));
+    m_errorTable->setItem(row, 4, new QTableWidgetItem(bytesToDisplayText(expected, hexMode)));
+    m_errorTable->setItem(row, 5, new QTableWidgetItem(bytesToDisplayText(actual,   hexMode)));
+
+    for (int c = 0; c < 6; ++c) {
+        QTableWidgetItem* it = m_errorTable->item(row, c);
+        if (it) it->setForeground(QColor("#e74c3c"));
+    }
+
+    while (m_errorTable->rowCount() > 1000)
+        m_errorTable->removeRow(0);
+
+    if (m_errorAutoScroll->getIsToggled())
+        m_errorTable->scrollToBottom();
+}
+
+void NetworkPage::clearErrors()
+{
+    m_errorSeq     = 0;
+    m_timeoutCount = 0;
+    m_contentCount = 0;
+    m_errorTotalCard->setValue("0");
+    m_errorTimeoutCard->setValue("0");
+    m_errorContentCard->setValue("0");
+    m_errorTable->clearContents();
+    m_errorTable->setRowCount(1);
+    m_errorTable->setItem(0, 0, new QTableWidgetItem("—"));
+    m_errorTable->setItem(0, 1, new QTableWidgetItem("尚未记录错误"));
+    m_errorTable->setSpan(0, 1, 1, 5);
+}
+
+void NetworkPage::clearSingleSendLog()
+{
+    m_singleSendLog->clear();
+    m_singleRecvLog->clear();
+}
+
+void NetworkPage::clearExcelSendLog()
+{
+    m_logSendList->clear();
+    m_logRecvList->clear();
+
+    m_logSentCountCard->setValue("0");
+    m_logRecvCountCard->setValue("0");
+    m_logStartTimeCard->setValue("--:--:--");
+
+    if (m_networkWork)
+        m_networkWork->resetRecvCount();
 }
