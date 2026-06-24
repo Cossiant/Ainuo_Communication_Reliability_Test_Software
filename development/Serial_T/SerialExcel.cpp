@@ -50,17 +50,26 @@ void SerialExcel::setRunning(bool running)
     m_page->m_excelTimeoutMs->setEnabled(!running);
 }
 
-// ═══════════════════════════════════════════════ 读取返回值 ═══
+// ═══════════════════════════════════════════════ ★ 读取返回值（捕获模式） ═══
 void SerialExcel::onCapture()
 {
     if (m_isRunning || !m_work || !m_work->isOpen()) return;
-    if (m_page->m_excelTableWidget->rowCount() == 0) return;
+
+    QTableWidget* table = m_page->m_excelTableWidget;
+    int rowCount = table->rowCount();
+    if (rowCount == 0) return;
+
     setRunning(true);
-    m_currentRow  = 0;
-    m_repeatLeft  = 1;
-    m_totalSent   = 0;
-    m_pendingStop = false;
+
+    m_isCaptureMode = true;       // ★ 进入捕获模式
+    m_currentRow    = 0;
+    m_repeatLeft    = -1;         // 不限次数，由行数控制结束
+    m_totalSent     = 0;
+    m_pendingStop   = false;
+
+    m_page->clearExcelSendLog();
     m_page->m_logStartTimeCard->setValue(QDateTime::currentDateTime().toString("HH:mm:ss"));
+
     onTrySendNext();
 }
 
@@ -74,12 +83,16 @@ void SerialExcel::onStartSend()
     if (count <= 0) count = -1;
 
     setRunning(true);
-    m_currentRow  = 0;
-    m_repeatLeft  = count;
-    m_totalSent   = 0;
-    m_pendingStop = false;
+
+    m_isCaptureMode = false;      // ★ 普通发送模式
+    m_currentRow    = 0;
+    m_repeatLeft    = count;
+    m_totalSent     = 0;
+    m_pendingStop   = false;
+
     m_page->clearExcelSendLog();
     m_page->m_logStartTimeCard->setValue(QDateTime::currentDateTime().toString("HH:mm:ss"));
+
     onTrySendNext();
 }
 
@@ -88,6 +101,7 @@ void SerialExcel::onStopSend()
 {
     m_timeoutTimer->stop();
     m_waiting = false;
+    m_isCaptureMode = false;       // ★ 退出捕获模式
 
     // 清除期望值（跨线程）
     QMetaObject::invokeMethod(m_work, "setExpectedResponse",
@@ -106,6 +120,13 @@ void SerialExcel::onTrySendNext()
     QTableWidget* table = m_page->m_excelTableWidget;
     int rowCount = table->rowCount();
     if (rowCount == 0) { onStopSend(); return; }
+
+    // ★ 捕获模式：所有行都发送完毕 → 停止
+    if (m_isCaptureMode && m_currentRow >= rowCount) {
+        onStopSend();
+        qDebug() << "SerialExcel: 捕获模式完成，共" << m_totalSent << "条";
+        return;
+    }
 
     if (m_pendingStop) {
         onStopSend();
@@ -132,6 +153,11 @@ void SerialExcel::onTrySendNext()
 
     int globalTimeout = m_page->m_excelTimeoutMs->text().toInt();
     if (globalTimeout <= 0) globalTimeout = 500;
+
+    // ★ 捕获模式：适当延长超时
+    if (m_isCaptureMode && globalTimeout < 2000) {
+        globalTimeout = 2000;
+    }
 
     m_currentRow++;
 
@@ -176,6 +202,11 @@ void SerialExcel::onResponseReceived(QByteArray data)
     m_gotReply     = true;
     m_lastRecvData = data;
 
+    // ★ 捕获模式：将返回值填入表格 B 列
+    if (m_isCaptureMode) {
+        fillCaptureResult(data);
+    }
+
     // 比对
     if (!m_expectData.isEmpty() && data != m_expectData) {
         m_page->addContentError(m_lastCmd, m_expectData, data);
@@ -200,6 +231,11 @@ void SerialExcel::onGlobalTimeout()
 {
     if (!m_waiting) return;
 
+    // ★ 捕获模式：超时也填入 "(超时)"
+    if (m_isCaptureMode) {
+        fillCaptureTimeout();
+    }
+
     // 超时前还没收到回复但有期望值 → 记录超时错误
     if (!m_gotReply && !m_expectData.isEmpty()) {
         m_page->addTimeoutError(m_lastCmd, m_expectData);
@@ -219,6 +255,54 @@ void SerialExcel::finalizeAndNext()
                               Q_ARG(QByteArray, QByteArray()));
 
     onTrySendNext();
+}
+
+// ═══════════════════════════════════════════════ ★ 捕获模式：填入返回值 ═══
+void SerialExcel::fillCaptureResult(const QByteArray &data)
+{
+    // m_currentRow 已在上一条发送时递增，当前回复对应 row = m_currentRow - 1
+    int row = m_currentRow - 1;
+    QTableWidget* table = m_page->m_excelTableWidget;
+    if (row < 0 || row >= table->rowCount()) return;
+
+    bool hexMode = m_page->m_serialHexSendCheckBox->isChecked();
+    QString displayText;
+    if (hexMode) {
+        displayText = data.toHex(' ').toUpper();
+    } else {
+        displayText = QString::fromUtf8(data);
+        if (displayText.isEmpty())
+            displayText = data.toHex(' ').toUpper();
+    }
+
+    QTableWidgetItem* item = table->item(row, 1);
+    if (!item) {
+        item = new QTableWidgetItem();
+        table->setItem(row, 1, item);
+    }
+    item->setText(displayText);
+
+    qDebug() << "SerialExcel: 捕获模式 — 第" << (row + 1) << "行返回值已填入:" << displayText;
+}
+
+// ═══════════════════════════════════════════════ ★ 捕获模式：超时标记 ═══
+void SerialExcel::fillCaptureTimeout()
+{
+    int row = m_currentRow - 1;
+    QTableWidget* table = m_page->m_excelTableWidget;
+    if (row < 0 || row >= table->rowCount()) return;
+
+    QTableWidgetItem* item = table->item(row, 1);
+    if (!item) {
+        item = new QTableWidgetItem();
+        table->setItem(row, 1, item);
+    }
+    // 只有当单元格为空时才填入超时标记
+    if (item->text().isEmpty()) {
+        item->setText("(超时)");
+    }
+
+    qDebug() << "SerialExcel: 捕获模式 — 第" << (row + 1) << "行超时";
 }
 
 // ═══════════════════════════════════════════════ 打开 Excel 并读取 ═══

@@ -18,7 +18,7 @@
 #include <QHeaderView>
 #include <QThread>
 #include <QDebug>
-#include <QTimer>                   // ★ 新增：连接超时定时器
+#include <QTimer>
 
 #include "ElaComboBox.h"
 #include "ElaLineEdit.h"
@@ -72,13 +72,15 @@ private:
     ElaLineEdit*   m_ipAddressEdit          = nullptr;
     ElaLineEdit*   m_portEdit               = nullptr;
     ElaCheckBox*   m_networkHexSendCheckBox  = nullptr;
-    ElaCheckBox*   m_nagleCheckBox           = nullptr;  // ★ 禁用 Nagle 勾选框
+    ElaCheckBox*   m_nagleCheckBox           = nullptr;
     ElaPushButton* m_openNetworkButton       = nullptr;
     ElaPushButton* m_closeNetworkButton      = nullptr;
     QLabel*        m_networkLED              = nullptr;
 
     // ★ 连接超时定时器（主线程，3 秒）
     QTimer*        m_connectTimeoutTimer     = nullptr;
+    // ★ 防止超时与错误信号竞态导致重复弹窗 / 重复 disconnect
+    bool           m_isConnecting            = false;
 
     // ═════════════ 单条发送控件 ═════════
     ElaLineEdit*   m_singleSendInput      = nullptr;

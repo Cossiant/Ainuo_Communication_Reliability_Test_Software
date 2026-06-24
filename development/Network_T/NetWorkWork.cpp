@@ -1,6 +1,8 @@
 // NetworkWork.cpp
 // 方案三实现（TCP 客户端版）
 // ★ 可选禁用 Nagle 算法（由勾选框控制）
+// ★ 修复：连接错误时使用 deleteLater 避免闪退
+// ★ 修复：disconnectFromHost 增加重入保护
 
 #include "NetworkWork.h"
 #include <QDebug>
@@ -13,10 +15,9 @@
 NetworkWork::NetworkWork(QObject *parent)
     : QObject(parent)
 {
-    // ★ 命令间隔精确延时定时器（工作线程内）
     m_interCmdTimer = new QTimer(this);
     m_interCmdTimer->setSingleShot(true);
-    m_interCmdTimer->setTimerType(Qt::PreciseTimer);   // ★ 1ms 精度
+    m_interCmdTimer->setTimerType(Qt::PreciseTimer);
     connect(m_interCmdTimer, &QTimer::timeout,
             this, &NetworkWork::onInterCmdDelay);
 
@@ -66,7 +67,6 @@ void NetworkWork::setHexDisplayMode(bool hexMode)
 
 // ═══════════════════════════════════════════════════════════════
 //  连接主机（TCP 客户端，异步连接）
-//  ★ disableNagle：勾选时才禁用 Nagle 算法
 // ═══════════════════════════════════════════════════════════════
 void NetworkWork::connectToHost(const QString &ipAddress,
                                 quint16 port,
@@ -78,12 +78,10 @@ void NetworkWork::connectToHost(const QString &ipAddress,
 
     m_tcpSocket = new QTcpSocket(this);
 
-    // ★ 根据勾选框决定是否禁用 Nagle 算法
     if (disableNagle) {
         m_tcpSocket->setSocketOption(QAbstractSocket::LowDelayOption, 1);
     }
 
-    // ★ 异步连接信号
     connect(m_tcpSocket, &QTcpSocket::connected,
             this, &NetworkWork::onConnected);
     connect(m_tcpSocket, &QTcpSocket::disconnected,
@@ -93,7 +91,6 @@ void NetworkWork::connectToHost(const QString &ipAddress,
     connect(m_tcpSocket, &QTcpSocket::errorOccurred,
             this, &NetworkWork::onSocketError);
 
-    // ★ 异步发起连接
     m_tcpSocket->connectToHost(ipAddress, port);
 
     qDebug() << "NetworkWork: 正在连接" << ipAddress << ":" << port
@@ -115,29 +112,42 @@ void NetworkWork::onConnected()
 
 // ═══════════════════════════════════════════════════════════════
 //  断开连接
+//  ★ 修复：增加重入保护，避免竞态导致闪退
 // ═══════════════════════════════════════════════════════════════
 void NetworkWork::disconnectFromHost()
 {
-    m_interCmdTimer->stop();   // ★ 停止命令间隔定时器
-
-    if (m_tcpSocket) {
-        disconnect(m_tcpSocket, nullptr, this, nullptr);
-
-        if (m_tcpSocket->state() != QAbstractSocket::UnconnectedState) {
-            m_tcpSocket->disconnectFromHost();
-
-            // 短暂等待断开（在工作线程内不会阻塞 UI）
-            if (m_tcpSocket->state() != QAbstractSocket::UnconnectedState) {
-                m_tcpSocket->waitForDisconnected(1000);
-            }
-        }
-
-        delete m_tcpSocket;
-        m_tcpSocket = nullptr;
+    // ★ 重入保护：如果已经在断开流程中，直接返回
+    if (m_disconnecting.testAndSetRelaxed(0, 1) == false) {
+        qDebug() << "NetworkWork: disconnectFromHost 已在执行中，跳过重复调用";
+        return;
     }
 
-    m_opened.storeRelaxed(0);
-    emit networkDisconnected();
+    m_interCmdTimer->stop();
+
+    if (m_tcpSocket) {
+        // ★ 先取出指针并置空，防止 onSocketError 等回调中重复操作
+        QTcpSocket* sock = m_tcpSocket;
+        m_tcpSocket = nullptr;
+
+        // 断开所有信号连接，防止后续 socket 事件触发回调
+        disconnect(sock, nullptr, this, nullptr);
+
+        if (sock->state() != QAbstractSocket::UnconnectedState) {
+            sock->abort();  // ★ 立即中止，避免 waitForDisconnected 阻塞
+        }
+
+        // ★ 使用 deleteLater 安全删除，避免在信号处理栈中直接 delete
+        sock->deleteLater();
+    }
+
+    bool wasOpen = (m_opened.fetchAndStoreRelaxed(0) != 0);
+
+    // ★ 只有之前是已连接状态才发断开信号（连接失败时不发重复信号）
+    if (wasOpen) {
+        emit networkDisconnected();
+    }
+
+    m_disconnecting.storeRelaxed(0);
 
     qDebug() << "NetworkWork: TCP 已断开"
              << "(线程:" << QThread::currentThreadId() << ")";
@@ -149,6 +159,10 @@ void NetworkWork::disconnectFromHost()
 void NetworkWork::onDisconnected()
 {
     m_interCmdTimer->stop();
+
+    // ★ 如果正在主动断开中，不重复处理
+    if (m_disconnecting.loadRelaxed() != 0)
+        return;
 
     m_opened.storeRelaxed(0);
     emit networkDisconnected();
@@ -209,10 +223,8 @@ void NetworkWork::sendStringWithDelay(const QString &text, bool hexMode,
     if (!isOpen() || text.isEmpty() || !m_tcpSocket)
         return;
 
-    // 1. 设置期望返回值
     m_expectedResponse = expectedResponse;
 
-    // 2. 编码并发送
     QByteArray data;
     if (hexMode) {
         QString hex = text;
@@ -228,12 +240,10 @@ void NetworkWork::sendStringWithDelay(const QString &text, bool hexMode,
         return;
     }
 
-    // 3. 发送日志
     QString timeStr = QDateTime::currentDateTime().toString("HH:mm:ss.zzz");
     QString display = formatByteArray(data);
     emit sendLogLine(QString("[%1] TX → %2").arg(timeStr, display));
 
-    // 4. ★ 在工作线程内启动精确延时
     if (delayMs > 0) {
         m_interCmdTimer->start(delayMs);
     } else {
@@ -263,38 +273,78 @@ void NetworkWork::onReadyRead()
 
 // ═══════════════════════════════════════════════════════════════
 //  处理 Socket 错误
+//  ★ 修复：
+//    1. 使用 deleteLater 替代直接 delete，避免在信号回调栈中删除 socket
+//    2. 先保存错误信息，再清理 socket
+//    3. 防止 onSocketError 重入
 // ═══════════════════════════════════════════════════════════════
 void NetworkWork::onSocketError(QAbstractSocket::SocketError error)
 {
-    Q_UNUSED(error);
-
+    // ★ 如果 socket 已经被清理（可能被超时或其他路径抢先），直接返回
     if (!m_tcpSocket)
         return;
 
+    // ★ 如果正在断开中，不重复处理
+    if (m_disconnecting.loadRelaxed() != 0)
+        return;
+
+    // ★ 先提取错误信息（在清理 socket 之前）
     QString msg;
+    bool fatal = false;
+
     switch (error) {
     case QAbstractSocket::ConnectionRefusedError:
         msg = "连接被拒绝，请检查目标 IP 和端口";
+        fatal = true;
         break;
     case QAbstractSocket::RemoteHostClosedError:
         msg = "远程主机关闭了连接";
-        disconnectFromHost();
-        return;
+        fatal = true;
+        break;
     case QAbstractSocket::HostNotFoundError:
         msg = "找不到主机，请检查 IP 地址";
+        fatal = true;
         break;
     case QAbstractSocket::SocketTimeoutError:
         msg = "Socket 操作超时";
+        fatal = true;
         break;
     case QAbstractSocket::NetworkError:
         msg = "网络错误，连接中断";
-        disconnectFromHost();
-        return;
+        fatal = true;
+        break;
     default:
+        // ★ 在 socket 还存在时保存错误信息
         msg = m_tcpSocket->errorString();
         break;
     }
 
+    // ★ 致命错误：安全清理 socket
+    if (fatal) {
+        // 先取出 socket 指针并置空，防止重复操作
+        QTcpSocket* sock = m_tcpSocket;
+        m_tcpSocket = nullptr;
+
+        m_interCmdTimer->stop();
+
+        // 断开所有信号
+        disconnect(sock, nullptr, this, nullptr);
+
+        // 立即中止连接
+        if (sock->state() != QAbstractSocket::UnconnectedState) {
+            sock->abort();
+        }
+
+        // ★ 使用 deleteLater 安全删除
+        sock->deleteLater();
+
+        m_opened.storeRelaxed(0);
+
+        // ★ 连接失败时也发 networkDisconnected，让 UI 恢复初始状态
+        emit networkDisconnected();
+    }
+
+    // ★ 最后发射错误信号（此时 socket 已安全清理或保留）
     emit errorOccurred(msg);
 }
 

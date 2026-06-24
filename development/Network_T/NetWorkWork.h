@@ -76,6 +76,9 @@ private:
     bool       m_hexDisplay = false;
 
     QAtomicInt m_opened{0};
+
+    // ★ 防止 disconnectFromHost 重入（同一线程内无需 atomic，但用 atomic 更安全）
+    QAtomicInt m_disconnecting{0};
 };
 
 #endif // UNTITLED_NETWORKWORK_H

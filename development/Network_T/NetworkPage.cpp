@@ -8,8 +8,6 @@
 #include "QMessageBox"
 #include "ElaIcon.h"
 
-// NetworkPage.cpp 构造函数
-
 NetworkPage::NetworkPage(ElaWindow *mainWindow, QObject *parent)
     : QObject(parent),
       m_mainWindow(mainWindow)
@@ -39,19 +37,21 @@ NetworkPage::NetworkPage(ElaWindow *mainWindow, QObject *parent)
     m_connectTimeoutTimer = new QTimer(this);
     m_connectTimeoutTimer->setSingleShot(true);
     connect(m_connectTimeoutTimer, &QTimer::timeout, this, [this]() {
-        QMessageBox::warning(m_mainWindow, "网络连接超时",
-                             "网络连接超时，请检查网络。\n"
-                             "请确认 IP 地址和端口号是否正确，目标设备是否在线。");
-        // 触发断开（跨线程）
-        QMetaObject::invokeMethod(m_networkWork, "disconnectFromHost",
-                                  Qt::QueuedConnection);
+        if (m_isConnecting) {
+            m_isConnecting = false;
+            QMessageBox::warning(m_mainWindow, "网络连接超时",
+                                 "网络连接超时，请检查网络。\n"
+                                 "请确认 IP 地址和端口号是否正确，目标设备是否在线。");
+            QMetaObject::invokeMethod(m_networkWork, "disconnectFromHost",
+                                      Qt::QueuedConnection);
+        }
     });
 
     // ═══════════════════════════════════════════════════════
-    //  连接 UI 控件 → NetworkWork（★ 全部使用 invokeMethod）
+    //  连接 UI 控件 → NetworkWork
     // ═══════════════════════════════════════════════════════
 
-    // ① 连接网络按钮（★ 传递 Nagle 勾选状态 + 启动超时定时器）
+    // ① 连接网络按钮
     connect(m_openNetworkButton, &ElaPushButton::clicked, this, [this]() {
         QString ipAddress = m_ipAddressEdit->text().trimmed();
         if (ipAddress.isEmpty()) {
@@ -69,7 +69,7 @@ NetworkPage::NetworkPage(ElaWindow *mainWindow, QObject *parent)
         bool hexMode      = m_networkHexSendCheckBox->isChecked();
         bool disableNagle = m_nagleCheckBox->isChecked();
 
-        // ★ 启动 3 秒连接超时定时器
+        m_isConnecting = true;
         m_connectTimeoutTimer->start(3000);
 
         QMetaObject::invokeMethod(m_networkWork, "setHexDisplayMode",
@@ -84,7 +84,8 @@ NetworkPage::NetworkPage(ElaWindow *mainWindow, QObject *parent)
 
     // ② 断开网络按钮
     connect(m_closeNetworkButton, &ElaPushButton::clicked, this, [this]() {
-        m_connectTimeoutTimer->stop();   // ★ 停止超时定时器
+        m_isConnecting = false;
+        m_connectTimeoutTimer->stop();
         QMetaObject::invokeMethod(m_networkWork, "disconnectFromHost",
                                   Qt::QueuedConnection);
     });
@@ -99,7 +100,7 @@ NetworkPage::NetworkPage(ElaWindow *mainWindow, QObject *parent)
                                   Q_ARG(bool, hexMode));
     });
 
-    // ④ HEX 勾选框 → 同步显示模式
+    // ④ HEX 勾选框
     connect(m_networkHexSendCheckBox, &ElaCheckBox::toggled, this, [this](bool checked) {
         QMetaObject::invokeMethod(m_networkWork, "setHexDisplayMode",
                                   Qt::QueuedConnection,
@@ -110,9 +111,10 @@ NetworkPage::NetworkPage(ElaWindow *mainWindow, QObject *parent)
     //  连接 NetworkWork 信号 → UI 更新
     // ═══════════════════════════════════════════════════════════
 
-    // ⑤ 网络连接成功 → 停止超时定时器
+    // ⑤ 网络连接成功
     connect(m_networkWork, &NetworkWork::networkConnected, this, [this]() {
-        m_connectTimeoutTimer->stop();   // ★ 停止超时定时器
+        m_isConnecting = false;
+        m_connectTimeoutTimer->stop();
 
         m_openNetworkButton->setEnabled(false);
         m_closeNetworkButton->setEnabled(true);
@@ -123,17 +125,17 @@ NetworkPage::NetworkPage(ElaWindow *mainWindow, QObject *parent)
         m_singleSendBtn->setEnabled(true);
         m_excelOpenBtn->setEnabled(true);
 
-        // ★ 改回原行为：表格有数据就启用发送/捕获按钮
         bool hasData = (m_excelTableWidget->rowCount() > 0);
         m_excelCaptureBtn->setEnabled(hasData);
         m_excelSendBtn->setEnabled(hasData);
 
-        LED::setLED(m_networkLED, 2, 16);   // 绿色
+        LED::setLED(m_networkLED, 2, 16);
     });
 
     // ⑥ 网络断开
     connect(m_networkWork, &NetworkWork::networkDisconnected, this, [this]() {
-        m_connectTimeoutTimer->stop();   // ★ 停止超时定时器
+        m_isConnecting = false;
+        m_connectTimeoutTimer->stop();
 
         m_openNetworkButton->setEnabled(true);
         m_closeNetworkButton->setEnabled(false);
@@ -146,16 +148,26 @@ NetworkPage::NetworkPage(ElaWindow *mainWindow, QObject *parent)
         m_excelCaptureBtn->setEnabled(false);
         m_excelSendBtn->setEnabled(false);
 
-        LED::setLED(m_networkLED, 0, 16);   // 灰色
+        LED::setLED(m_networkLED, 0, 16);
     });
 
-    // ⑦ 错误提示 + 停止超时定时器
+    // ⑦ 错误提示
+    // ★ 修复：只在 m_isConnecting 为 true 时弹窗，防止与超时弹窗冲突
     connect(m_networkWork, &NetworkWork::errorOccurred, this, [this](const QString &msg) {
-        m_connectTimeoutTimer->stop();   // ★ 停止超时定时器
-        QMessageBox::critical(m_mainWindow, "网络错误", msg);
+        bool wasConnecting = m_isConnecting;
+        m_isConnecting = false;
+        m_connectTimeoutTimer->stop();
+
+        // ★ 只有在连接等待阶段才弹错误框，避免与超时弹窗重复
+        if (wasConnecting) {
+            QMessageBox::critical(m_mainWindow, "网络错误", msg);
+        } else {
+            // 非连接阶段的错误（如发送失败等），静默记录即可
+            qDebug() << "NetworkPage: 非连接阶段错误 -" << msg;
+        }
     });
 
-    // ⑧ 发送日志行 → 写入两个 QListWidget
+    // ⑧ 发送日志行
     connect(m_networkWork, &NetworkWork::sendLogLine, this, [this](const QString &line) {
         if (m_singleSendLog) {
             m_singleSendLog->addItem(line);
@@ -169,7 +181,7 @@ NetworkPage::NetworkPage(ElaWindow *mainWindow, QObject *parent)
         }
     });
 
-    // ⑨ 接收日志行 → 写入两个 QListWidget
+    // ⑨ 接收日志行
     connect(m_networkWork, &NetworkWork::recvLogLine, this, [this](const QString &line) {
         if (m_singleRecvLog) {
             m_singleRecvLog->addItem(line);
@@ -183,13 +195,13 @@ NetworkPage::NetworkPage(ElaWindow *mainWindow, QObject *parent)
         }
     });
 
-    // ⑩ 接收计数更新
+    // ⑩ 接收计数
     connect(m_networkWork, &NetworkWork::recvCountChanged, this, [this](int count) {
         if (m_logRecvCountCard)
             m_logRecvCountCard->setValue(QString::number(count));
     });
 
-    // ⑪ 清空按钮相关
+    // ⑪ 清空按钮
     connect(m_logClearBtn, &ElaPushButton::clicked, this, [this]() {
         if (m_singleSendLog)   m_singleSendLog->clear();
         if (m_singleRecvLog)   m_singleRecvLog->clear();
@@ -207,6 +219,7 @@ NetworkPage::NetworkPage(ElaWindow *mainWindow, QObject *parent)
 
 NetworkPage::~NetworkPage()
 {
+    m_isConnecting = false;
     m_connectTimeoutTimer->stop();
 
     if (m_networkWork) {
@@ -265,7 +278,7 @@ void NetworkPage::initwindowConfig() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  页面：网络设置（★ Nagle 勾选框 + HEX 勾选框 并列）
+//  页面：网络设置
 // ═══════════════════════════════════════════════════════════════
 void NetworkPage::createSettingsPage() {
     _NetworkSettingPage = new QWidget();
@@ -283,7 +296,6 @@ void NetworkPage::createSettingsPage() {
     grid->setSpacing(10);
     grid->setContentsMargins(30, 30, 30, 30);
 
-    // ──── 第 0 行：IP 地址 | 端口号 ────
     ElaText* ipLabel = new ElaText("IP 地址:");
     ipLabel->setTextPixelSize(15);
     m_ipAddressEdit = new ElaLineEdit();
@@ -301,7 +313,6 @@ void NetworkPage::createSettingsPage() {
     grid->addWidget(portLabel,             0, 2);
     grid->addWidget(m_portEdit,            0, 3);
 
-    // ──── 第 1 行：网络状态 LED ────
     ElaText* statusLabel = new ElaText("网络状态:");
     statusLabel->setTextPixelSize(15);
     m_networkLED = new QLabel();
@@ -310,22 +321,20 @@ void NetworkPage::createSettingsPage() {
     grid->addWidget(statusLabel,           1, 0);
     grid->addWidget(m_networkLED,          1, 1);
 
-    // ──── 第 2 行：HEX 勾选框 | 禁用 Nagle 勾选框 ────
-    m_networkHexSendCheckBox = new ElaCheckBox("以HEX格式发送（AN3.0）（Modbus tcp）");
+    m_networkHexSendCheckBox = new ElaCheckBox("以HEX格式发送（AN3.0）");
     m_networkHexSendCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
     m_nagleCheckBox = new ElaCheckBox("禁用 Nagle 算法");
     m_nagleCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
-    grid->addWidget(m_networkHexSendCheckBox,  2, 1, 1, 2);
-    grid->addWidget(m_nagleCheckBox,           2, 3, 1, 2);
+    grid->addWidget(m_networkHexSendCheckBox,  2, 0, 1, 2);
+    grid->addWidget(m_nagleCheckBox,           2, 2, 1, 2);
 
-    // ──── 第 3 行：连接/断开按钮 ────
     m_openNetworkButton = new ElaPushButton("连接网络");
     m_openNetworkButton->setFixedHeight(35);
     m_closeNetworkButton = new ElaPushButton("断开网络");
     m_closeNetworkButton->setFixedHeight(35);
     m_closeNetworkButton->setEnabled(false);
-    grid->addWidget(m_openNetworkButton,       3, 1);
-    grid->addWidget(m_closeNetworkButton,      3, 3);
+    grid->addWidget(m_openNetworkButton,       3, 0);
+    grid->addWidget(m_closeNetworkButton,      3, 1);
 
     _NetworkSettingLayout1->addWidget(_NetworkSettingGroup);
     _NetworkSettingLayout1->addStretch();
@@ -405,7 +414,7 @@ void NetworkPage::createSendPage() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  页面：Excel 表格发送（★ 恢复占位数据，改回原行为）
+//  页面：Excel 表格发送
 // ═══════════════════════════════════════════════════════════════
 void NetworkPage::createExcelSendPage()
 {
@@ -439,17 +448,14 @@ void NetworkPage::createExcelSendPage()
     m_excelTableWidget->setColumnWidth(0, 250);
     m_excelTableWidget->setColumnWidth(1, 250);
     m_excelTableWidget->setColumnWidth(2, 200);
-    // ★ 恢复占位数据
     m_excelTableWidget->setRowCount(8);
     m_excelTableWidget->setItem(0, 0, new QTableWidgetItem("等待读取 Excel 表格"));
     m_excelTableWidget->setAlternatingRowColors(true);
     layout->addWidget(m_excelTableWidget, 1);
 
-    // ═══════════ 底部 ═══════════
     QVBoxLayout* bottomArea = new QVBoxLayout();
     bottomArea->setSpacing(12);
 
-    // 发送次数
     QHBoxLayout* repeatRow = new QHBoxLayout();
     repeatRow->setSpacing(8);
     ElaText* repeatLabel = new ElaText("发送次数:");
@@ -468,7 +474,6 @@ void NetworkPage::createExcelSendPage()
     repeatRow->addStretch();
     bottomArea->addLayout(repeatRow);
 
-    // ──── 超时时间 ────
     QHBoxLayout* timeoutRow = new QHBoxLayout();
     timeoutRow->setSpacing(8);
     ElaText* timeoutLabel = new ElaText("超时时间:");
@@ -487,7 +492,6 @@ void NetworkPage::createExcelSendPage()
     timeoutRow->addStretch();
     bottomArea->addLayout(timeoutRow);
 
-    // 按钮行
     QHBoxLayout* btnRow = new QHBoxLayout();
     btnRow->setSpacing(16);
 
@@ -588,9 +592,6 @@ void NetworkPage::createLogPage()
     logRow->addLayout(sendArea, 1);
     logRow->addLayout(recvArea, 1);
     layout->addLayout(logRow, 1);
-
-    connect(m_logClearBtn, &ElaPushButton::clicked,
-        this, &NetworkPage::clearExcelSendLog);
 }
 
 // ═══════════════════════════════════════════════════════════════
