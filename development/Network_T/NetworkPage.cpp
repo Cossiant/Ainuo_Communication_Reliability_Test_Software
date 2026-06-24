@@ -311,12 +311,12 @@ void NetworkPage::createSettingsPage() {
     grid->addWidget(m_networkLED,          1, 1);
 
     // ──── 第 2 行：HEX 勾选框 | 禁用 Nagle 勾选框 ────
-    m_networkHexSendCheckBox = new ElaCheckBox("以HEX格式发送（AN3.0）");
+    m_networkHexSendCheckBox = new ElaCheckBox("以HEX格式发送（AN3.0）（Modbus tcp）");
     m_networkHexSendCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
     m_nagleCheckBox = new ElaCheckBox("禁用 Nagle 算法");
     m_nagleCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
-    grid->addWidget(m_networkHexSendCheckBox,  2, 0, 1, 2);
-    grid->addWidget(m_nagleCheckBox,           2, 2, 1, 2);
+    grid->addWidget(m_networkHexSendCheckBox,  2, 1, 1, 2);
+    grid->addWidget(m_nagleCheckBox,           2, 3, 1, 2);
 
     // ──── 第 3 行：连接/断开按钮 ────
     m_openNetworkButton = new ElaPushButton("连接网络");
@@ -324,8 +324,8 @@ void NetworkPage::createSettingsPage() {
     m_closeNetworkButton = new ElaPushButton("断开网络");
     m_closeNetworkButton->setFixedHeight(35);
     m_closeNetworkButton->setEnabled(false);
-    grid->addWidget(m_openNetworkButton,       3, 0);
-    grid->addWidget(m_closeNetworkButton,      3, 1);
+    grid->addWidget(m_openNetworkButton,       3, 1);
+    grid->addWidget(m_closeNetworkButton,      3, 3);
 
     _NetworkSettingLayout1->addWidget(_NetworkSettingGroup);
     _NetworkSettingLayout1->addStretch();

@@ -26,7 +26,7 @@ find_package(Qt5 COMPONENTS
         REQUIRED
 )
 # 这里需要在编译的时候加上WIN32，如果是debug需要去掉，否则不显示qdebug内容！
-add_executable(untitled
+add_executable(untitled WIN32
         development/Other_T/main.cpp
         development/Other_T/ElaWidgetToolsDemo.cpp
         development/Other_T/ElaWidgetToolsDemo.h

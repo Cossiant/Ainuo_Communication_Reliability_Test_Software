@@ -6,6 +6,7 @@
 #include <QObject>
 #include <QWidget>
 #include <QVBoxLayout>
+#include <QScrollArea>
 
 class ElaWindow;
 class ElaText;
@@ -40,6 +41,9 @@ private:
     void createHomePage();
     void createHelpPage();
     void createAboutPage();
+
+    // ═════════════ 辅助方法 ═════════
+    QWidget* createHelpSection(const QString &title, const QStringList &lines) const;
 };
 
 #endif //UNTITLED_MAINPAGE_H
