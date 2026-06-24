@@ -166,6 +166,12 @@ void NetworkExcel::onTrySendNext()
                              : expectedStr.toUtf8();
     m_lastCmd = cmdText;
 
+    // ★ 去除 \r\n：非 HEX 模式下，勾选后去除期望值中的 \r\n
+    if (!hexMode && m_page->m_networkStripCRLFCheckBox->isChecked()) {
+        m_expectData.replace("\r", "");
+        m_expectData.replace("\n", "");
+    }
+
     QMetaObject::invokeMethod(m_work, "sendStringWithDelay",
                               Qt::QueuedConnection,
                               Q_ARG(QString, cmdText),
@@ -196,8 +202,16 @@ void NetworkExcel::onResponseReceived(QByteArray data)
         fillCaptureResult(data);
     }
 
-    if (!m_expectData.isEmpty() && data != m_expectData) {
-        m_page->addContentError(m_lastCmd, m_expectData, data);
+    // ★ 去除 \r\n：非 HEX 模式下，勾选后去除接收数据中的 \r\n 再比对
+    QByteArray cmpData = data;
+    bool hexMode = m_page->m_networkHexSendCheckBox->isChecked();
+    if (!hexMode && m_page->m_networkStripCRLFCheckBox->isChecked()) {
+        cmpData.replace("\r", "");
+        cmpData.replace("\n", "");
+    }
+
+    if (!m_expectData.isEmpty() && cmpData != m_expectData) {
+        m_page->addContentError(m_lastCmd, m_expectData, cmpData);
     }
 
     if (m_minDelayOk) finalizeAndNext();

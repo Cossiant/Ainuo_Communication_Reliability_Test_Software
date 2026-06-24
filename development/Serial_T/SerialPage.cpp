@@ -378,14 +378,19 @@ void SerialPage::createSettingsPage() {
     grid->addWidget(m_serialBufferCheckBox,   3, 0, 1, 2);   // 左半边
     grid->addWidget(m_serialHexSendCheckBox,  3, 2, 1, 2);   // 右半边
 
-    // ──── 第 4 行：打开/关闭按钮 ────
+    // ──── ★ 第 4 行：去除 \r\n 勾选框 ────
+    m_serialStripCRLFCheckBox = new ElaCheckBox("比对时去除返回值中的 \\r\\n");
+    m_serialStripCRLFCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
+    grid->addWidget(m_serialStripCRLFCheckBox, 4, 0, 1, 4);
+
+    // ──── 第 5 行：打开/关闭按钮 ────
     m_openSerialButton = new ElaPushButton("打开串口");
     m_openSerialButton->setFixedHeight(35);
     m_closeSerialButton = new ElaPushButton("关闭串口");
     m_closeSerialButton->setFixedHeight(35);
     m_closeSerialButton->setEnabled(false);
-    grid->addWidget(m_openSerialButton,       4, 0);
-    grid->addWidget(m_closeSerialButton,      4, 1);
+    grid->addWidget(m_openSerialButton,       5, 0);
+    grid->addWidget(m_closeSerialButton,      5, 1);
 
     _SerialSettingLayout1->addWidget(_SerialSettingGroup);
     _SerialSettingLayout1->addStretch();

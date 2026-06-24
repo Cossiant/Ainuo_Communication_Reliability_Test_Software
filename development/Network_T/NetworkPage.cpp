@@ -326,15 +326,20 @@ void NetworkPage::createSettingsPage() {
     m_nagleCheckBox = new ElaCheckBox("禁用 Nagle 算法");
     m_nagleCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
     grid->addWidget(m_networkHexSendCheckBox,  2, 0, 1, 2);
-    grid->addWidget(m_nagleCheckBox,           2, 2, 1, 2);
+    grid->addWidget(m_nagleCheckBox,           2, 3, 1, 2);
+
+    // 去除 \r\n 勾选框
+    m_networkStripCRLFCheckBox = new ElaCheckBox("比对时去除返回值中的 \\r\\n");
+    m_networkStripCRLFCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
+    grid->addWidget(m_networkStripCRLFCheckBox, 3, 0, 1, 4);
 
     m_openNetworkButton = new ElaPushButton("连接网络");
     m_openNetworkButton->setFixedHeight(35);
     m_closeNetworkButton = new ElaPushButton("断开网络");
     m_closeNetworkButton->setFixedHeight(35);
     m_closeNetworkButton->setEnabled(false);
-    grid->addWidget(m_openNetworkButton,       3, 0);
-    grid->addWidget(m_closeNetworkButton,      3, 1);
+    grid->addWidget(m_openNetworkButton,       4, 1);
+    grid->addWidget(m_closeNetworkButton,      4, 3);
 
     _NetworkSettingLayout1->addWidget(_NetworkSettingGroup);
     _NetworkSettingLayout1->addStretch();

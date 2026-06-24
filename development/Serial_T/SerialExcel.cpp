@@ -173,6 +173,12 @@ void SerialExcel::onTrySendNext()
                              : expectedStr.toUtf8();
     m_lastCmd = cmdText;
 
+    // ★ 去除 \r\n：非 HEX 模式下，勾选后去除期望值中的 \r\n
+    if (!hexMode && m_page->m_serialStripCRLFCheckBox->isChecked()) {
+        m_expectData.replace("\r", "");
+        m_expectData.replace("\n", "");
+    }
+
     // ★ 方案三：一次 invokeMethod 完成"发送 + 期望值 + 工作线程精确延时"
     // 消除了原先两次 invokeMethod + 主线程定时器抖动的开销
     QMetaObject::invokeMethod(m_work, "sendStringWithDelay",
@@ -207,9 +213,17 @@ void SerialExcel::onResponseReceived(QByteArray data)
         fillCaptureResult(data);
     }
 
+    // ★ 去除 \r\n：非 HEX 模式下，勾选后去除接收数据中的 \r\n 再比对
+    QByteArray cmpData = data;
+    bool hexMode = m_page->m_serialHexSendCheckBox->isChecked();
+    if (!hexMode && m_page->m_serialStripCRLFCheckBox->isChecked()) {
+        cmpData.replace("\r", "");
+        cmpData.replace("\n", "");
+    }
+
     // 比对
-    if (!m_expectData.isEmpty() && data != m_expectData) {
-        m_page->addContentError(m_lastCmd, m_expectData, data);
+    if (!m_expectData.isEmpty() && cmpData != m_expectData) {
+        m_page->addContentError(m_lastCmd, m_expectData, cmpData);
     }
 
     // 延时已过 → 立刻下一条

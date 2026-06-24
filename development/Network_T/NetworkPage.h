@@ -73,6 +73,7 @@ private:
     ElaLineEdit*   m_portEdit               = nullptr;
     ElaCheckBox*   m_networkHexSendCheckBox  = nullptr;
     ElaCheckBox*   m_nagleCheckBox           = nullptr;
+    ElaCheckBox*   m_networkStripCRLFCheckBox = nullptr;   // ★ 去除 \r\n
     ElaPushButton* m_openNetworkButton       = nullptr;
     ElaPushButton* m_closeNetworkButton      = nullptr;
     QLabel*        m_networkLED              = nullptr;

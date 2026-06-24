@@ -77,6 +77,7 @@ private:
     ElaComboBox*  m_parityComboBox     = nullptr;
     ElaCheckBox*  m_serialBufferCheckBox = nullptr;
     ElaCheckBox*  m_serialHexSendCheckBox  = nullptr;
+    ElaCheckBox*  m_serialStripCRLFCheckBox = nullptr;   // ★ 去除 \r\n
     ElaPushButton* m_openSerialButton  = nullptr;
     ElaPushButton* m_closeSerialButton = nullptr;
     QLabel*        m_serialLED         = nullptr;
