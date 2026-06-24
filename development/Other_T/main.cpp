@@ -1,7 +1,7 @@
 #include <QApplication>
 #include <QGuiApplication>
 #include "ElaApplication.h"
-#include "../include/ElaWidgetToolsDemo.h"
+#include "ElaWidgetToolsDemo.h"
 
 int main(int argc, char *argv[]) {
     //启用高 DPI 图标。在高分屏（4K、Retina）下，如果程序里用了 QPixmap，这条语句会让 Qt 自动使用 @2x 的高分辨率版本，避免图标模糊。

@@ -27,24 +27,24 @@ find_package(Qt5 COMPONENTS
 )
 # 这里需要在编译的时候加上WIN32，如果是debug需要去掉，否则不显示qdebug内容！
 add_executable(untitled
-        development/src/main.cpp
-        development/src/ElaWidgetToolsDemo.cpp
-        development/include/ElaWidgetToolsDemo.h
+        development/Other_T/main.cpp
+        development/Other_T/ElaWidgetToolsDemo.cpp
+        development/Other_T/ElaWidgetToolsDemo.h
         development/ico/app.rc
-        development/src/connectnetwork.cpp
-        development/include/connectnetwork.h
-        development/src/excelsendworker.cpp
-        development/include/excelsendworker.h
+        development/Old/src/connectnetwork.cpp
+        development/Old/include/connectnetwork.h
+        development/Old/src/excelsendworker.cpp
+        development/Old/include/excelsendworker.h
         development/Other_T/LED.cpp
         development/Other_T/LED.h
-        development/src/readexceldata.cpp
-        development/include/readexceldata.h
-        development/src/responsevalidator.cpp
-        development/include/responsevalidator.h
-        development/src/saveworker.cpp
-        development/include/saveworker.h
-        development/src/serialworker.cpp
-        development/include/serialworker.h
+        development/Old/src/readexceldata.cpp
+        development/Old/include/readexceldata.h
+        development/Old/src/responsevalidator.cpp
+        development/Old/include/responsevalidator.h
+        development/Old/src/saveworker.cpp
+        development/Old/include/saveworker.h
+        development/Old/src/serialworker.cpp
+        development/Old/include/serialworker.h
         development/Other_T/StatCard.cpp
         development/Other_T/StatCard.h
         development/Serial_T/SerialPage.cpp
