@@ -1,5 +1,5 @@
 // SerialWork.h
-// 方案三：命令间隔延时移入工作线程，精确定时
+// ★ 升级：1ms 轮询 + 微秒忙等 + EMA 误差补偿（对齐 NetworkWork）
 
 #ifndef UNTITLED_SERIALWORK_H
 #define UNTITLED_SERIALWORK_H
@@ -8,6 +8,7 @@
 #include <QSerialPort>
 #include <QByteArray>
 #include <QTimer>
+#include <QElapsedTimer>
 #include <QAtomicInt>
 
 class SerialWork : public QObject
@@ -22,6 +23,7 @@ public:
     bool isOpen() const;
     int  totalRecvCount() const;
     QByteArray expectedResponse() const;
+    int  timingCompensationMs() const { return m_timingCompensationMs; }
 
 public slots:
     // ═══════════════════════════════════════════════════
@@ -37,7 +39,7 @@ public slots:
     void sendData(const QByteArray &data);
     void sendString(const QString &text, bool hexMode);
 
-    // ★ 方案三：发送命令 + 在工作线程启动精确延时
+    // ★ 发送命令 + 在工作线程启动精确延时（1ms轮询+忙等+EMA补偿）
     // expectedResponse: 期望返回值（传回主线程比对）
     // delayMs: 命令间隔（C 列），在工作线程用 PreciseTimer 计时
     void sendStringWithDelay(const QString &text, bool hexMode,
@@ -58,7 +60,7 @@ signals:
     void recvLogLine(const QString &line);
     void recvCountChanged(int totalCount);
 
-    // ★ 新增：工作线程内精确延时到期
+    // ★ 工作线程内精确延时到期
     void interCmdDelayFinished();
 
 private slots:
@@ -71,9 +73,9 @@ private:
     QString formatByteArray(const QByteArray &data) const;
     void emitData(const QByteArray &data);
 
-    QSerialPort *m_serialPort  = nullptr;
-    QTimer      *m_bufferTimer = nullptr;
-    QTimer      *m_interCmdTimer = nullptr;   // ★ 命令间隔定时器（工作线程）
+    QSerialPort *m_serialPort   = nullptr;
+    QTimer      *m_bufferTimer  = nullptr;
+    QTimer      *m_interCmdTimer = nullptr;   // ★ 命令间隔定时器（工作线程，1ms轮询）
 
     QByteArray m_recvBuffer;
     bool       m_buffered = true;
@@ -83,6 +85,14 @@ private:
     bool       m_hexDisplay = false;
 
     QAtomicInt m_opened{0};
+
+    // ═══════════════════════════════════════════════
+    //  精确延时 + 误差补偿（对齐 NetworkWork）
+    // ═══════════════════════════════════════════════
+    QElapsedTimer m_preciseDelayTimer;                // 高精度计时
+    int           m_targetDelayMs        = 0;         // 本次补偿后目标（ms）
+    int           m_originalDelayMs      = 0;         // 本次原始请求（ms，日志用）
+    int           m_timingCompensationMs = 0;         // EMA 累积补偿（ms）
 };
 
 #endif // UNTITLED_SERIALWORK_H

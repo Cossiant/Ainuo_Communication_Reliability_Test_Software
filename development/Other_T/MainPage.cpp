@@ -26,6 +26,7 @@ MainPage::~MainPage() = default;
 // ═══════════════════════════════════════════════════════════════
 void MainPage::initMainPage() {
     createHomePage();
+    createCommandCalculationPage();
     createHelpPage();
     createAboutPage();
 }
@@ -36,7 +37,7 @@ void MainPage::initMainPage() {
 void MainPage::initNavigation() {
     // ────── 顶部：首页 ──────
     m_mainWindow->addPageNode("首页", _MainHomePage, ElaIconType::House);
-
+    m_mainWindow->addPageNode("命令转换",_MainCommandCalculationPage, ElaIconType::Command);
     // ────── 底部：帮助文档 / 关于软件 ──────
     m_mainWindow->addFooterNode("帮助文档", _MainHelpPage,  MainHelpKey,  0, ElaIconType::CircleQuestion);
     m_mainWindow->addFooterNode("关于软件", _MainAboutPage, MainAboutKey, 0, ElaIconType::CircleInfo);
@@ -123,6 +124,20 @@ void MainPage::createHomePage() {
         stepLabel->setWordWrap(true);
         lay->addWidget(stepLabel);
     }
+
+    lay->addStretch();
+}
+void MainPage::createCommandCalculationPage() {
+    _MainCommandCalculationPage = new QWidget();
+    QVBoxLayout *lay = new QVBoxLayout(_MainCommandCalculationPage);
+    lay->setContentsMargins(40, 40, 40, 40);
+    lay->setSpacing(20);
+
+    // ──── 标题 ────
+    ElaText *title = new ElaText("命令转换页面");
+    title->setTextPixelSize(28);
+    title->setTextStyle(ElaTextType::Title);
+    lay->addWidget(title);
 
     lay->addStretch();
 }

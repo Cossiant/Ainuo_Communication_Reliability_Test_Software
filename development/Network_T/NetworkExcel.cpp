@@ -46,7 +46,7 @@ void NetworkExcel::setRunning(bool running)
     m_page->m_excelTimeoutMs->setEnabled(!running);
 }
 
-// ═══════════════════════════════════════════════ ★ 读取返回值（捕获模式） ═══
+// ═══════════════════════════════════════════════ 捕获模式 ═══
 void NetworkExcel::onCapture()
 {
     if (m_isRunning || !m_work || !m_work->isOpen()) return;
@@ -57,9 +57,9 @@ void NetworkExcel::onCapture()
 
     setRunning(true);
 
-    m_isCaptureMode = true;       // ★ 进入捕获模式
+    m_isCaptureMode = true;
     m_currentRow    = 0;
-    m_repeatLeft    = -1;         // 不限次数，由行数控制结束
+    m_repeatLeft    = -1;
     m_totalSent     = 0;
     m_pendingStop   = false;
 
@@ -80,7 +80,7 @@ void NetworkExcel::onStartSend()
 
     setRunning(true);
 
-    m_isCaptureMode = false;      // ★ 普通发送模式
+    m_isCaptureMode = false;
     m_currentRow    = 0;
     m_repeatLeft    = count;
     m_totalSent     = 0;
@@ -97,7 +97,7 @@ void NetworkExcel::onStopSend()
 {
     m_timeoutTimer->stop();
     m_waiting = false;
-    m_isCaptureMode = false;       // ★ 退出捕获模式
+    m_isCaptureMode = false;
 
     QMetaObject::invokeMethod(m_work, "setExpectedResponse",
                               Qt::QueuedConnection,
@@ -116,7 +116,6 @@ void NetworkExcel::onTrySendNext()
     int rowCount = table->rowCount();
     if (rowCount == 0) { onStopSend(); return; }
 
-    // ★ 捕获模式：所有行都发送完毕 → 停止
     if (m_isCaptureMode && m_currentRow >= rowCount) {
         onStopSend();
         qDebug() << "NetworkExcel: 捕获模式完成，共" << m_totalSent << "条";
@@ -148,7 +147,6 @@ void NetworkExcel::onTrySendNext()
     int globalTimeout = m_page->m_excelTimeoutMs->text().toInt();
     if (globalTimeout <= 0) globalTimeout = 500;
 
-    // ★ 捕获模式：适当延长超时
     if (m_isCaptureMode && globalTimeout < 2000) {
         globalTimeout = 2000;
     }
@@ -166,7 +164,6 @@ void NetworkExcel::onTrySendNext()
                              : expectedStr.toUtf8();
     m_lastCmd = cmdText;
 
-    // ★ 去除 \r\n：非 HEX 模式下，勾选后去除期望值中的 \r\n
     if (!hexMode && m_page->m_networkStripCRLFCheckBox->isChecked()) {
         m_expectData.replace("\r", "");
         m_expectData.replace("\n", "");
@@ -197,12 +194,10 @@ void NetworkExcel::onResponseReceived(QByteArray data)
     m_gotReply     = true;
     m_lastRecvData = data;
 
-    // ★ 捕获模式：将返回值填入表格 B 列
     if (m_isCaptureMode) {
         fillCaptureResult(data);
     }
 
-    // ★ 去除 \r\n：非 HEX 模式下，勾选后去除接收数据中的 \r\n 再比对
     QByteArray cmpData = data;
     bool hexMode = m_page->m_networkHexSendCheckBox->isChecked();
     if (!hexMode && m_page->m_networkStripCRLFCheckBox->isChecked()) {
@@ -217,7 +212,7 @@ void NetworkExcel::onResponseReceived(QByteArray data)
     if (m_minDelayOk) finalizeAndNext();
 }
 
-// ═══════════════════════════════════════════════ ★ 工作线程精确延时到期 ═══
+// ═══════════════════════════════════════════════ 延时到期 ═══
 void NetworkExcel::onInterCmdDelayFinished()
 {
     if (!m_waiting) return;
@@ -231,7 +226,6 @@ void NetworkExcel::onGlobalTimeout()
 {
     if (!m_waiting) return;
 
-    // ★ 捕获模式：超时也填入 "(超时)"
     if (m_isCaptureMode) {
         fillCaptureTimeout();
     }
@@ -255,10 +249,9 @@ void NetworkExcel::finalizeAndNext()
     onTrySendNext();
 }
 
-// ═══════════════════════════════════════════════ ★ 捕获模式：填入返回值 ═══
+// ═══════════════════════════════════════════════ 捕获：填入返回值 ═══
 void NetworkExcel::fillCaptureResult(const QByteArray &data)
 {
-    // m_currentRow 已在上一条发送时递增，当前回复对应 row = m_currentRow - 1
     int row = m_currentRow - 1;
     QTableWidget* table = m_page->m_excelTableWidget;
     if (row < 0 || row >= table->rowCount()) return;
@@ -283,7 +276,7 @@ void NetworkExcel::fillCaptureResult(const QByteArray &data)
     qDebug() << "NetworkExcel: 捕获模式 — 第" << (row + 1) << "行返回值已填入:" << displayText;
 }
 
-// ═══════════════════════════════════════════════ ★ 捕获模式：超时标记 ═══
+// ═══════════════════════════════════════════════ 捕获：超时标记 ═══
 void NetworkExcel::fillCaptureTimeout()
 {
     int row = m_currentRow - 1;
@@ -295,7 +288,6 @@ void NetworkExcel::fillCaptureTimeout()
         item = new QTableWidgetItem();
         table->setItem(row, 1, item);
     }
-    // 只有当单元格为空时才填入超时标记
     if (item->text().isEmpty()) {
         item->setText("(超时)");
     }
@@ -303,7 +295,7 @@ void NetworkExcel::fillCaptureTimeout()
     qDebug() << "NetworkExcel: 捕获模式 — 第" << (row + 1) << "行超时";
 }
 
-// ═══════════════════════════════════════════════ 打开 Excel 并读取 ═══
+// ═══════════════════════════════════════════════ 打开 Excel ═══
 void NetworkExcel::onOpenExcel()
 {
     QString filePath = QFileDialog::getOpenFileName(

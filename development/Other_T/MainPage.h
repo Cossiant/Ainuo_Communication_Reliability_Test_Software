@@ -25,11 +25,13 @@ private:
 
     // ═════════════ 页面 ═════════
     QWidget *_MainHomePage  = nullptr;
+    QWidget *_MainCommandCalculationPage = nullptr;
     QWidget *_MainHelpPage  = nullptr;
     QWidget *_MainAboutPage = nullptr;
 
     // ========== 分组 Key ==========
     QString MainPageKey;
+    QString CommandCalculationPageKey;
     QString MainHelpKey;
     QString MainAboutKey;
 
@@ -39,6 +41,7 @@ private:
     void initWindowConfig();
 
     void createHomePage();
+    void createCommandCalculationPage();
     void createHelpPage();
     void createAboutPage();
 

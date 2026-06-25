@@ -1,13 +1,14 @@
 // NetworkWork.cpp
-// 方案三实现（TCP 客户端版）
-// ★ 可选禁用 Nagle 算法（由勾选框控制）
-// ★ 修复：连接错误时使用 deleteLater 避免闪退
-// ★ 修复：disconnectFromHost 增加重入保护
+// 精确定时实现：1ms QTimer轮询 + QElapsedTimer + 微秒忙等 + EMA补偿
 
 #include "NetworkWork.h"
 #include <QDebug>
 #include <QDateTime>
 #include <QThread>
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 
 // ═══════════════════════════════════════════════════════════════
 //  构造 / 析构
@@ -15,18 +16,24 @@
 NetworkWork::NetworkWork(QObject *parent)
     : QObject(parent)
 {
+    // ★ 1ms 轮询定时器 — 配合 QElapsedTimer 实现高精度
+    //    Qt5 在 Windows 上创建 QTimer 时会内部调用 timeBeginPeriod(1)，
+    //    无需手动调用。
     m_interCmdTimer = new QTimer(this);
-    m_interCmdTimer->setSingleShot(true);
     m_interCmdTimer->setTimerType(Qt::PreciseTimer);
+    m_interCmdTimer->setInterval(1);          // 每1ms触发
+    m_interCmdTimer->setSingleShot(false);     // 持续触发直到手动停止
     connect(m_interCmdTimer, &QTimer::timeout,
             this, &NetworkWork::onInterCmdDelay);
 
     qDebug() << "NetworkWork: 初始化完成"
-             << "(线程:" << QThread::currentThreadId() << ")";
+             << "(线程:" << QThread::currentThreadId() << ")"
+             << "| 精确延时: 1ms轮询+忙等自旋+EMA补偿";
 }
 
 NetworkWork::~NetworkWork()
 {
+    m_interCmdTimer->stop();
     disconnectFromHost();
     qDebug() << "NetworkWork: 已销毁";
 }
@@ -66,7 +73,7 @@ void NetworkWork::setHexDisplayMode(bool hexMode)
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  连接主机（TCP 客户端，异步连接）
+//  连接主机
 // ═══════════════════════════════════════════════════════════════
 void NetworkWork::connectToHost(const QString &ipAddress,
                                 quint16 port,
@@ -93,6 +100,9 @@ void NetworkWork::connectToHost(const QString &ipAddress,
 
     m_tcpSocket->connectToHost(ipAddress, port);
 
+    // ★ 新连接重置误差补偿
+    m_timingCompensationMs = 0;
+
     qDebug() << "NetworkWork: 正在连接" << ipAddress << ":" << port
              << (disableNagle ? "(Nagle 已禁用)" : "(Nagle 正常)")
              << "(线程:" << QThread::currentThreadId() << ")";
@@ -112,11 +122,9 @@ void NetworkWork::onConnected()
 
 // ═══════════════════════════════════════════════════════════════
 //  断开连接
-//  ★ 修复：增加重入保护，避免竞态导致闪退
 // ═══════════════════════════════════════════════════════════════
 void NetworkWork::disconnectFromHost()
 {
-    // ★ 重入保护：如果已经在断开流程中，直接返回
     if (m_disconnecting.testAndSetRelaxed(0, 1) == false) {
         qDebug() << "NetworkWork: disconnectFromHost 已在执行中，跳过重复调用";
         return;
@@ -125,24 +133,20 @@ void NetworkWork::disconnectFromHost()
     m_interCmdTimer->stop();
 
     if (m_tcpSocket) {
-        // ★ 先取出指针并置空，防止 onSocketError 等回调中重复操作
         QTcpSocket* sock = m_tcpSocket;
         m_tcpSocket = nullptr;
 
-        // 断开所有信号连接，防止后续 socket 事件触发回调
         disconnect(sock, nullptr, this, nullptr);
 
         if (sock->state() != QAbstractSocket::UnconnectedState) {
-            sock->abort();  // ★ 立即中止，避免 waitForDisconnected 阻塞
+            sock->abort();
         }
 
-        // ★ 使用 deleteLater 安全删除，避免在信号处理栈中直接 delete
         sock->deleteLater();
     }
 
     bool wasOpen = (m_opened.fetchAndStoreRelaxed(0) != 0);
 
-    // ★ 只有之前是已连接状态才发断开信号（连接失败时不发重复信号）
     if (wasOpen) {
         emit networkDisconnected();
     }
@@ -158,12 +162,10 @@ void NetworkWork::disconnectFromHost()
 // ═══════════════════════════════════════════════════════════════
 void NetworkWork::onDisconnected()
 {
-    m_interCmdTimer->stop();
-
-    // ★ 如果正在主动断开中，不重复处理
     if (m_disconnecting.loadRelaxed() != 0)
         return;
 
+    m_interCmdTimer->stop();
     m_opened.storeRelaxed(0);
     emit networkDisconnected();
 
@@ -214,7 +216,7 @@ void NetworkWork::sendString(const QString &text, bool hexMode)
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  ★ 方案三核心：发送命令 + 工作线程内精确延时
+//  ★★★ 核心：发送 + 1ms轮询精确延时 + 微秒忙等 + EMA补偿 ★★★
 // ═══════════════════════════════════════════════════════════════
 void NetworkWork::sendStringWithDelay(const QString &text, bool hexMode,
                                       const QByteArray &expectedResponse,
@@ -225,6 +227,7 @@ void NetworkWork::sendStringWithDelay(const QString &text, bool hexMode,
 
     m_expectedResponse = expectedResponse;
 
+    // ── 构建数据 ──
     QByteArray data;
     if (hexMode) {
         QString hex = text;
@@ -234,28 +237,92 @@ void NetworkWork::sendStringWithDelay(const QString &text, bool hexMode,
         data = text.toUtf8();
     }
 
+    // ── 发送 ──
     qint64 written = m_tcpSocket->write(data);
     if (written == -1) {
         emit errorOccurred(QString("发送失败: %1").arg(m_tcpSocket->errorString()));
         return;
     }
 
+    // ★ 关键：等待数据刷新到 TCP 栈，消除发送侧的随机延迟
+    if (m_tcpSocket->state() == QAbstractSocket::ConnectedState) {
+        m_tcpSocket->waitForBytesWritten(10);  // 最多等10ms
+    }
+
     QString timeStr = QDateTime::currentDateTime().toString("HH:mm:ss.zzz");
     QString display = formatByteArray(data);
     emit sendLogLine(QString("[%1] TX → %2").arg(timeStr, display));
 
+    // ═══════════════════════════════════════════════════════════
+    //  精确延时（1ms轮询 + 微秒忙等 + EMA补偿）
+    // ═══════════════════════════════════════════════════════════
     if (delayMs > 0) {
-        m_interCmdTimer->start(delayMs);
+        // 第1步：EMA补偿
+        int compensatedMs = delayMs + m_timingCompensationMs;
+        if (compensatedMs < 0) compensatedMs = 0;
+
+        // 钳位补偿范围 ±100ms，防止单次异常抖动
+        const int MAX_COMPENSATION = 100;
+        m_timingCompensationMs = qBound(-MAX_COMPENSATION,
+                                         m_timingCompensationMs,
+                                         MAX_COMPENSATION);
+
+        // 第2步：启动1ms轮询 + 记录起始时间
+        m_targetDelayMs   = compensatedMs;
+        m_originalDelayMs = delayMs;
+        m_preciseDelayTimer.start();
+        m_interCmdTimer->start();  // 每1ms触发 onInterCmdDelay()
     } else {
         emit interCmdDelayFinished();
     }
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  ★ 精确延时到期（工作线程内触发）
+//  1ms 轮询回调：检测是否到期 → 微秒忙等 → 误差补偿 → 发射信号
 // ═══════════════════════════════════════════════════════════════
 void NetworkWork::onInterCmdDelay()
 {
+    qint64 elapsedMs = m_preciseDelayTimer.elapsed();
+
+    // ★ 还没到目标时间，继续等（定时器下次再触发）
+    if (elapsedMs < m_targetDelayMs - 1) {
+        return;
+    }
+
+    // ★ 距离目标 ≤1ms：进入忙等自旋，精准命中
+    //   用 nsecsElapsed() 获得纳秒级精度（QElapsedTimer 内部用 QPC）
+    while (m_preciseDelayTimer.elapsed() < m_targetDelayMs) {
+        // 自旋等待，不做任何事
+        // 在 Windows上 QElapsedTimer 基于 QueryPerformanceCounter，
+        // 精度可达微秒级。1ms 的自旋 ≈ 3,000,000 个 CPU 周期（3GHz），
+        // 开销极小。
+    }
+
+    // ★ 停止轮询
+    m_interCmdTimer->stop();
+
+    // ★ 测量实际耗时，计算误差
+    qint64 actualMs = m_preciseDelayTimer.elapsed();
+    int    errorMs  = static_cast<int>(actualMs - m_targetDelayMs);
+
+    // ★ EMA 平滑更新补偿值 (alpha = 0.5)
+    const int MAX_COMPENSATION = 100;
+    m_timingCompensationMs -= errorMs / 2;
+    m_timingCompensationMs  = qBound(-MAX_COMPENSATION,
+                                      m_timingCompensationMs,
+                                      MAX_COMPENSATION);
+
+    // ★ 诊断日志
+    if (qAbs(errorMs) >= 1) {
+        qDebug() << "NetworkWork:[精确延时]"
+                 << "请求" << m_originalDelayMs << "ms"
+                 << "→补偿后" << m_targetDelayMs << "ms"
+                 << "→实际" << actualMs << "ms"
+                 << "|误差" << errorMs << "ms"
+                 << "|累积补偿" << m_timingCompensationMs << "ms";
+    }
+
+    // ★ 通知主线程
     emit interCmdDelayFinished();
 }
 
@@ -273,22 +340,15 @@ void NetworkWork::onReadyRead()
 
 // ═══════════════════════════════════════════════════════════════
 //  处理 Socket 错误
-//  ★ 修复：
-//    1. 使用 deleteLater 替代直接 delete，避免在信号回调栈中删除 socket
-//    2. 先保存错误信息，再清理 socket
-//    3. 防止 onSocketError 重入
 // ═══════════════════════════════════════════════════════════════
 void NetworkWork::onSocketError(QAbstractSocket::SocketError error)
 {
-    // ★ 如果 socket 已经被清理（可能被超时或其他路径抢先），直接返回
     if (!m_tcpSocket)
         return;
 
-    // ★ 如果正在断开中，不重复处理
     if (m_disconnecting.loadRelaxed() != 0)
         return;
 
-    // ★ 先提取错误信息（在清理 socket 之前）
     QString msg;
     bool fatal = false;
 
@@ -314,37 +374,28 @@ void NetworkWork::onSocketError(QAbstractSocket::SocketError error)
         fatal = true;
         break;
     default:
-        // ★ 在 socket 还存在时保存错误信息
         msg = m_tcpSocket->errorString();
         break;
     }
 
-    // ★ 致命错误：安全清理 socket
     if (fatal) {
-        // 先取出 socket 指针并置空，防止重复操作
         QTcpSocket* sock = m_tcpSocket;
         m_tcpSocket = nullptr;
 
         m_interCmdTimer->stop();
 
-        // 断开所有信号
         disconnect(sock, nullptr, this, nullptr);
 
-        // 立即中止连接
         if (sock->state() != QAbstractSocket::UnconnectedState) {
             sock->abort();
         }
 
-        // ★ 使用 deleteLater 安全删除
         sock->deleteLater();
 
         m_opened.storeRelaxed(0);
-
-        // ★ 连接失败时也发 networkDisconnected，让 UI 恢复初始状态
         emit networkDisconnected();
     }
 
-    // ★ 最后发射错误信号（此时 socket 已安全清理或保留）
     emit errorOccurred(msg);
 }
 

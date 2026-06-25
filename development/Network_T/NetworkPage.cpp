@@ -171,12 +171,12 @@ NetworkPage::NetworkPage(ElaWindow *mainWindow, QObject *parent)
     connect(m_networkWork, &NetworkWork::sendLogLine, this, [this](const QString &line) {
         if (m_singleSendLog) {
             m_singleSendLog->addItem(line);
-            while (m_singleSendLog->count() > 200)
+            while (m_singleSendLog->count() > 100)
                 delete m_singleSendLog->takeItem(0);
         }
         if (m_logSendList) {
             m_logSendList->addItem(line);
-            while (m_logSendList->count() > 200)
+            while (m_logSendList->count() > 100)
                 delete m_logSendList->takeItem(0);
         }
     });

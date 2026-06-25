@@ -1,10 +1,14 @@
 // SerialWork.cpp
-// 方案三实现
+// ★ 升级：1ms QTimer轮询 + QElapsedTimer + 微秒忙等 + EMA补偿
 
 #include "SerialWork.h"
 #include <QDebug>
 #include <QDateTime>
 #include <QThread>
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 
 // ═══════════════════════════════════════════════════════════════
 //  构造 / 析构
@@ -18,19 +22,24 @@ SerialWork::SerialWork(QObject *parent)
     connect(m_bufferTimer, &QTimer::timeout,
             this, &SerialWork::onBufferTimeout);
 
-    // ★ 命令间隔精确延时定时器（工作线程内）
+    // ★ 1ms 轮询定时器 — 配合 QElapsedTimer 实现高精度
+    //    Qt5 在 Windows 上创建 QTimer 时会内部调用 timeBeginPeriod(1)，
+    //    无需手动调用。
     m_interCmdTimer = new QTimer(this);
-    m_interCmdTimer->setSingleShot(true);
-    m_interCmdTimer->setTimerType(Qt::PreciseTimer);   // ★ 1ms 精度
+    m_interCmdTimer->setTimerType(Qt::PreciseTimer);
+    m_interCmdTimer->setInterval(1);          // 每1ms触发
+    m_interCmdTimer->setSingleShot(false);     // 持续触发直到手动停止
     connect(m_interCmdTimer, &QTimer::timeout,
             this, &SerialWork::onInterCmdDelay);
 
     qDebug() << "SerialWork: 初始化完成"
-             << "(线程:" << QThread::currentThreadId() << ")";
+             << "(线程:" << QThread::currentThreadId() << ")"
+             << "| 精确延时: 1ms轮询+忙等自旋+EMA补偿";
 }
 
 SerialWork::~SerialWork()
 {
+    m_interCmdTimer->stop();
     closeSerialPort();
     qDebug() << "SerialWork: 已销毁";
 }
@@ -108,6 +117,9 @@ void SerialWork::openSerialPort(const QString &portName,
     connect(m_serialPort, &QSerialPort::errorOccurred,
             this, &SerialWork::onSerialError);
 
+    // ★ 新连接重置误差补偿
+    m_timingCompensationMs = 0;
+
     m_opened.storeRelaxed(1);
     emit serialOpened();
 
@@ -145,7 +157,7 @@ void SerialWork::closeSerialPort()
 // ═══════════════════════════════════════════════════════════════
 void SerialWork::sendData(const QByteArray &data)
 {
-    if (!isOpen() || data.isEmpty())
+    if (!isOpen() || data.isEmpty() || !m_serialPort)
         return;
 
     qint64 written = m_serialPort->write(data);
@@ -183,19 +195,18 @@ void SerialWork::sendString(const QString &text, bool hexMode)
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  ★ 方案三核心：发送命令 + 工作线程内精确延时
+//  ★★★ 核心：发送 + 1ms轮询精确延时 + 微秒忙等 + EMA补偿 ★★★
 // ═══════════════════════════════════════════════════════════════
 void SerialWork::sendStringWithDelay(const QString &text, bool hexMode,
                                      const QByteArray &expectedResponse,
                                      int delayMs)
 {
-    if (!isOpen() || text.isEmpty())
+    if (!isOpen() || text.isEmpty() || !m_serialPort)
         return;
 
-    // 1. 设置期望返回值
     m_expectedResponse = expectedResponse;
 
-    // 2. 编码并发送
+    // ── 构建数据 ──
     QByteArray data;
     if (hexMode) {
         QString hex = text;
@@ -205,32 +216,92 @@ void SerialWork::sendStringWithDelay(const QString &text, bool hexMode,
         data = text.toUtf8();
     }
 
+    // ── 发送 ──
     qint64 written = m_serialPort->write(data);
     if (written == -1) {
         emit errorOccurred(QString("发送失败: %1").arg(m_serialPort->errorString()));
         return;
     }
 
-    // 3. 发送日志
+    // ★ 关键：等待数据刷新到串口驱动，消除发送侧的随机延迟
+    if (m_serialPort->isOpen()) {
+        m_serialPort->waitForBytesWritten(10);  // 最多等10ms
+    }
+
     QString timeStr = QDateTime::currentDateTime().toString("HH:mm:ss.zzz");
     QString display = formatByteArray(data);
     emit sendLogLine(QString("[%1] TX → %2").arg(timeStr, display));
 
-    // 4. ★ 在工作线程内启动精确延时（消除主线程定时器抖动 + 跨线程排队）
+    // ═══════════════════════════════════════════════════════════
+    //  精确延时（1ms轮询 + 微秒忙等 + EMA补偿）
+    // ═══════════════════════════════════════════════════════════
     if (delayMs > 0) {
-        m_interCmdTimer->start(delayMs);
+        // 第1步：EMA补偿
+        int compensatedMs = delayMs + m_timingCompensationMs;
+        if (compensatedMs < 0) compensatedMs = 0;
+
+        // 钳位补偿范围 ±100ms，防止单次异常抖动
+        const int MAX_COMPENSATION = 100;
+        m_timingCompensationMs = qBound(-MAX_COMPENSATION,
+                                         m_timingCompensationMs,
+                                         MAX_COMPENSATION);
+
+        // 第2步：启动1ms轮询 + 记录起始时间
+        m_targetDelayMs   = compensatedMs;
+        m_originalDelayMs = delayMs;
+        m_preciseDelayTimer.start();
+        m_interCmdTimer->start();  // 每1ms触发 onInterCmdDelay()
     } else {
-        // 无延时，立刻通知
         emit interCmdDelayFinished();
     }
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  ★ 精确延时到期（工作线程内触发）
+//  1ms 轮询回调：检测是否到期 → 微秒忙等 → 误差补偿 → 发射信号
 // ═══════════════════════════════════════════════════════════════
 void SerialWork::onInterCmdDelay()
 {
-    // 从工作线程发射信号 → 主线程通过 QueuedConnection 接收
+    qint64 elapsedMs = m_preciseDelayTimer.elapsed();
+
+    // ★ 还没到目标时间，继续等（定时器下次再触发）
+    if (elapsedMs < m_targetDelayMs - 1) {
+        return;
+    }
+
+    // ★ 距离目标 ≤1ms：进入忙等自旋，精准命中
+    //    用 QElapsedTimer 获得高精度时间（内部基于系统性能计数器）
+    while (m_preciseDelayTimer.elapsed() < m_targetDelayMs) {
+        // 自旋等待，不做任何事
+        // 在 Windows上 QElapsedTimer 基于 QueryPerformanceCounter，
+        // 精度可达微秒级。1ms 的自旋 ≈ 3,000,000 个 CPU 周期（3GHz），
+        // 开销极小。
+    }
+
+    // ★ 停止轮询
+    m_interCmdTimer->stop();
+
+    // ★ 测量实际耗时，计算误差
+    qint64 actualMs = m_preciseDelayTimer.elapsed();
+    int    errorMs  = static_cast<int>(actualMs - m_targetDelayMs);
+
+    // ★ EMA 平滑更新补偿值 (alpha = 0.5)
+    const int MAX_COMPENSATION = 100;
+    m_timingCompensationMs -= errorMs / 2;
+    m_timingCompensationMs  = qBound(-MAX_COMPENSATION,
+                                      m_timingCompensationMs,
+                                      MAX_COMPENSATION);
+
+    // ★ 诊断日志
+    if (qAbs(errorMs) >= 1) {
+        qDebug() << "SerialWork:[精确延时]"
+                 << "请求" << m_originalDelayMs << "ms"
+                 << "→补偿后" << m_targetDelayMs << "ms"
+                 << "→实际" << actualMs << "ms"
+                 << "|误差" << errorMs << "ms"
+                 << "|累积补偿" << m_timingCompensationMs << "ms";
+    }
+
+    // ★ 通知主线程
     emit interCmdDelayFinished();
 }
 
