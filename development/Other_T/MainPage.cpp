@@ -48,12 +48,14 @@ void MainPage::initNavigation() {
 // ═══════════════════════════════════════════════════════════════
 void MainPage::initWindowConfig() {
     m_mainWindow->resize(1200, 750);
-    m_mainWindow->setWindowTitle("Ainuo 通用通讯可靠性测试软件V3.3.2");
+    // <<< 修改：V3.3.2 → V3.4.1 >>>
+    m_mainWindow->setWindowTitle("Ainuo 通用通讯可靠性测试软件V3.4.1");
 
     // 用户信息卡片
     m_mainWindow->setUserInfoCardTitle("Ainuo 通讯可靠性");
     m_mainWindow->setUserInfoCardSubTitle("Excel SCPI Sender");
     m_mainWindow->setUserInfoCardVisible(true);
+
 
     // 导航栏外观
     m_mainWindow->setNavigationBarDisplayMode(ElaNavigationType::Auto);
@@ -225,17 +227,61 @@ void MainPage::createHelpPage() {
             QString::fromUtf8("    操作方式与网口通讯一致，请参考第 2 节的说明。")
         }));
 
-    // ════════════════ 4. CAN / GPIB 通讯 ════════════════
+    // <<< 修改：GPIB 已完整实现，替换预留接口说明为完整帮助文档 >>>
+    // ════════════════ 4. GPIB 通讯 ════════════════
     lay->addWidget(createHelpSection(
-        QString::fromUtf8("4. CAN / GPIB 通讯"),
+        QString::fromUtf8("4. GPIB 通讯"),
         QStringList{
-            QString::fromUtf8("CAN 和 GPIB 通讯模块目前为预留接口，具体功能将在后续版本中完善。"),
+            QString::fromUtf8("4.1  配置 GPIB 参数"),
+            QString::fromUtf8("    在「GPIB设置」页中输入板卡号（通常为 0）、仪器主地址（0-30）。"),
+            QString::fromUtf8("    如需使用副地址（某些多通道仪器），可填入副地址（0=不使用）。"),
+            QString::fromUtf8("    设置超时时间（建议 3000ms，可根据仪器响应速度调整）。"),
+            QString::fromUtf8("    结束字符默认为换行符 \\n，启用后 viRead 会在收到换行符时终止读取。"),
+            QString::fromUtf8("    可选勾选「发送时附加 EOI 信号」，大多数 GPIB 仪器需要此信号标识命令结束。"),
+            QString::fromUtf8("    可选勾选「以HEX格式发送」切换十六进制模式。"),
+            QString::fromUtf8("    点击「打开 GPIB」建立连接，LED 指示灯变为绿色。"),
+            QString(),
+            QString::fromUtf8("4.2  前置条件"),
+            QString::fromUtf8("    a) 必须安装 NI-VISA 运行时驱动（NI-488.2 或 NI-VISA 独立包）。"),
+            QString::fromUtf8("    b) GPIB 控制器（如 NI GPIB-USB-HS）需正确插入并被系统识别。"),
+            QString::fromUtf8("    c) 可在 NI-MAX（Measurement & Automation Explorer）中验证设备可见性。"),
+            QString::fromUtf8("    d) 确认仪器 GPIB 地址与软件中填写的主地址一致。"),
+            QString(),
+            QString::fromUtf8("4.3  单条命令发送"),
+            QString::fromUtf8("    在「单条发送」页中输入 SCPI 命令文本，点击「通过 GPIB 发送」。"),
+            QString::fromUtf8("    发送和接收日志实时显示在下方列表中。"),
+            QString(),
+            QString::fromUtf8("4.4  表格批量发送"),
+            QString::fromUtf8("    操作方式与网口通讯一致，请参考第 2.3 节的说明。"),
+            QString::fromUtf8("    支持「读取返回值（捕获）」模式，自动将仪器返回值填入 Excel B 列。"),
+            QString(),
+            QString::fromUtf8("4.5  错误统计"),
+            QString::fromUtf8("    超时错误：在超时时间内未收到仪器回复"),
+            QString::fromUtf8("    内容错误：仪器回复的内容与 Excel 中定义的期望值不一致"),
+            QString::fromUtf8("    错误列表支持自动滚动和清空操作"),
+            QString(),
+            QString::fromUtf8("4.6  常见 GPIB 问题"),
+            QString::fromUtf8("    Q: 打开 GPIB 时提示「未找到目标资源」？"),
+            QString::fromUtf8("    A: 检查板卡号和主地址是否正确，仪器是否上电，NI-MAX 中是否可见该设备。"),
+            QString(),
+            QString::fromUtf8("    Q: 打开 GPIB 时提示「未找到 VISA 运行库」？"),
+            QString::fromUtf8("    A: 请确认 NI-VISA 已正确安装。可从 NI 官网下载 NI-VISA 运行时（免费）。"),
+            QString(),
+            QString::fromUtf8("    Q: GPIB 连接超时（5秒弹窗）？"),
+            QString::fromUtf8("    A: 检查 GPIB 线缆连接是否牢固，仪器是否上电且处于远程控制模式。")
+        }));
+
+    // ════════════════ 5. CAN 通讯 ════════════════
+    lay->addWidget(createHelpSection(
+        QString::fromUtf8("5. CAN 通讯"),
+        QStringList{
+            QString::fromUtf8("CAN 通讯模块目前为预留接口，具体功能将在后续版本中完善。"),
             QString::fromUtf8("如需使用请联系开发者获取技术支持。")
         }));
 
-    // ════════════════ 5. Excel 模板格式 ════════════════
+    // ════════════════ 6. Excel 模板格式 ════════════════
     lay->addWidget(createHelpSection(
-        QString::fromUtf8("5. Excel 模板格式"),
+        QString::fromUtf8("6. Excel 模板格式"),
         QStringList{
             QString::fromUtf8("Excel 文件必须包含表头行（第 1 行），数据从第 2 行开始。"),
             QString::fromUtf8("表格结构："),
@@ -254,9 +300,9 @@ void MainPage::createHelpPage() {
             QString::fromUtf8("  留空则不对该命令的返回值进行校验")
         }));
 
-    // ════════════════ 6. 常见问题 ════════════════
+    // ════════════════ 7. 常见问题 ════════════════
     lay->addWidget(createHelpSection(
-        QString::fromUtf8("6. 常见问题"),
+        QString::fromUtf8("7. 常见问题"),
         QStringList{
             QString::fromUtf8("Q: 连接网络超时（3秒弹窗）？"),
             QString::fromUtf8("A: 请检查 IP 地址和端口号是否正确，目标设备是否在线，防火墙是否阻止了连接。"),
@@ -298,7 +344,8 @@ void MainPage::createAboutPage() {
     lay->addWidget(title);
 
     // ──── 版本 ────
-    ElaText *version = new ElaText(QString::fromUtf8("版本: v3.3.2"));
+    // <<< 修改：v3.3.2 → v3.4.1 >>>
+    ElaText *version = new ElaText(QString::fromUtf8("版本: v3.4.1"));
     version->setTextPixelSize(18);
     version->setTextStyle(ElaTextType::Subtitle);
     lay->addWidget(version);
@@ -335,14 +382,15 @@ void MainPage::createAboutPage() {
         infoLayout->addLayout(row);
     };
 
-    addInfo(QString::fromUtf8("软件版本："), "v3.3.2");
-    addInfo(QString::fromUtf8("发布日期："), QString::fromUtf8("2026 年 6 月"));
+    // <<< 修改：版本号 v3.3.2 → v3.4.1，日期 6月 → 7月 >>>
+    addInfo(QString::fromUtf8("软件版本："), "v3.4.1");
+    addInfo(QString::fromUtf8("发布日期："), QString::fromUtf8("2026 年 7 月"));
     addInfo(QString::fromUtf8("开发者："),   "Cossiant");
     addInfo(QString::fromUtf8("开发环境："), "Qt 5.15 + MinGW");
     infoLayout->addSpacing(8);
     addInfo(QString::fromUtf8("UI 框架："),  "ElaWidgetTools（现代化 Fluent Design 组件库）");
     addInfo(QString::fromUtf8("Excel 引擎："), "QXlsx（高性能跨平台 Excel 读写库）");
-    addInfo(QString::fromUtf8("通讯协议："), "TCP/IP、RS-232/485 (Serial)、CAN、GPIB");
+    addInfo(QString::fromUtf8("通讯协议："), "TCP/IP、RS-232/485 (Serial)、CAN、GPIB (NI-VISA)");
 
     lay->addWidget(infoGroup);
 
@@ -360,9 +408,10 @@ void MainPage::createAboutPage() {
         QString::fromUtf8("\u2022  支持 HEX 和 ASCII 两种命令编码格式"),
         QString::fromUtf8("\u2022  独立单条命令发送模式，便于调试"),
         QString::fromUtf8("\u2022  实时收发日志，带毫秒级时间戳"),
-        QString::fromUtf8("\u2022  错误统计卡片 + 详细错误列表"),
+        QString::fromUtf8("\u2022  错误统计卡片 + 6列详细错误列表"),
         QString::fromUtf8("\u2022  Nagle 算法可选禁用（网口低延迟模式）"),
-        QString::fromUtf8("\u2022  命令间隔精确延时控制（1ms 精度）"),
+        QString::fromUtf8("\u2022  GPIB 仪器地址配置 + EOI / 结束字符控制"),
+        QString::fromUtf8("\u2022  命令间隔精确延时控制（1ms 精度，EMA 补偿）"),
         QString::fromUtf8("\u2022  多线程架构，收发与 UI 完全分离")
     };
 
@@ -415,7 +464,8 @@ QWidget* MainPage::createHelpSection(const QString &title, const QStringList &li
         // 小标题（以数字或 Q: 开头）
         bool isSubTitle = (line.startsWith("Q:") || line.startsWith("2.") ||
                            line.startsWith("3.") || line.startsWith("4.") ||
-                           line.startsWith("5.") || line.startsWith("6."));
+                           line.startsWith("5.") || line.startsWith("6.") ||
+                           line.startsWith("7."));
         // 子步骤（以空格开头）
         bool isIndent = line.startsWith("    ");
 

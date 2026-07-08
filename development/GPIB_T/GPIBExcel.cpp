@@ -1,6 +1,10 @@
-#include "NetworkExcel.h"
-#include "NetworkPage.h"
-#include "NetworkWork.h"
+// GPIBExcel.cpp
+// GPIB Excel 批量发送 / 捕获实现
+// 对齐 SerialExcel / NetworkExcel
+
+#include "GPIBExcel.h"
+#include "GPIBPage.h"
+#include "GPIBWork.h"
 #include "ElaWindow.h"
 #include "xlsxdocument.h"
 #include "xlsxformat.h"
@@ -11,31 +15,31 @@
 #include <QTableWidgetItem>
 #include <QDateTime>
 
-NetworkExcel::NetworkExcel(NetworkPage* page, QObject *parent)
-    : QObject(parent), m_page(page), m_work(page->m_networkWork)
+GPIBExcel::GPIBExcel(GPIBPage* page, QObject *parent)
+    : QObject(parent), m_page(page), m_work(page->m_gpibWork)
 {
-    connect(m_page->m_excelDownloadTplBtn, &ElaPushButton::clicked, this, &NetworkExcel::onDownloadTemplate);
-    connect(m_page->m_excelOpenBtn,        &ElaPushButton::clicked, this, &NetworkExcel::onOpenExcel);
-    connect(m_page->m_excelCaptureBtn,     &ElaPushButton::clicked, this, &NetworkExcel::onCapture);
-    connect(m_page->m_excelSendBtn,        &ElaPushButton::clicked, this, &NetworkExcel::onStartSend);
-    connect(m_page->m_excelStopBtn,        &ElaPushButton::clicked, this, &NetworkExcel::onStopSend);
+    connect(m_page->m_excelDownloadTplBtn, &ElaPushButton::clicked, this, &GPIBExcel::onDownloadTemplate);
+    connect(m_page->m_excelOpenBtn,        &ElaPushButton::clicked, this, &GPIBExcel::onOpenExcel);
+    connect(m_page->m_excelCaptureBtn,     &ElaPushButton::clicked, this, &GPIBExcel::onCapture);
+    connect(m_page->m_excelSendBtn,        &ElaPushButton::clicked, this, &GPIBExcel::onStartSend);
+    connect(m_page->m_excelStopBtn,        &ElaPushButton::clicked, this, &GPIBExcel::onStopSend);
 
     m_timeoutTimer = new QTimer(this);
     m_timeoutTimer->setSingleShot(true);
     m_timeoutTimer->setTimerType(Qt::PreciseTimer);
-    connect(m_timeoutTimer, &QTimer::timeout, this, &NetworkExcel::onGlobalTimeout);
+    connect(m_timeoutTimer, &QTimer::timeout, this, &GPIBExcel::onGlobalTimeout);
 
-    connect(m_work, &NetworkWork::responseReceived, this, &NetworkExcel::onResponseReceived);
-    connect(m_work, &NetworkWork::interCmdDelayFinished, this, &NetworkExcel::onInterCmdDelayFinished);
+    connect(m_work, &GPIBWork::responseReceived, this, &GPIBExcel::onResponseReceived);
+    connect(m_work, &GPIBWork::interCmdDelayFinished, this, &GPIBExcel::onInterCmdDelayFinished);
 }
 
-NetworkExcel::~NetworkExcel()
+GPIBExcel::~GPIBExcel()
 {
     m_timeoutTimer->stop();
     m_isRunning = false;
 }
 
-void NetworkExcel::setRunning(bool running)
+void GPIBExcel::setRunning(bool running)
 {
     m_isRunning = running;
     m_page->m_excelCaptureBtn->setEnabled(!running);
@@ -47,7 +51,7 @@ void NetworkExcel::setRunning(bool running)
 }
 
 // ═══════════════════════════════════════════════ 捕获模式 ═══
-void NetworkExcel::onCapture()
+void GPIBExcel::onCapture()
 {
     if (m_isRunning || !m_work || !m_work->isOpen()) return;
 
@@ -70,7 +74,7 @@ void NetworkExcel::onCapture()
 }
 
 // ═══════════════════════════════════════════════ 开始发送 ═══
-void NetworkExcel::onStartSend()
+void GPIBExcel::onStartSend()
 {
     if (m_isRunning || !m_work || !m_work->isOpen()) return;
     if (m_page->m_excelTableWidget->rowCount() == 0) return;
@@ -93,7 +97,7 @@ void NetworkExcel::onStartSend()
 }
 
 // ═══════════════════════════════════════════════ 停止 ═══
-void NetworkExcel::onStopSend()
+void GPIBExcel::onStopSend()
 {
     m_timeoutTimer->stop();
     m_waiting = false;
@@ -104,11 +108,11 @@ void NetworkExcel::onStopSend()
                               Q_ARG(QByteArray, QByteArray()));
 
     setRunning(false);
-    qDebug() << "NetworkExcel: 发送已停止，总计" << m_totalSent << "条";
+    qDebug() << "GPIBExcel: 发送已停止，总计" << m_totalSent << "条";
 }
 
 // ═══════════════════════════════════════════════ 统一入口 ═══
-void NetworkExcel::onTrySendNext()
+void GPIBExcel::onTrySendNext()
 {
     if (!m_isRunning || !m_work || !m_work->isOpen()) { onStopSend(); return; }
 
@@ -118,13 +122,13 @@ void NetworkExcel::onTrySendNext()
 
     if (m_isCaptureMode && m_currentRow >= rowCount) {
         onStopSend();
-        qDebug() << "NetworkExcel: 捕获模式完成，共" << m_totalSent << "条";
+        qDebug() << "GPIBExcel: 捕获模式完成，共" << m_totalSent << "条";
         return;
     }
 
     if (m_pendingStop) {
         onStopSend();
-        qDebug() << "NetworkExcel: 发送完成，总计" << m_totalSent << "条";
+        qDebug() << "GPIBExcel: 发送完成，总计" << m_totalSent << "条";
         return;
     }
 
@@ -158,13 +162,13 @@ void NetworkExcel::onTrySendNext()
         return;
     }
 
-    bool hexMode = m_page->m_networkHexSendCheckBox->isChecked();
+    bool hexMode = m_page->m_gpibHexSendCheckBox->isChecked();
     m_expectData = expectedStr.isEmpty() ? QByteArray()
                    : hexMode ? QByteArray::fromHex(expectedStr.toLatin1())
                              : expectedStr.toUtf8();
     m_lastCmd = cmdText;
 
-    if (!hexMode && m_page->m_networkStripCRLFCheckBox->isChecked()) {
+    if (!hexMode && m_page->m_gpibStripCRLFCheckBox->isChecked()) {
         m_expectData.replace("\r", "");
         m_expectData.replace("\n", "");
     }
@@ -187,7 +191,7 @@ void NetworkExcel::onTrySendNext()
 }
 
 // ═══════════════════════════════════════════════ 收到回复 ═══
-void NetworkExcel::onResponseReceived(QByteArray data)
+void GPIBExcel::onResponseReceived(QByteArray data)
 {
     if (!m_waiting) return;
 
@@ -199,8 +203,8 @@ void NetworkExcel::onResponseReceived(QByteArray data)
     }
 
     QByteArray cmpData = data;
-    bool hexMode = m_page->m_networkHexSendCheckBox->isChecked();
-    if (!hexMode && m_page->m_networkStripCRLFCheckBox->isChecked()) {
+    bool hexMode = m_page->m_gpibHexSendCheckBox->isChecked();
+    if (!hexMode && m_page->m_gpibStripCRLFCheckBox->isChecked()) {
         cmpData.replace("\r", "");
         cmpData.replace("\n", "");
     }
@@ -213,7 +217,7 @@ void NetworkExcel::onResponseReceived(QByteArray data)
 }
 
 // ═══════════════════════════════════════════════ 延时到期 ═══
-void NetworkExcel::onInterCmdDelayFinished()
+void GPIBExcel::onInterCmdDelayFinished()
 {
     if (!m_waiting) return;
 
@@ -222,7 +226,7 @@ void NetworkExcel::onInterCmdDelayFinished()
 }
 
 // ═══════════════════════════════════════════════ 全局超时 ═══
-void NetworkExcel::onGlobalTimeout()
+void GPIBExcel::onGlobalTimeout()
 {
     if (!m_waiting) return;
 
@@ -237,7 +241,7 @@ void NetworkExcel::onGlobalTimeout()
 }
 
 // ═══════════════════════════════════════════════ 结算 → 下一条 ═══
-void NetworkExcel::finalizeAndNext()
+void GPIBExcel::finalizeAndNext()
 {
     m_timeoutTimer->stop();
     m_waiting = false;
@@ -250,13 +254,13 @@ void NetworkExcel::finalizeAndNext()
 }
 
 // ═══════════════════════════════════════════════ 捕获：填入返回值 ═══
-void NetworkExcel::fillCaptureResult(const QByteArray &data)
+void GPIBExcel::fillCaptureResult(const QByteArray &data)
 {
     int row = m_currentRow - 1;
     QTableWidget* table = m_page->m_excelTableWidget;
     if (row < 0 || row >= table->rowCount()) return;
 
-    bool hexMode = m_page->m_networkHexSendCheckBox->isChecked();
+    bool hexMode = m_page->m_gpibHexSendCheckBox->isChecked();
     QString displayText;
     if (hexMode) {
         displayText = data.toHex(' ').toUpper();
@@ -273,11 +277,11 @@ void NetworkExcel::fillCaptureResult(const QByteArray &data)
     }
     item->setText(displayText);
 
-    qDebug() << "NetworkExcel: 捕获模式 — 第" << (row + 1) << "行返回值已填入:" << displayText;
+    qDebug() << "GPIBExcel: 捕获模式 — 第" << (row + 1) << "行返回值已填入:" << displayText;
 }
 
 // ═══════════════════════════════════════════════ 捕获：超时标记 ═══
-void NetworkExcel::fillCaptureTimeout()
+void GPIBExcel::fillCaptureTimeout()
 {
     int row = m_currentRow - 1;
     QTableWidget* table = m_page->m_excelTableWidget;
@@ -292,11 +296,11 @@ void NetworkExcel::fillCaptureTimeout()
         item->setText("(超时)");
     }
 
-    qDebug() << "NetworkExcel: 捕获模式 — 第" << (row + 1) << "行超时";
+    qDebug() << "GPIBExcel: 捕获模式 — 第" << (row + 1) << "行超时";
 }
 
 // ═══════════════════════════════════════════════ 打开 Excel ═══
-void NetworkExcel::onOpenExcel()
+void GPIBExcel::onOpenExcel()
 {
     QString filePath = QFileDialog::getOpenFileName(
         m_page->m_mainWindow,
@@ -314,7 +318,7 @@ void NetworkExcel::onOpenExcel()
     }
 }
 
-bool NetworkExcel::loadExcelToTable(const QString &filePath)
+bool GPIBExcel::loadExcelToTable(const QString &filePath)
 {
     QXlsx::Document xlsx(filePath);
     if (!xlsx.load())
@@ -366,18 +370,18 @@ bool NetworkExcel::loadExcelToTable(const QString &filePath)
     }
 
     bool hasData  = (dataRowCount > 0);
-    bool portOpen = m_page->m_networkWork && m_page->m_networkWork->isOpen();
+    bool portOpen = m_page->m_gpibWork && m_page->m_gpibWork->isOpen();
     m_page->m_excelSendBtn->setEnabled(hasData && portOpen);
     m_page->m_excelCaptureBtn->setEnabled(hasData && portOpen);
 
-    qDebug() << "NetworkExcel: 加载了" << dataRowCount << "行数据";
+    qDebug() << "GPIBExcel: 加载了" << dataRowCount << "行数据";
     return true;
 }
 
-void NetworkExcel::onDownloadTemplate()
+void GPIBExcel::onDownloadTemplate()
 {
     QString defaultPath = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation)
-                          + "/网口通讯示例模板.xlsx";
+                          + "/GPIB通讯示例模板.xlsx";
 
     QString filePath = QFileDialog::getSaveFileName(
         m_page->m_mainWindow, "保存示例模板", defaultPath, "Excel 文件 (*.xlsx)");
@@ -393,7 +397,7 @@ void NetworkExcel::onDownloadTemplate()
     }
 }
 
-bool NetworkExcel::generateExcelTemplate(const QString &filePath)
+bool GPIBExcel::generateExcelTemplate(const QString &filePath)
 {
     QXlsx::Document xlsx;
 

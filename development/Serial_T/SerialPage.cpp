@@ -163,6 +163,7 @@ SerialPage::SerialPage(ElaWindow *mainWindow, QObject *parent)
 
     // ⑧ 发送日志行 → 写入两个 QListWidget
     connect(m_serialWork, &SerialWork::sendLogLine, this, [this](const QString &line) {
+        if (m_logPaused) return;   // ★ 暂停时不更新
         if (m_singleSendLog) {
             m_singleSendLog->addItem(line);
             while (m_singleSendLog->count() > 200)
@@ -177,6 +178,7 @@ SerialPage::SerialPage(ElaWindow *mainWindow, QObject *parent)
 
     // ⑨ 接收日志行 → 写入两个 QListWidget
     connect(m_serialWork, &SerialWork::recvLogLine, this, [this](const QString &line) {
+        if (m_logPaused) return;   // ★ 暂停时不更新
         if (m_singleRecvLog) {
             m_singleRecvLog->addItem(line);
             while (m_singleRecvLog->count() > 200)
@@ -205,6 +207,21 @@ SerialPage::SerialPage(ElaWindow *mainWindow, QObject *parent)
         QMetaObject::invokeMethod(m_serialWork, "resetRecvCount",
                                   Qt::QueuedConnection);
     });
+
+    // ⑫ 暂停/恢复日志更新
+    connect(m_logPauseBtn, &ElaPushButton::clicked, this, [this]() {
+        m_logPaused = !m_logPaused;
+        if (m_logPaused) {
+            m_logPauseBtn->setText("恢复日志");
+            LED::setLED(m_logLED, 0, 14);    // 灰色
+            qDebug() << "SerialPage: 日志更新已暂停";
+        } else {
+            m_logPauseBtn->setText("暂停日志");
+            LED::setLED(m_logLED, 2, 14);    // 绿色
+            qDebug() << "SerialPage: 日志更新已恢复";
+        }
+    });
+
 
     // ═══════════════════════════════════════════════════════
     //  创建 SerialExcel
@@ -603,11 +620,13 @@ void SerialPage::createLogPage()
     QVBoxLayout* layout = new QVBoxLayout(_SerialLogPage);
     layout->setSpacing(16);
     layout->setContentsMargins(30, 30, 30, 30);
+
     // ──── 标题 ────
     ElaText* title = new ElaText("串口 Excel 发送日志");
     title->setTextPixelSize(24);
     title->setTextStyle(ElaTextType::Title);
     layout->addWidget(title);
+
     // ──── 描述 ────
     ElaText* desc = new ElaText(
         "记录每次 Excel 表格发送的详细过程。\n"
@@ -615,39 +634,69 @@ void SerialPage::createLogPage()
     desc->setTextPixelSize(15);
     desc->setWordWrap(true);
     layout->addWidget(desc);
-    // ════════════════════════════════════════════════════════
-    //  Stats 卡片行
-    // ════════════════════════════════════════════════════════
-    QHBoxLayout* cardRow = new QHBoxLayout();
-    cardRow->setSpacing(16);
+
+    // ═══════════════════════════════════════════════════════
+    //  ★ 使用 QGridLayout：卡片占2行，右侧按钮竖排
+    // ═══════════════════════════════════════════════════════
+    QGridLayout* cardRow = new QGridLayout();
+    cardRow->setSpacing(12);
+
     m_logSentCountCard = new StatCard("总计发送", "0");
     m_logRecvCountCard = new StatCard("总计接收", "0");
     m_logStartTimeCard = new StatCard("开始时间", "--:--:--");
 
-    cardRow->addWidget(m_logSentCountCard);
-    cardRow->addWidget(m_logRecvCountCard);
-    cardRow->addWidget(m_logStartTimeCard);
-    cardRow->addStretch();
+    // 三张卡片各占2行高度（rowSpan=2）
+    cardRow->addWidget(m_logSentCountCard, 0, 0, 2, 1);
+    cardRow->addWidget(m_logRecvCountCard, 0, 1, 2, 1);
+    cardRow->addWidget(m_logStartTimeCard, 0, 2, 2, 1);
+    cardRow->setColumnStretch(0, 1);
+    cardRow->setColumnStretch(1, 1);
+    cardRow->setColumnStretch(2, 1);
+
+    // 右侧按钮区：清空日志 + 暂停日志（竖排）
+    QVBoxLayout* btnCol = new QVBoxLayout();
+    btnCol->setSpacing(8);
 
     m_logClearBtn = new ElaPushButton("清空日志");
     m_logClearBtn->setFixedSize(120, 38);
-    cardRow->addWidget(m_logClearBtn);
+    btnCol->addWidget(m_logClearBtn);
+
+    m_logPauseBtn = new ElaPushButton("暂停日志");
+    m_logPauseBtn->setFixedSize(120, 38);
+    btnCol->addWidget(m_logPauseBtn);
+
+    btnCol->addStretch();
+    cardRow->addLayout(btnCol, 0, 3, 2, 1, Qt::AlignTop);
 
     layout->addLayout(cardRow);
-    // ════════════════════════════════════════════════════════
+
+    // ═══════════════════════════════════════════════════════
     //  发送日志 + 接收日志（左右分栏）
-    // ════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════
     QHBoxLayout* logRow = new QHBoxLayout();
     logRow->setSpacing(12);
+
     // ──── 左侧：发送日志 ────
     QVBoxLayout* sendArea = new QVBoxLayout();
+    QHBoxLayout* sendTitleRow = new QHBoxLayout();
+    sendTitleRow->setSpacing(8);
     ElaText* sendLabel = new ElaText("发送日志");
     sendLabel->setTextPixelSize(15);
     sendLabel->setTextStyle(ElaTextType::Subtitle);
+    sendTitleRow->addWidget(sendLabel);
+
+    m_logLED = new QLabel();
+    m_logLED->setFixedSize(14, 14);
+    LED::setLED(m_logLED, 2, 14);   // 初始绿色
+    sendTitleRow->addWidget(m_logLED);
+    sendTitleRow->addStretch();
+
     m_logSendList = new QListWidget();
     m_logSendList->setAlternatingRowColors(true);
-    sendArea->addWidget(sendLabel);
+    sendArea->addLayout(sendTitleRow);
     sendArea->addWidget(m_logSendList);
+
+
     // ──── 右侧：接收日志 ────
     QVBoxLayout* recvArea = new QVBoxLayout();
     ElaText* recvLabel = new ElaText("接收日志");
@@ -657,13 +706,14 @@ void SerialPage::createLogPage()
     m_logRecvList->setAlternatingRowColors(true);
     recvArea->addWidget(recvLabel);
     recvArea->addWidget(m_logRecvList);
+
     logRow->addLayout(sendArea, 1);
     logRow->addLayout(recvArea, 1);
     layout->addLayout(logRow, 1);
 
+    // 清空按钮功能
     connect(m_logClearBtn, &ElaPushButton::clicked,
         this, &SerialPage::clearExcelSendLog);
-
 }
 
 // ═══════════════════════════════════════════════════════════════

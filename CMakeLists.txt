@@ -7,6 +7,11 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 set(CMAKE_PREFIX_PATH "D:/Apps/Work/Qt/5.15.2/mingw81_64")
+
+# NI-VISA 64位路径
+set(VISA_INCLUDE_DIR "C:/Program Files (x86)/IVI Foundation/VISA/WinNT/include")
+set(VISA_LIB_DIR "C:/Program Files (x86)/IVI Foundation/VISA/WinNT/lib_x64/msc")
+
 add_subdirectory(./QXlsx/QXlsx)
 add_subdirectory(./ElaWidgetTools ${CMAKE_BINARY_DIR}/ElaWidgetTools)
 
@@ -25,6 +30,10 @@ find_package(Qt5 COMPONENTS
         AxContainer
         REQUIRED
 )
+
+# ===== 添加 NI-VISA 头文件搜索路径 =====
+include_directories(${VISA_INCLUDE_DIR})
+
 # 这里需要在编译的时候加上WIN32，如果是debug需要去掉，否则不显示qdebug内容！
 add_executable(untitled WIN32
         development/Other_T/main.cpp
@@ -67,6 +76,11 @@ add_executable(untitled WIN32
         development/Network_T/NetWorkWork.h
         development/Network_T/NetworkExcel.cpp
         development/Network_T/NetworkExcel.h
+        development/ExcelSCPISender.qrc
+        development/GPIB_T/GPIBWork.cpp
+        development/GPIB_T/GPIBWork.h
+        development/GPIB_T/GPIBExcel.cpp
+        development/GPIB_T/GPIBExcel.h
 )
 
 target_link_libraries(untitled
@@ -78,6 +92,7 @@ target_link_libraries(untitled
         Qt5::AxContainer
         QXlsx::QXlsx
         ElaWidgetTools
+        ${VISA_LIB_DIR}/visa64.lib
 )
 
 # ① 复制 ElaWidgetTools DLL

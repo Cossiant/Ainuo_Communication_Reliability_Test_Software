@@ -101,12 +101,16 @@ private:
     QTableWidget*  m_excelTableWidget     = nullptr;
 
     // ═════════════ 发送日志控件 ═════════
+    // ═════════════ 发送日志控件 ═════════
     StatCard*      m_logSentCountCard = nullptr;
     StatCard*      m_logRecvCountCard = nullptr;
     StatCard*      m_logStartTimeCard = nullptr;
     QListWidget*   m_logSendList      = nullptr;
     QListWidget*   m_logRecvList      = nullptr;
     ElaPushButton* m_logClearBtn      = nullptr;
+    ElaPushButton* m_logPauseBtn      = nullptr;   // 新增：暂停/恢复日志更新
+    QLabel*        m_logLED           = nullptr;
+    bool           m_logPaused        = false;     // 新增：日志是否暂停
 
     // ═════════════ 错误统计 ═════════
     int m_errorSeq     = 0;

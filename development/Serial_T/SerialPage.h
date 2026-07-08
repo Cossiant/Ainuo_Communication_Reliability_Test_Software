@@ -106,6 +106,9 @@ private:
     QListWidget*  m_logSendList      = nullptr;   // 发送日志（左）
     QListWidget*  m_logRecvList      = nullptr;   // 接收日志（右）
     ElaPushButton* m_logClearBtn     = nullptr;   // 清空日志
+    ElaPushButton* m_logPauseBtn      = nullptr;   // 暂停恢复日志更新
+    QLabel*        m_logLED           = nullptr;
+    bool           m_logPaused        = false;      // 日志是否暂停
 
     // ═════════════ 错误统计 ═════════
     int m_errorSeq        = 0;
