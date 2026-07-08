@@ -2,7 +2,7 @@
 // Created by Cossiant on 2026/6/2.
 //
 
-#include "../include/LED.h"
+#include "LED.h"
 
 LED::LED()
 {

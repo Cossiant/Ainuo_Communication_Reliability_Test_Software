@@ -1,15 +1,16 @@
-#include "../include/StatCard.h"
+#include "StatCard.h"
 #include <QPainter>
 #include <QPainterPath>
 
 StatCard::StatCard(const QString& title, const QString& value, QWidget* parent)
     : QWidget(parent), m_title(title), m_value(value)
 {
-    setFixedSize(190, 110);
+    setFixedSize(220, 110);
     setObjectName("StatCard");
     setStyleSheet("#StatCard{background-color:transparent}");
 }
 
+//赋值数据
 void StatCard::setValue(const QString& value)
 {
     m_value = value;
