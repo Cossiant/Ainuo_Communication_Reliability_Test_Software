@@ -149,7 +149,7 @@ void SerialExcel::onTrySendNext()
     QString cmdText     = cmdItem    ? cmdItem->text().trimmed()    : "";
     QString expectedStr = expectItem ? expectItem->text().trimmed() : "";
     int delayMs         = delayItem  ? delayItem->text().toInt()    : 100;
-    if (delayMs <= 0) delayMs = 100;
+    if (delayMs < 0) delayMs = 100;
 
     int globalTimeout = m_page->m_excelTimeoutMs->text().toInt();
     if (globalTimeout <= 0) globalTimeout = 500;

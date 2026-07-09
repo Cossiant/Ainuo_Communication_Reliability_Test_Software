@@ -165,7 +165,7 @@ void GPIBExcel::onTrySendNext()
     bool hexMode = m_page->m_gpibHexSendCheckBox->isChecked();
 
     // ★ 空字符串 或 "(超时)" 都不校验
-    if (expectedStr.isEmpty() || expectedStr == QString::fromUtf8("(超时)")) {
+    if (expectedStr.isEmpty()){
         m_expectData = QByteArray();
     } else {
         m_expectData = hexMode ? QByteArray::fromHex(expectedStr.toLatin1())

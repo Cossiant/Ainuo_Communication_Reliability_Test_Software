@@ -1,6 +1,6 @@
 # Ainuo 通用通讯可靠性测试软件
 
-[![Version](https://img.shields.io/badge/version-v3.4.3-blue)](https://github.com)
+[![Version](https://img.shields.io/badge/version-v3.4.4-blue)](https://github.com)
 [![Qt](https://img.shields.io/badge/Qt-5.15-green)](https://www.qt.io/)
 [![License](https://img.shields.io/badge/license-MIT-orange)](LICENSE)
 
@@ -199,8 +199,15 @@ cmake --build . --target untitled -j 14
 | **NI-VISA** | GPIB / 仪器控制驱动 | [NI 官网](https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html) |
 
 ---
-
 ## 📝 更新日志
+
+### V3.4.4 (2026-07)
+
+- 🐛 修复 GPIB 单条发送无回传数据显示的 Bug（`sendString` 仅写不读，已补全 `doVISARead` + `emitData`）
+- 🐛 修复 GPIB 表格发送中设置命令（无返回值）导致 `doVISARead` 阻塞超时的 Bug（新增 `forceRead` 机制：B 列为空时跳过 `viRead`，延时 0ms 直接发下一条）
+- 🐛 修复串口表格发送延时 0ms 被强制覆盖为 100ms 的 Bug（`delayMs <= 0` → `delayMs < 0`）
+- 🔧 GPIB 表格发送中 B 列为 `(超时)` 不再触发校验（视为空期望）
+- ⚡ GPIB 设置命令间隔从 ~1.5s 降至 ~2ms（跳过无意义的 `viRead` 超时等待）
 
 ### V3.4.1 (2026-07)
 
@@ -212,7 +219,6 @@ cmake --build . --target untitled -j 14
 - ✅ 界面优化：GroupBox 分组布局、卡片样式、占位行提示
 
 ---
-
 ## 📄 许可证
 
 MIT License. 详见 [LICENSE](LICENSE) 文件。
