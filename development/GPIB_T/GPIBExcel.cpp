@@ -163,9 +163,14 @@ void GPIBExcel::onTrySendNext()
     }
 
     bool hexMode = m_page->m_gpibHexSendCheckBox->isChecked();
-    m_expectData = expectedStr.isEmpty() ? QByteArray()
-                   : hexMode ? QByteArray::fromHex(expectedStr.toLatin1())
-                             : expectedStr.toUtf8();
+
+    // ★ 空字符串 或 "(超时)" 都不校验
+    if (expectedStr.isEmpty() || expectedStr == QString::fromUtf8("(超时)")) {
+        m_expectData = QByteArray();
+    } else {
+        m_expectData = hexMode ? QByteArray::fromHex(expectedStr.toLatin1())
+                               : expectedStr.toUtf8();
+    }
     m_lastCmd = cmdText;
 
     if (!hexMode && m_page->m_gpibStripCRLFCheckBox->isChecked()) {
@@ -173,12 +178,14 @@ void GPIBExcel::onTrySendNext()
         m_expectData.replace("\n", "");
     }
 
+    // ★ 传递 forceRead：捕获模式必须读取，普通模式仅在期望非空时读取
     QMetaObject::invokeMethod(m_work, "sendStringWithDelay",
                               Qt::QueuedConnection,
                               Q_ARG(QString, cmdText),
                               Q_ARG(bool, hexMode),
                               Q_ARG(QByteArray, m_expectData),
-                              Q_ARG(int, delayMs));
+                              Q_ARG(int, delayMs),
+                              Q_ARG(bool, m_isCaptureMode));
 
     m_totalSent++;
     m_page->m_logSentCountCard->setValue(QString::number(m_totalSent));
@@ -293,7 +300,7 @@ void GPIBExcel::fillCaptureTimeout()
         table->setItem(row, 1, item);
     }
     if (item->text().isEmpty()) {
-        item->setText("(超时)");
+        item->setText(QString::fromUtf8("(超时)"));
     }
 
     qDebug() << "GPIBExcel: 捕获模式 — 第" << (row + 1) << "行超时";
@@ -429,9 +436,9 @@ bool GPIBExcel::generateExcelTemplate(const QString &filePath)
     delayFormat.setVerticalAlignment(QXlsx::Format::AlignVCenter);
     delayFormat.setBorderStyle(QXlsx::Format::BorderThin);
 
-    xlsx.write(1, 1, "发送的命令",          headerFormat);
-    xlsx.write(1, 2, "正确的返回值",        headerFormat);
-    xlsx.write(1, 3, "到下一条命令的时间ms", headerFormat);
+    xlsx.write(1, 1, QString::fromUtf8("发送的命令"),          headerFormat);
+    xlsx.write(1, 2, QString::fromUtf8("正确的返回值"),        headerFormat);
+    xlsx.write(1, 3, QString::fromUtf8("到下一条命令的时间ms"), headerFormat);
 
     struct Sample { QString command; int delayMs; };
     QList<Sample> samples = {

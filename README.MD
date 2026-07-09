@@ -1,6 +1,6 @@
 # Ainuo 通用通讯可靠性测试软件
 
-[![Version](https://img.shields.io/badge/version-v3.4.1-blue)](https://github.com)
+[![Version](https://img.shields.io/badge/version-v3.4.3-blue)](https://github.com)
 [![Qt](https://img.shields.io/badge/Qt-5.15-green)](https://www.qt.io/)
 [![License](https://img.shields.io/badge/license-MIT-orange)](LICENSE)
 

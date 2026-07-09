@@ -173,7 +173,7 @@ void GPIBWork::closeGPIBPort()
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  发送字符串（只写，不读）
+//  发送字符串（单条发送用，写后读取）
 // ═══════════════════════════════════════════════════════════════
 void GPIBWork::sendString(const QString &text, bool hexMode)
 {
@@ -189,15 +189,24 @@ void GPIBWork::sendString(const QString &text, bool hexMode)
         data = text.toUtf8();
     }
 
-    doVISAWrite(data);
+    if (!doVISAWrite(data))
+        return;
+
+    // ★ GPIB 必须显式 viRead 才能获取仪器响应（与串口/网口的异步 readyRead 不同）
+    QByteArray response = doVISARead(m_timeoutMs);
+    if (!response.isEmpty()) {
+        emitData(response);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  ★★★ 核心：发送 + VISA读取 + 1ms轮询精确延时 ★★★
+//  ★★★ 核心：发送 + 条件读取 + 1ms轮询精确延时 ★★★
+//  forceRead: 捕获模式强制读取；否则仅在期望非空时读取
 // ═══════════════════════════════════════════════════════════════
 void GPIBWork::sendStringWithDelay(const QString &text, bool hexMode,
                                     const QByteArray &expectedResponse,
-                                    int delayMs)
+                                    int delayMs,
+                                    bool forceRead)
 {
     if (!isOpen() || text.isEmpty() || !m_instrument)
         return;
@@ -237,11 +246,20 @@ void GPIBWork::sendStringWithDelay(const QString &text, bool hexMode,
     }
 
     // ── 步骤2: viRead 读取响应 ──
-    // GPIB 的响应通常在 viWrite 之后立即可用
-    // 使用用户配置的超时时间等待响应
-    QByteArray response = doVISARead(m_timeoutMs);
-    if (!response.isEmpty()) {
-        emitData(response);
+    // ★ 关键优化：
+    //    forceRead=true（捕获模式）→ 总是读取仪器响应
+    //    forceRead=false 且期望非空 → 读取响应用于校验
+    //    forceRead=false 且期望为空 → 跳过 viRead（设置命令无需等待）
+    bool shouldRead = forceRead || !m_expectedResponse.isEmpty();
+
+    if (shouldRead) {
+        QByteArray response = doVISARead(m_timeoutMs);
+        if (!response.isEmpty()) {
+            emitData(response);
+        }
+    } else {
+        // ★ 无期望响应也不强制读取 → 发出空响应信号让流程继续
+        emit responseReceived(QByteArray());
     }
 
     // ═══════════════════════════════════════════════════════════
