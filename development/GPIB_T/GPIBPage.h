@@ -80,6 +80,7 @@ private:
     ElaCheckBox*   m_sendEndEnabledCheckBox  = nullptr;
     ElaCheckBox*   m_gpibHexSendCheckBox     = nullptr;
     ElaCheckBox*   m_gpibStripCRLFCheckBox   = nullptr;
+    ElaComboBox*   m_suffixComboBox         = nullptr;   //发送后缀选择
     ElaPushButton* m_openGpibButton         = nullptr;
     ElaPushButton* m_closeGpibButton        = nullptr;
     QLabel*        m_gpibLED                = nullptr;

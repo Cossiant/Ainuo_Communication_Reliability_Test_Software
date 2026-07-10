@@ -48,7 +48,7 @@ void MainPage::initNavigation() {
 // ═══════════════════════════════════════════════════════════════
 void MainPage::initWindowConfig() {
     m_mainWindow->resize(1200, 750);
-    m_mainWindow->setWindowTitle("Ainuo 通用通讯可靠性测试软件V3.4.5");
+    m_mainWindow->setWindowTitle("Ainuo 通用通讯可靠性测试软件V3.4.6");
 
     // 用户信息卡片
     m_mainWindow->setUserInfoCardTitle("Ainuo 通讯可靠性");
@@ -235,6 +235,12 @@ void MainPage::createHelpPage() {
             QString::fromUtf8("    在「GPIB设置」页中输入板卡号（通常为 0）、仪器主地址（0-30）。"),
             QString::fromUtf8("    如需使用副地址（某些多通道仪器），可填入副地址（0=不使用）。"),
             QString::fromUtf8("    设置超时时间（建议 3000ms，可根据仪器响应速度调整）。"),
+            QString::fromUtf8("    「发送后缀」下拉框：选择发送命令后自动追加的结束符。"),
+            QString::fromUtf8("        - 无 (None)：不追加任何字节（仪器靠硬件 EOI 信号识别结束）"),
+            QString::fromUtf8("        - LF (\\n)：追加换行符 0x0A，适合大多数 SCPI 仪器（推荐）"),
+            QString::fromUtf8("        - CR (\\r)：追加回车符 0x0D"),
+            QString::fromUtf8("        - CRLF (\\r\\n)：追加回车+换行双字符"),
+            QString::fromUtf8("    如果仪器发送命令后无响应，请尝试将后缀切换为 LF (\\n)。"),
             QString::fromUtf8("    结束字符默认为换行符 \\n，启用后 viRead 会在收到换行符时终止读取。"),
             QString::fromUtf8("    可选勾选「发送时附加 EOI 信号」，大多数 GPIB 仪器需要此信号标识命令结束。"),
             QString::fromUtf8("    可选勾选「以HEX格式发送」切换十六进制模式。"),
@@ -317,7 +323,14 @@ void MainPage::createHelpPage() {
             QString(),
             QString::fromUtf8("Q: Nagle 算法是什么？是否需要禁用？"),
             QString::fromUtf8("A: Nagle 算法会合并小数据包以提升网络效率。对于 SCPI 指令这种小包高频场景，"),
-            QString::fromUtf8("   建议禁用（勾选该选项）以避免延迟。")
+            QString::fromUtf8("   建议禁用（勾选该选项）以避免延迟。"),
+            QString(),
+            QString::fromUtf8("Q: GPIB 发送命令后仪器不响应？"),
+            QString::fromUtf8("A: 首先检查 GPIB 连接状态 LED 是否为绿色。若连接正常但仍无响应："),
+            QString::fromUtf8("   ① 在 GPIB 设置页中尝试切换「发送后缀」为 LF (\\n)；"),
+            QString::fromUtf8("   ② 检查 Excel 命令列中是否有多余的 \\n 字符（软件会自动处理但建议清理）；"),
+            QString::fromUtf8("   ③ 适当增大超时时间（如 5000ms），部分老旧仪器响应较慢；"),
+            QString::fromUtf8("   ④ 确认仪器支持的命令格式无误（可先用 NI-MAX 手动测试）。")
         }));
 
     scrollArea->setWidget(scrollContent);
@@ -343,7 +356,7 @@ void MainPage::createAboutPage() {
     lay->addWidget(title);
 
     // ──── 版本 ────
-    ElaText *version = new ElaText(QString::fromUtf8("版本: v3.4.5"));
+    ElaText *version = new ElaText(QString::fromUtf8("版本: v3.4.6"));
     version->setTextPixelSize(18);
     version->setTextStyle(ElaTextType::Subtitle);
     lay->addWidget(version);
@@ -380,7 +393,7 @@ void MainPage::createAboutPage() {
         infoLayout->addLayout(row);
     };
 
-    addInfo(QString::fromUtf8("软件版本："), "v3.4.5");
+    addInfo(QString::fromUtf8("软件版本："), "v3.4.6");
     addInfo(QString::fromUtf8("发布日期："), QString::fromUtf8("2026 年 7 月"));
     addInfo(QString::fromUtf8("开发者："),   "Cossiant");
     addInfo(QString::fromUtf8("开发环境："), "Qt 5.15 + MinGW");
@@ -407,7 +420,7 @@ void MainPage::createAboutPage() {
         QString::fromUtf8("\u2022  实时收发日志，带毫秒级时间戳"),
         QString::fromUtf8("\u2022  错误统计卡片 + 6列详细错误列表"),
         QString::fromUtf8("\u2022  Nagle 算法可选禁用（网口低延迟模式）"),
-        QString::fromUtf8("\u2022  GPIB 仪器地址配置 + EOI / 结束字符控制"),
+        QString::fromUtf8("\u2022  GPIB 仪器地址配置 + 发送后缀(CR/LF/CRLF) + EOI / 结束字符控制"),
         QString::fromUtf8("\u2022  命令间隔精确延时控制（1ms 精度，EMA 补偿）"),
         QString::fromUtf8("\u2022  多线程架构，收发与 UI 完全分离")
     };

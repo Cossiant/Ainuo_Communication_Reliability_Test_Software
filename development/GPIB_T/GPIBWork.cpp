@@ -73,6 +73,51 @@ void GPIBWork::setHexDisplayMode(bool hexMode)
     m_hexDisplay = hexMode;
 }
 
+void GPIBWork::setSuffixMode(int mode)
+{
+    m_suffixMode = static_cast<GPIBSuffix>(mode);
+    qDebug() << "GPIBWork: 后缀模式 =" << mode
+             << (mode == 0 ? "None" : mode == 1 ? "CR" : mode == 2 ? "LF" : "CRLF");
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  构建发送数据：unescape → 去尾 → 加后缀
+// ═══════════════════════════════════════════════════════════════
+QByteArray GPIBWork::buildSendData(const QString &text, bool hexMode) const
+{
+    if (hexMode) {
+        QString hex = text;
+        hex.remove(' ');
+        return QByteArray::fromHex(hex.toLatin1());
+    }
+
+    // ★ Step 1: 将用户输入的 \r \n 转义还原为真实控制字符
+    QString unescaped = text;
+    unescaped.replace(QLatin1String("\\r"), QLatin1String("\r"));
+    unescaped.replace(QLatin1String("\\n"), QLatin1String("\n"));
+
+    QByteArray data = unescaped.toUtf8();
+
+    // ★ Step 2: 去掉末尾已有的 \r \n（避免与后缀重复）
+    while (!data.isEmpty()) {
+        char last = data.at(data.size() - 1);
+        if (last == '\r' || last == '\n')
+            data.chop(1);
+        else
+            break;
+    }
+
+    // ★ Step 3: 追加用户选择的后缀
+    switch (m_suffixMode) {
+        case GPIBSuffix::CR:   data.append('\r');          break;
+        case GPIBSuffix::LF:   data.append('\n');          break;
+        case GPIBSuffix::CRLF: data.append("\r\n");        break;
+        case GPIBSuffix::None:                             break;
+    }
+
+    return data;
+}
+
 // ═══════════════════════════════════════════════════════════════
 //  打开 GPIB 设备
 // ═══════════════════════════════════════════════════════════════
@@ -180,19 +225,12 @@ void GPIBWork::sendString(const QString &text, bool hexMode)
     if (!isOpen() || text.isEmpty())
         return;
 
-    QByteArray data;
-    if (hexMode) {
-        QString hex = text;
-        hex.remove(' ');
-        data = QByteArray::fromHex(hex.toLatin1());
-    } else {
-        data = text.toUtf8();
-    }
+    QByteArray data = buildSendData(text, hexMode);   // 使用统一构建方法
 
     if (!doVISAWrite(data))
         return;
 
-    // ★ GPIB 必须显式 viRead 才能获取仪器响应（与串口/网口的异步 readyRead 不同）
+    // ★ GPIB 必须显式 viRead 才能获取仪器响应
     QByteArray response = doVISARead(m_timeoutMs);
     if (!response.isEmpty()) {
         emitData(response);
@@ -214,14 +252,7 @@ void GPIBWork::sendStringWithDelay(const QString &text, bool hexMode,
     m_expectedResponse = expectedResponse;
 
     // ── 构建数据 ──
-    QByteArray data;
-    if (hexMode) {
-        QString hex = text;
-        hex.remove(' ');
-        data = QByteArray::fromHex(hex.toLatin1());
-    } else {
-        data = text.toUtf8();
-    }
+    QByteArray data = buildSendData(text, hexMode);
 
     // ── 步骤1: viWrite 发送命令 ──
     // ★ 在 viRead 之前启动计时，让延时包含 viRead 的阻塞时间

@@ -1,6 +1,6 @@
 # Ainuo 通用通讯可靠性测试软件
 
-[![Version](https://img.shields.io/badge/version-v3.4.5-blue)](https://github.com)
+[![Version](https://img.shields.io/badge/version-v3.4.6-blue)](https://github.com)
 [![Qt](https://img.shields.io/badge/Qt-5.15-green)](https://www.qt.io/)
 [![License](https://img.shields.io/badge/license-MIT-orange)](LICENSE)
 
@@ -18,7 +18,7 @@
 |------|------|
 | 🔌 **串口通讯** | RS-232 / RS-485，波特率/数据位/停止位/校验位可配置，支持 HEX/ASCII 模式 |
 | 🌐 **网口通讯** | TCP 客户端，支持 Nagle 算法禁用（低延迟），3 秒连接超时保护 |
-| 🔬 **GPIB 通讯** | 基于 NI-VISA，支持板卡号/主副地址配置、EOI 信号、结束字符控制、连接超时保护 |
+| 🔬 **GPIB 通讯** | 基于 NI-VISA，支持板卡号/主副地址配置、发送后缀(无/CR/LF/CRLF)、EOI 信号、结束字符控制、连接超时保护 |
 | 🚗 **CAN 通讯** | 预留接口，后续版本完善 |
 | 📊 **Excel 批量发送** | 读取 .xlsx 命令表，自动逐条发送、校验响应、标记超时/内容错误 |
 | 📝 **单条命令调试** | 独立发送页，实时查看收发日志（毫秒级时间戳） |
@@ -134,7 +134,7 @@ cmake --build . --target untitled -j 14
 
 - **串口:** 设置 → 选择端口号 / 波特率 → 打开串口
 - **网口:** 设置 → 输入 IP / 端口 → 连接网络
-- **GPIB:** 设置 → 输入板卡号 / 仪器地址 → 打开 GPIB
+- **GPIB:** 设置 → 输入板卡号 / 仪器地址 → 选择发送后缀 → 打开 GPIB
 
 > 连接成功后对应 LED 指示灯变为**绿色**。
 
@@ -160,6 +160,19 @@ cmake --build . --target untitled -j 14
 ### 4. 读取返回值模式
 
 点击 **「读取返回值」**，软件仅发送一轮命令，并将仪器的实际返回值自动填入 Excel B 列（用于快速建立期望值模板）。
+
+### 5. GPIB 发送后缀说明
+
+GPIB 设置页中新增「发送后缀」下拉框，支持以下选项：
+
+| 后缀选项 | 实际追加字节 | 适用场景 |
+|---------|-------------|---------|
+| 无 (None) | 不追加任何字节 | 仪器仅靠 EOI 硬件信号识别命令结束 |
+| CR (`\r`) | 0x0D | 少数仪器使用回车符作为命令终止符 |
+| LF (`\n`) | 0x0A | **大多数 SCPI 仪器**使用换行符终止命令 |
+| CRLF (`\r\n`) | 0x0D 0x0A | 部分仪器要求回车+换行双字符终止 |
+
+> **注意：** 如果 Excel 命令列中已包含 `\n`，软件会自动去除末尾的 `\r`/`\n` 后再追加所选后缀，避免重复。建议 Excel 中不写 `\n`，统一通过后缀选项控制。
 
 ---
 
@@ -199,7 +212,15 @@ cmake --build . --target untitled -j 14
 | **NI-VISA** | GPIB / 仪器控制驱动 | [NI 官网](https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html) |
 
 ---
+
 ## 📝 更新日志
+
+### V3.4.6 (2026-07)
+
+- ✨ GPIB 设置页新增「发送后缀」选择（无/CR/LF/CRLF），解决部分仪器必须收到换行符才响应的问题
+- ✨ 发送数据自动 unescape：输入框和 Excel 命令列中的 `\r` `\n` 字面量自动转换为真实控制字符
+- ✨ 智能去重：发送前自动去除命令末尾已有的 `\r` `\n`，再追加所选后缀，避免重复终止符
+- 🐛 修复 GPIB 命令中 `\n` 作为字面量字符发送而非换行符的 Bug（导致部分仪器不响应查询命令）
 
 ### V3.4.5 (2026-07)
 
@@ -225,6 +246,7 @@ cmake --build . --target untitled -j 14
 
 
 ---
+
 ## 📄 许可证
 
 MIT License. 详见 [LICENSE](LICENSE) 文件。
@@ -244,3 +266,5 @@ MIT License. 详见 [LICENSE](LICENSE) 文件。
   <sub>Made with ❤️ for instrument automation testing</sub>
 </p>
 ```
+
+---
