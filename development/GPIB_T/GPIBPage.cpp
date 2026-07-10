@@ -124,6 +124,14 @@ GPIBPage::GPIBPage(ElaWindow *mainWindow, QObject *parent)
                                   Q_ARG(bool, checked));
     });
 
+    //后缀选择变更 → 同步到工作线程
+    connect(m_suffixComboBox, QOverload<int>::of(&ElaComboBox::currentIndexChanged),
+            this, [this](int index) {
+        QMetaObject::invokeMethod(m_gpibWork, "setSuffixMode",
+                                  Qt::QueuedConnection,
+                                  Q_ARG(int, index));
+    });
+
     // ═══════════════════════════════════════════════════════════
     //  连接 GPIBWork 信号 → UI 更新
     // ═══════════════════════════════════════════════════════════
@@ -404,10 +412,20 @@ void GPIBPage::createSettingsPage() {
     grid->addWidget(m_termCharEnabledCheckBox, 3, 0, 1, 2);
     grid->addWidget(m_sendEndEnabledCheckBox,  3, 2, 1, 2);
 
-    // ──── 第 4 行：HEX 发送勾选框 ────
+    // ──── 第 4 行：HEX 发送勾选框、发送后缀选择  ────
     m_gpibHexSendCheckBox = new ElaCheckBox("以HEX格式发送（AN3.0）");
     m_gpibHexSendCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
     grid->addWidget(m_gpibHexSendCheckBox, 4, 0, 1, 2);
+
+    ElaText* suffixLabel = new ElaText("发送后缀:");
+    suffixLabel->setTextPixelSize(15);
+    m_suffixComboBox = new ElaComboBox();
+    m_suffixComboBox->addItems({"无 (None)", "CR (\\r)", "LF (\\n)", "CRLF (\\r\\n)"});
+    m_suffixComboBox->setCurrentIndex(0);  // 默认无后缀
+
+    grid->addWidget(suffixLabel,       4, 2);
+    grid->addWidget(m_suffixComboBox,  4, 3);
+
 
     // ──── ★ 第 5 行：去除 \r\n 勾选框 ────
     m_gpibStripCRLFCheckBox = new ElaCheckBox("比对时去除返回值中的 \\r\\n");

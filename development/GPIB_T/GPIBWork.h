@@ -16,6 +16,14 @@
 typedef unsigned long ViSession;
 typedef long          ViStatus;
 
+// 发送后缀模式
+enum class GPIBSuffix {
+    None = 0,
+    CR   = 1,   // 追加 \r
+    LF   = 2,   // 追加 \n
+    CRLF = 3    // 追加 \r\n
+};
+
 class GPIBWork : public QObject
 {
     Q_OBJECT
@@ -54,6 +62,8 @@ public slots:
     void resetRecvCount();
     void setExpectedResponse(const QByteArray &expected);
     void setHexDisplayMode(bool hexMode);
+
+    void setSuffixMode(int mode);   // 设置发送后缀模式
 
 signals:
     void gpibOpened();
@@ -98,6 +108,9 @@ private:
     QByteArray m_expectedResponse;
     bool       m_hexDisplay = false;
 
+    GPIBSuffix m_suffixMode = GPIBSuffix::None;   // 发送后缀
+    QByteArray buildSendData(const QString &text, bool hexMode) const;  // 构建发送数据
+
     QAtomicInt m_opened{0};
 
     // ═══════════════════════════════════════════════
@@ -108,6 +121,7 @@ private:
     int           m_targetDelayMs         = 0;         // 本次补偿后目标（ms）
     int           m_originalDelayMs       = 0;         // 本次原始请求（ms，日志用）
     int           m_timingCompensationMs  = 0;         // EMA 累积补偿（ms）
+
 };
 
 #endif // UNTITLED_GPIBWORK_H
