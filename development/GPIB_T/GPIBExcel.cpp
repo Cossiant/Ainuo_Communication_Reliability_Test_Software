@@ -164,15 +164,23 @@ void GPIBExcel::onTrySendNext()
 
     bool hexMode = m_page->m_gpibHexSendCheckBox->isChecked();
 
-    // ★ 空字符串 或 "(超时)" 都不校验
-    if (expectedStr.isEmpty()){
+    // ★ 解析期望值
+    if (expectedStr.isEmpty()) {
         m_expectData = QByteArray();
     } else {
-        m_expectData = hexMode ? QByteArray::fromHex(expectedStr.toLatin1())
-                               : expectedStr.toUtf8();
+        // ★ 将 Excel 中显示的转义字符 \r \n 还原为真实字节
+        //    这样用户手动输入 "ANRGL030A-350\r\n" 或捕获模式自动填入的
+        //    "ANRGL030A-350\r\n" 都能正确还原为仪器的原始返回值
+        QString unescaped = expectedStr;
+        unescaped.replace(QLatin1String("\\r"), QLatin1String("\r"));
+        unescaped.replace(QLatin1String("\\n"), QLatin1String("\n"));
+
+        m_expectData = hexMode ? QByteArray::fromHex(unescaped.toLatin1())
+                               : unescaped.toUtf8();
     }
     m_lastCmd = cmdText;
 
+    // ★ checkbox 勾选时：去除 \r\n（比对时也同步去除）
     if (!hexMode && m_page->m_gpibStripCRLFCheckBox->isChecked()) {
         m_expectData.replace("\r", "");
         m_expectData.replace("\n", "");
@@ -209,6 +217,7 @@ void GPIBExcel::onResponseReceived(QByteArray data)
         fillCaptureResult(data);
     }
 
+    // ★ 比对逻辑：checkbox 控制是否去除 \r\n
     QByteArray cmpData = data;
     bool hexMode = m_page->m_gpibHexSendCheckBox->isChecked();
     if (!hexMode && m_page->m_gpibStripCRLFCheckBox->isChecked()) {
@@ -276,6 +285,10 @@ void GPIBExcel::fillCaptureResult(const QByteArray &data)
         if (displayText.isEmpty())
             displayText = data.toHex(' ').toUpper();
     }
+
+    // ★ 将控制字符转义为可见字符串，避免在表格中被解释为换行
+    displayText.replace(QLatin1Char('\r'), QLatin1String("\\r"));
+    displayText.replace(QLatin1Char('\n'), QLatin1String("\\n"));
 
     QTableWidgetItem* item = table->item(row, 1);
     if (!item) {

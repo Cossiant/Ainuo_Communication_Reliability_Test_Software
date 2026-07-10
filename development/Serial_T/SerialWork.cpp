@@ -225,7 +225,7 @@ void SerialWork::sendStringWithDelay(const QString &text, bool hexMode,
 
     // ★ 关键：等待数据刷新到串口驱动，消除发送侧的随机延迟
     if (m_serialPort->isOpen()) {
-        m_serialPort->waitForBytesWritten(10);  // 最多等10ms
+        m_serialPort->waitForBytesWritten(1);
     }
 
     QString timeStr = QDateTime::currentDateTime().toString("HH:mm:ss.zzz");
@@ -391,9 +391,14 @@ QString SerialWork::formatByteArray(const QByteArray &data) const
         return data.toHex(' ').toUpper();
     } else {
         QString text = QString::fromUtf8(data);
-        if (!text.isEmpty())
+        if (!text.isEmpty()) {
+            // ★ 将控制字符转义为可见字符串
+            text.replace(QLatin1Char('\r'), QLatin1String("\\r"));
+            text.replace(QLatin1Char('\n'), QLatin1String("\\n"));
             return text;
-        else
+        } else {
             return data.toHex(' ').toUpper();
+        }
     }
 }
+

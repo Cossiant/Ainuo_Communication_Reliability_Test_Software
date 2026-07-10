@@ -1,6 +1,6 @@
 # Ainuo 通用通讯可靠性测试软件
 
-[![Version](https://img.shields.io/badge/version-v3.4.4-blue)](https://github.com)
+[![Version](https://img.shields.io/badge/version-v3.4.5-blue)](https://github.com)
 [![Qt](https://img.shields.io/badge/Qt-5.15-green)](https://www.qt.io/)
 [![License](https://img.shields.io/badge/license-MIT-orange)](LICENSE)
 
@@ -201,22 +201,28 @@ cmake --build . --target untitled -j 14
 ---
 ## 📝 更新日志
 
+### V3.4.5 (2026-07)
+
+- 🐛 修复 GPIB 精确延时偏差 10ms 的 Bug（计时起点从 viRead 之后移到 viRead 之前）
+- 🐛 修复串口/网口 `waitForBytesWritten(10)` 引入 10ms 额外延迟（改为 1ms）
+- ✨ 全模块日志/表格支持 `\r\n` 显示为可见字符 `\r\n`（不再被解释为换行）
+- ✨ 全模块捕获模式：`\r` `\n` 在 Excel B 列中存储为 `\\r` `\\n`，读取时自动还原为真实字节
+- ✨ 全模块 `bytesToDisplayText()` 控制字符转义（错误日志表格不再异常换行）
+- 🔧 串口延时 0ms 修复（`delayMs <= 0` → `delayMs < 0`）
+
 ### V3.4.4 (2026-07)
 
-- 🐛 修复 GPIB 单条发送无回传数据显示的 Bug（`sendString` 仅写不读，已补全 `doVISARead` + `emitData`）
-- 🐛 修复 GPIB 表格发送中设置命令（无返回值）导致 `doVISARead` 阻塞超时的 Bug（新增 `forceRead` 机制：B 列为空时跳过 `viRead`，延时 0ms 直接发下一条）
-- 🐛 修复串口表格发送延时 0ms 被强制覆盖为 100ms 的 Bug（`delayMs <= 0` → `delayMs < 0`）
-- 🔧 GPIB 表格发送中 B 列为 `(超时)` 不再触发校验（视为空期望）
-- ⚡ GPIB 设置命令间隔从 ~1.5s 降至 ~2ms（跳过无意义的 `viRead` 超时等待）
+- 🐛 修复 GPIB 单条发送无回传数据显示的 Bug
+- 🐛 修复 GPIB 表格发送中设置命令导致 `doVISARead` 阻塞超时的 Bug
+- 🐛 修复串口表格发送延时 0ms 被强制覆盖为 100ms 的 Bug
+- ⚡ GPIB 设置命令间隔从 ~1.5s 降至 ~2ms
 
 ### V3.4.1 (2026-07)
 
-- ✅ GPIB 模块完整实现：NI-VISA 驱动集成、仪器地址配置、EOI/结束字符控制
-- ✅ GPIB Excel 表格发送、读取返回值（捕获）功能
-- ✅ GPIB 发送日志与 6 列错误统计界面（对齐网口/串口标准）
-- ✅ 帮助文档新增 GPIB 完整使用说明
-- ✅ 精确延时 EMA 误差补偿算法（跨串口/网口/GPIB 统一）
-- ✅ 界面优化：GroupBox 分组布局、卡片样式、占位行提示
+- ✅ GPIB 模块完整实现
+- ✅ 精确延时 EMA 误差补偿算法
+- ✅ 界面优化：GroupBox 分组布局、卡片样式
+
 
 ---
 ## 📄 许可证

@@ -820,15 +820,18 @@ void SerialPage::createErrorLogPage()
 static QString bytesToDisplayText(const QByteArray &data, bool isHexMode)
 {
     if (data.isEmpty())
-        return QString("—");
+        return QString::fromUtf8("—");
     if (isHexMode) {
         return data.toHex(' ').toUpper();
     } else {
         QString text = QString::fromUtf8(data);
-        if (!text.isEmpty())
+        if (!text.isEmpty()) {
+            text.replace(QLatin1Char('\r'), QLatin1String("\\r"));
+            text.replace(QLatin1Char('\n'), QLatin1String("\\n"));
             return text;
-        else
-            return data.toHex(' ').toUpper();   // 不可显示字符降级
+        } else {
+            return data.toHex(' ').toUpper();
+        }
     }
 }
 
