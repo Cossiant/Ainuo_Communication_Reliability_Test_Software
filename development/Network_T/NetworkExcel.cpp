@@ -157,11 +157,16 @@ void NetworkExcel::onTrySendNext()
         onTrySendNext();
         return;
     }
-
     bool hexMode = m_page->m_networkHexSendCheckBox->isChecked();
-    m_expectData = expectedStr.isEmpty() ? QByteArray()
-                   : hexMode ? QByteArray::fromHex(expectedStr.toLatin1())
-                             : expectedStr.toUtf8();
+    if (expectedStr.isEmpty()) {
+        m_expectData = QByteArray();
+    } else {
+        QString unescaped = expectedStr;
+        unescaped.replace(QLatin1String("\\r"), QLatin1String("\r"));
+        unescaped.replace(QLatin1String("\\n"), QLatin1String("\n"));
+        m_expectData = hexMode ? QByteArray::fromHex(unescaped.toLatin1())
+                               : unescaped.toUtf8();
+    }
     m_lastCmd = cmdText;
 
     if (!hexMode && m_page->m_networkStripCRLFCheckBox->isChecked()) {
@@ -271,6 +276,9 @@ void NetworkExcel::fillCaptureResult(const QByteArray &data)
         item = new QTableWidgetItem();
         table->setItem(row, 1, item);
     }
+    displayText.replace(QLatin1Char('\r'), QLatin1String("\\r"));
+    displayText.replace(QLatin1Char('\n'), QLatin1String("\\n"));
+
     item->setText(displayText);
 
     qDebug() << "NetworkExcel: 捕获模式 — 第" << (row + 1) << "行返回值已填入:" << displayText;

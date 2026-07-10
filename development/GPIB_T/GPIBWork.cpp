@@ -173,7 +173,7 @@ void GPIBWork::closeGPIBPort()
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  发送字符串（只写，不读）
+//  发送字符串（单条发送用，写后读取）
 // ═══════════════════════════════════════════════════════════════
 void GPIBWork::sendString(const QString &text, bool hexMode)
 {
@@ -189,15 +189,24 @@ void GPIBWork::sendString(const QString &text, bool hexMode)
         data = text.toUtf8();
     }
 
-    doVISAWrite(data);
+    if (!doVISAWrite(data))
+        return;
+
+    // ★ GPIB 必须显式 viRead 才能获取仪器响应（与串口/网口的异步 readyRead 不同）
+    QByteArray response = doVISARead(m_timeoutMs);
+    if (!response.isEmpty()) {
+        emitData(response);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  ★★★ 核心：发送 + VISA读取 + 1ms轮询精确延时 ★★★
+//  ★★★ 核心：发送 + 条件读取 + 1ms轮询精确延时 ★★★
+//  forceRead: 捕获模式强制读取；否则仅在期望非空时读取
 // ═══════════════════════════════════════════════════════════════
 void GPIBWork::sendStringWithDelay(const QString &text, bool hexMode,
                                     const QByteArray &expectedResponse,
-                                    int delayMs)
+                                    int delayMs,
+                                    bool forceRead)
 {
     if (!isOpen() || text.isEmpty() || !m_instrument)
         return;
@@ -215,6 +224,14 @@ void GPIBWork::sendStringWithDelay(const QString &text, bool hexMode,
     }
 
     // ── 步骤1: viWrite 发送命令 ──
+    // ★ 在 viRead 之前启动计时，让延时包含 viRead 的阻塞时间
+    //   这样 TX→TX 间隔 = max(viRead, delayMs)，而不是 viRead + delayMs
+    if (delayMs > 0) {
+        m_originalDelayMs = delayMs;
+        m_preciseDelayTimer.start();
+    }
+
+    // ── 步骤1: viWrite 发送命令 ──
     if (!doVISAWrite(data)) {
         // 发送失败但照样启动延时（保持与 Serial/Network 行为一致）
         if (delayMs > 0) {
@@ -227,8 +244,6 @@ void GPIBWork::sendStringWithDelay(const QString &text, bool hexMode,
                                              MAX_COMPENSATION);
 
             m_targetDelayMs   = compensatedMs;
-            m_originalDelayMs = delayMs;
-            m_preciseDelayTimer.start();
             m_interCmdTimer->start();
         } else {
             emit interCmdDelayFinished();
@@ -237,36 +252,53 @@ void GPIBWork::sendStringWithDelay(const QString &text, bool hexMode,
     }
 
     // ── 步骤2: viRead 读取响应 ──
-    // GPIB 的响应通常在 viWrite 之后立即可用
-    // 使用用户配置的超时时间等待响应
-    QByteArray response = doVISARead(m_timeoutMs);
-    if (!response.isEmpty()) {
-        emitData(response);
+    // ★ 关键优化：
+    //    forceRead=true（捕获模式）→ 总是读取仪器响应
+    //    forceRead=false 且期望非空 → 读取响应用于校验
+    //    forceRead=false 且期望为空 → 跳过 viRead（设置命令无需等待）
+    bool shouldRead = forceRead || !m_expectedResponse.isEmpty();
+
+    if (shouldRead) {
+        QByteArray response = doVISARead(m_timeoutMs);
+        if (!response.isEmpty()) {
+            emitData(response);
+        }
+    } else {
+        // ★ 无期望响应也不强制读取 → 发出空响应信号让流程继续
+        emit responseReceived(QByteArray());
     }
 
     // ═══════════════════════════════════════════════════════════
-    //  步骤3: 精确延时（1ms轮询 + 微秒忙等 + EMA补偿）
+    //  步骤3: 精确延时（计时起点在 viRead 之前）
     // ═══════════════════════════════════════════════════════════
     if (delayMs > 0) {
-        // 第1步：EMA补偿
-        int compensatedMs = delayMs + m_timingCompensationMs;
-        if (compensatedMs < 0) compensatedMs = 0;
+        qint64 alreadyElapsed = m_preciseDelayTimer.elapsed();
 
-        // 钳位补偿范围 ±100ms，防止单次异常抖动
-        const int MAX_COMPENSATION = 100;
-        m_timingCompensationMs = qBound(-MAX_COMPENSATION,
-                                         m_timingCompensationMs,
-                                         MAX_COMPENSATION);
+        if (alreadyElapsed >= delayMs) {
+            // viRead 已经消耗了所有延时，立即通知主线程
+            emit interCmdDelayFinished();
+        } else {
+            // 计算剩余需要等待的时间
+            int remainingMs = static_cast<int>(delayMs - alreadyElapsed);
 
-        // 第2步：启动1ms轮询 + 记录起始时间
-        m_targetDelayMs   = compensatedMs;
-        m_originalDelayMs = delayMs;
-        m_preciseDelayTimer.start();
-        m_interCmdTimer->start();  // 每1ms触发 onInterCmdDelay()
+            // EMA 补偿
+            int compensatedMs = remainingMs + m_timingCompensationMs;
+            if (compensatedMs < 0) compensatedMs = 0;
+
+            const int MAX_COMPENSATION = 100;
+            m_timingCompensationMs = qBound(-MAX_COMPENSATION,
+                                             m_timingCompensationMs,
+                                             MAX_COMPENSATION);
+
+            // m_targetDelayMs = 从计时起点算起的绝对目标时间
+            m_targetDelayMs = static_cast<int>(alreadyElapsed + compensatedMs);
+            m_interCmdTimer->start();  // 每1ms触发 onInterCmdDelay()
+        }
     } else {
         emit interCmdDelayFinished();
     }
 }
+
 
 // ═══════════════════════════════════════════════════════════════
 //  1ms 轮询回调：检测是否到期 → 微秒忙等 → 误差补偿 → 发射信号
@@ -477,9 +509,13 @@ QString GPIBWork::formatByteArray(const QByteArray &data) const
         return data.toHex(' ').toUpper();
     } else {
         QString text = QString::fromUtf8(data);
-        if (!text.isEmpty())
+        if (!text.isEmpty()) {
+            // ★ 将控制字符转义为可见字符串，避免被 QListWidget 解释为换行
+            text.replace(QLatin1Char('\r'), QLatin1String("\\r"));
+            text.replace(QLatin1Char('\n'), QLatin1String("\\n"));
             return text;
-        else
+        } else {
             return data.toHex(' ').toUpper();
+        }
     }
 }

@@ -45,10 +45,11 @@ public slots:
     void sendString(const QString &text, bool hexMode);
 
     // ★ 发送命令 + 在工作线程启动精确延时（1ms轮询+忙等+EMA补偿）
-    // 对于 GPIB：先 viWrite，再 viRead 读取响应，然后精确延时
+    // forceRead: true=必须viRead（捕获模式），false=仅在expectedResponse非空时读取
     void sendStringWithDelay(const QString &text, bool hexMode,
                              const QByteArray &expectedResponse,
-                             int delayMs);
+                             int delayMs,
+                             bool forceRead);
 
     void resetRecvCount();
     void setExpectedResponse(const QByteArray &expected);

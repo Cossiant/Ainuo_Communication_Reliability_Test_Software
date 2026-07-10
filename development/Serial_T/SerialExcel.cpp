@@ -149,7 +149,7 @@ void SerialExcel::onTrySendNext()
     QString cmdText     = cmdItem    ? cmdItem->text().trimmed()    : "";
     QString expectedStr = expectItem ? expectItem->text().trimmed() : "";
     int delayMs         = delayItem  ? delayItem->text().toInt()    : 100;
-    if (delayMs <= 0) delayMs = 100;
+    if (delayMs < 0) delayMs = 100;
 
     int globalTimeout = m_page->m_excelTimeoutMs->text().toInt();
     if (globalTimeout <= 0) globalTimeout = 500;
@@ -168,9 +168,16 @@ void SerialExcel::onTrySendNext()
 
     // 解析期望值
     bool hexMode = m_page->m_serialHexSendCheckBox->isChecked();
-    m_expectData = expectedStr.isEmpty() ? QByteArray()
-                   : hexMode ? QByteArray::fromHex(expectedStr.toLatin1())
-                             : expectedStr.toUtf8();
+    if (expectedStr.isEmpty()) {
+        m_expectData = QByteArray();
+    } else {
+        // ★ 将 Excel 中显示的转义字符 \r \n 还原为真实字节
+        QString unescaped = expectedStr;
+        unescaped.replace(QLatin1String("\\r"), QLatin1String("\r"));
+        unescaped.replace(QLatin1String("\\n"), QLatin1String("\n"));
+        m_expectData = hexMode ? QByteArray::fromHex(unescaped.toLatin1())
+                               : unescaped.toUtf8();
+    }
     m_lastCmd = cmdText;
 
     // ★ 去除 \r\n：非 HEX 模式下，勾选后去除期望值中的 \r\n
@@ -294,6 +301,10 @@ void SerialExcel::fillCaptureResult(const QByteArray &data)
         item = new QTableWidgetItem();
         table->setItem(row, 1, item);
     }
+    // ★ 将控制字符转义为可见字符串
+    displayText.replace(QLatin1Char('\r'), QLatin1String("\\r"));
+    displayText.replace(QLatin1Char('\n'), QLatin1String("\\n"));
+
     item->setText(displayText);
 
     qDebug() << "SerialExcel: 捕获模式 — 第" << (row + 1) << "行返回值已填入:" << displayText;

@@ -246,7 +246,7 @@ void NetworkWork::sendStringWithDelay(const QString &text, bool hexMode,
 
     // ★ 关键：等待数据刷新到 TCP 栈，消除发送侧的随机延迟
     if (m_tcpSocket->state() == QAbstractSocket::ConnectedState) {
-        m_tcpSocket->waitForBytesWritten(10);  // 最多等10ms
+        m_tcpSocket->waitForBytesWritten(1);  // 最多等1ms
     }
 
     QString timeStr = QDateTime::currentDateTime().toString("HH:mm:ss.zzz");
@@ -424,9 +424,12 @@ QString NetworkWork::formatByteArray(const QByteArray &data) const
         return data.toHex(' ').toUpper();
     } else {
         QString text = QString::fromUtf8(data);
-        if (!text.isEmpty())
+        if (!text.isEmpty()) {
+            text.replace(QLatin1Char('\r'), QLatin1String("\\r"));
+            text.replace(QLatin1Char('\n'), QLatin1String("\\n"));
             return text;
-        else
+        } else {
             return data.toHex(' ').toUpper();
+        }
     }
 }

@@ -163,22 +163,37 @@ void GPIBExcel::onTrySendNext()
     }
 
     bool hexMode = m_page->m_gpibHexSendCheckBox->isChecked();
-    m_expectData = expectedStr.isEmpty() ? QByteArray()
-                   : hexMode ? QByteArray::fromHex(expectedStr.toLatin1())
-                             : expectedStr.toUtf8();
+
+    // ★ 解析期望值
+    if (expectedStr.isEmpty()) {
+        m_expectData = QByteArray();
+    } else {
+        // ★ 将 Excel 中显示的转义字符 \r \n 还原为真实字节
+        //    这样用户手动输入 "ANRGL030A-350\r\n" 或捕获模式自动填入的
+        //    "ANRGL030A-350\r\n" 都能正确还原为仪器的原始返回值
+        QString unescaped = expectedStr;
+        unescaped.replace(QLatin1String("\\r"), QLatin1String("\r"));
+        unescaped.replace(QLatin1String("\\n"), QLatin1String("\n"));
+
+        m_expectData = hexMode ? QByteArray::fromHex(unescaped.toLatin1())
+                               : unescaped.toUtf8();
+    }
     m_lastCmd = cmdText;
 
+    // ★ checkbox 勾选时：去除 \r\n（比对时也同步去除）
     if (!hexMode && m_page->m_gpibStripCRLFCheckBox->isChecked()) {
         m_expectData.replace("\r", "");
         m_expectData.replace("\n", "");
     }
 
+    // ★ 传递 forceRead：捕获模式必须读取，普通模式仅在期望非空时读取
     QMetaObject::invokeMethod(m_work, "sendStringWithDelay",
                               Qt::QueuedConnection,
                               Q_ARG(QString, cmdText),
                               Q_ARG(bool, hexMode),
                               Q_ARG(QByteArray, m_expectData),
-                              Q_ARG(int, delayMs));
+                              Q_ARG(int, delayMs),
+                              Q_ARG(bool, m_isCaptureMode));
 
     m_totalSent++;
     m_page->m_logSentCountCard->setValue(QString::number(m_totalSent));
@@ -202,6 +217,7 @@ void GPIBExcel::onResponseReceived(QByteArray data)
         fillCaptureResult(data);
     }
 
+    // ★ 比对逻辑：checkbox 控制是否去除 \r\n
     QByteArray cmpData = data;
     bool hexMode = m_page->m_gpibHexSendCheckBox->isChecked();
     if (!hexMode && m_page->m_gpibStripCRLFCheckBox->isChecked()) {
@@ -270,6 +286,10 @@ void GPIBExcel::fillCaptureResult(const QByteArray &data)
             displayText = data.toHex(' ').toUpper();
     }
 
+    // ★ 将控制字符转义为可见字符串，避免在表格中被解释为换行
+    displayText.replace(QLatin1Char('\r'), QLatin1String("\\r"));
+    displayText.replace(QLatin1Char('\n'), QLatin1String("\\n"));
+
     QTableWidgetItem* item = table->item(row, 1);
     if (!item) {
         item = new QTableWidgetItem();
@@ -293,7 +313,7 @@ void GPIBExcel::fillCaptureTimeout()
         table->setItem(row, 1, item);
     }
     if (item->text().isEmpty()) {
-        item->setText("(超时)");
+        item->setText(QString::fromUtf8("(超时)"));
     }
 
     qDebug() << "GPIBExcel: 捕获模式 — 第" << (row + 1) << "行超时";
@@ -429,9 +449,9 @@ bool GPIBExcel::generateExcelTemplate(const QString &filePath)
     delayFormat.setVerticalAlignment(QXlsx::Format::AlignVCenter);
     delayFormat.setBorderStyle(QXlsx::Format::BorderThin);
 
-    xlsx.write(1, 1, "发送的命令",          headerFormat);
-    xlsx.write(1, 2, "正确的返回值",        headerFormat);
-    xlsx.write(1, 3, "到下一条命令的时间ms", headerFormat);
+    xlsx.write(1, 1, QString::fromUtf8("发送的命令"),          headerFormat);
+    xlsx.write(1, 2, QString::fromUtf8("正确的返回值"),        headerFormat);
+    xlsx.write(1, 3, QString::fromUtf8("到下一条命令的时间ms"), headerFormat);
 
     struct Sample { QString command; int delayMs; };
     QList<Sample> samples = {
