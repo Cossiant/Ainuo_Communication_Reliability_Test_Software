@@ -188,7 +188,14 @@ void NetworkExcel::onTrySendNext()
     m_gotReply   = false;
     m_minDelayOk = false;
 
-    m_timeoutTimer->start(globalTimeout);
+    // ★ 设置命令（预期回复为空且非捕获模式）：
+    //    设备不会回复，直接标记 m_gotReply=true，
+    //    等延时到期后立即发下一条，不做判断
+    if (m_expectData.isEmpty() && !m_isCaptureMode) {
+        m_gotReply = true;
+    } else {
+        m_timeoutTimer->start(globalTimeout);
+    }
 }
 
 // ═══════════════════════════════════════════════ 收到回复 ═══
@@ -223,6 +230,8 @@ void NetworkExcel::onInterCmdDelayFinished()
     if (!m_waiting) return;
 
     m_minDelayOk = true;
+    // ★ 设置命令时 m_gotReply 已在 onTrySendNext 中预设为 true，
+    //    延时到期后立即进入下一条
     if (m_gotReply) finalizeAndNext();
 }
 

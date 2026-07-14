@@ -1,6 +1,6 @@
 # Ainuo 通用通讯可靠性测试软件
 
-[![Version](https://img.shields.io/badge/version-v3.4.6-blue)](https://github.com)
+[![Version](https://img.shields.io/badge/version-v3.4.7-blue)](https://github.com)
 [![Qt](https://img.shields.io/badge/Qt-5.15-green)](https://www.qt.io/)
 [![License](https://img.shields.io/badge/license-MIT-orange)](LICENSE)
 
@@ -157,6 +157,8 @@ cmake --build . --target untitled -j 14
 5. 点击 **「开始发送」** 启动批量测试
 6. 在 **「发送日志」** 和 **「错误统计」** 页面实时监控
 
+> 💡 **设置命令（无回复）:** 对于 `*RST`、`CONF:VOLT:DC 10` 等电源不回复的设置命令，只需将 B 列留空，软件会自动跳过等待回复，仅按 C 列延时后发送下一条。查询命令（如 `*IDN?`）在 B 列填写期望值即可自动校验。
+
 ### 4. 读取返回值模式
 
 点击 **「读取返回值」**，软件仅发送一轮命令，并将仪器的实际返回值自动填入 Excel B 列（用于快速建立期望值模板）。
@@ -215,6 +217,12 @@ GPIB 设置页中新增「发送后缀」下拉框，支持以下选项：
 
 ## 📝 更新日志
 
+### V3.4.7 (2026-07)
+
+- 🐛 **修复串口/网口 Excel 批量发送中设置命令卡死问题：** 当 B 列（预期返回值）为空且非捕获模式时，自动识别为"无回复设置命令"，跳过等待回复，仅按 C 列延时后直接发送下一条命令。对齐 GPIB 模块已有行为
+- ✨ 串口/网口批量发送优化：设置命令不再启动全局超时计时器，避免无意义的超时等待
+- 📝 使用指南补充设置命令（无回复）与查询命令的使用说明
+
 ### V3.4.6 (2026-07)
 
 - ✨ GPIB 设置页新增「发送后缀」选择（无/CR/LF/CRLF），解决部分仪器必须收到换行符才响应的问题
@@ -266,5 +274,3 @@ MIT License. 详见 [LICENSE](LICENSE) 文件。
   <sub>Made with ❤️ for instrument automation testing</sub>
 </p>
 ```
-
----

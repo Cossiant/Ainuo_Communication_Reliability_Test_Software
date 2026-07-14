@@ -48,7 +48,7 @@ void MainPage::initNavigation() {
 // ═══════════════════════════════════════════════════════════════
 void MainPage::initWindowConfig() {
     m_mainWindow->resize(1200, 750);
-    m_mainWindow->setWindowTitle("Ainuo 通用通讯可靠性测试软件V3.4.6");
+    m_mainWindow->setWindowTitle("Ainuo 通用通讯可靠性测试软件V3.4.7");
 
     // 用户信息卡片
     m_mainWindow->setUserInfoCardTitle("Ainuo 通讯可靠性");
@@ -356,7 +356,7 @@ void MainPage::createAboutPage() {
     lay->addWidget(title);
 
     // ──── 版本 ────
-    ElaText *version = new ElaText(QString::fromUtf8("版本: v3.4.6"));
+    ElaText *version = new ElaText(QString::fromUtf8("版本: v3.4.7"));
     version->setTextPixelSize(18);
     version->setTextStyle(ElaTextType::Subtitle);
     lay->addWidget(version);
@@ -393,7 +393,7 @@ void MainPage::createAboutPage() {
         infoLayout->addLayout(row);
     };
 
-    addInfo(QString::fromUtf8("软件版本："), "v3.4.6");
+    addInfo(QString::fromUtf8("软件版本："), "v3.4.7");
     addInfo(QString::fromUtf8("发布日期："), QString::fromUtf8("2026 年 7 月"));
     addInfo(QString::fromUtf8("开发者："),   "Cossiant");
     addInfo(QString::fromUtf8("开发环境："), "Qt 5.15 + MinGW");
