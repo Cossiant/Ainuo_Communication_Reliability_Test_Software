@@ -4,6 +4,7 @@
 #include <QTimer>
 #include <QElapsedTimer>
 #include <QByteArray>
+#include <QQueue>
 
 class NetworkPage;
 class NetworkWork;
@@ -50,6 +51,10 @@ private:
     QString    m_lastCmd;
     QByteArray m_expectData;
     bool      m_minDelayOk  = false;
+
+    // ★ 粘包分割队列（新增）
+    QQueue<QByteArray> m_stickyQueue;
+    QByteArray stickyDelimiter() const;
 
     QTimer* m_timeoutTimer = nullptr;
 };

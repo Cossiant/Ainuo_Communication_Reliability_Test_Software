@@ -107,6 +107,14 @@ NetworkPage::NetworkPage(ElaWindow *mainWindow, QObject *parent)
                                   Q_ARG(bool, checked));
     });
 
+    // ★ 新增：后缀选择变更 → 同步到工作线程
+    connect(m_suffixComboBox, QOverload<int>::of(&ElaComboBox::currentIndexChanged),
+            this, [this](int index) {
+        QMetaObject::invokeMethod(m_networkWork, "setSuffixMode",
+                                  Qt::QueuedConnection,
+                                  Q_ARG(int, index));
+    });
+
     // ═══════════════════════════════════════════════════════════
     //  连接 NetworkWork 信号 → UI 更新
     // ═══════════════════════════════════════════════════════════
@@ -340,20 +348,41 @@ void NetworkPage::createSettingsPage() {
     m_nagleCheckBox = new ElaCheckBox("禁用 Nagle 算法");
     m_nagleCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
     grid->addWidget(m_networkHexSendCheckBox,  2, 0, 1, 2);
-    grid->addWidget(m_nagleCheckBox,           2, 3, 1, 2);
+    grid->addWidget(m_nagleCheckBox,           2, 2, 1, 2);
+
+    // 发送后缀
+    ElaText* suffixLabel = new ElaText("发送后缀: ");
+    suffixLabel->setTextPixelSize(15);
+    m_suffixComboBox = new ElaComboBox();
+    m_suffixComboBox->addItems({"无 (None)", "CR (\\r)", "LF (\\n)", "CRLF (\\r\\n)"});
+    m_suffixComboBox->setCurrentIndex(0);  // 默认无后缀
+
+    grid->addWidget(suffixLabel,           5, 0);
+    grid->addWidget(m_suffixComboBox,      5, 2, 1, 2);
 
     // 去除 \r\n 勾选框
     m_networkStripCRLFCheckBox = new ElaCheckBox("比对时去除返回值中的 \\r\\n");
     m_networkStripCRLFCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
     grid->addWidget(m_networkStripCRLFCheckBox, 3, 0, 1, 4);
 
+    // 粘包分割
+    m_networkSplitStickyCheckBox = new ElaCheckBox("启用粘包分割（按分隔符拆分返回值）");
+    m_networkSplitStickyCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
+    grid->addWidget(m_networkSplitStickyCheckBox, 4, 0, 1, 2);
+
+    m_networkSplitDelimiterComboBox = new ElaComboBox();
+    m_networkSplitDelimiterComboBox->addItems({"\\n", "\\r", "\\r\\n"});
+    m_networkSplitDelimiterComboBox->setCurrentIndex(0);
+    m_networkSplitDelimiterComboBox->setStyleSheet("ElaComboBox { font-size: 14px; }");
+    grid->addWidget(m_networkSplitDelimiterComboBox, 4, 2, 1, 2);
+
     m_openNetworkButton = new ElaPushButton("连接网络");
     m_openNetworkButton->setFixedHeight(35);
     m_closeNetworkButton = new ElaPushButton("断开网络");
     m_closeNetworkButton->setFixedHeight(35);
     m_closeNetworkButton->setEnabled(false);
-    grid->addWidget(m_openNetworkButton,       4, 1);
-    grid->addWidget(m_closeNetworkButton,      4, 3);
+    grid->addWidget(m_openNetworkButton,       6, 1);
+    grid->addWidget(m_closeNetworkButton,      6, 3);
 
     _NetworkSettingLayout1->addWidget(_NetworkSettingGroup);
     _NetworkSettingLayout1->addStretch();

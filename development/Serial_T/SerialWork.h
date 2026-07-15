@@ -1,5 +1,6 @@
 // SerialWork.h
 // ★ 对齐 GPIBWork：sendStringWithDelay 添加 forceRead 参数
+// ★ 新增：发送后缀功能
 
 #ifndef UNTITLED_SERIALWORK_H
 #define UNTITLED_SERIALWORK_H
@@ -26,9 +27,6 @@ public:
     int  timingCompensationMs() const { return m_timingCompensationMs; }
 
 public slots:
-    // ═══════════════════════════════════════════════════
-    //  所有可能从主线程调用的写操作必须是 slot
-    // ═══════════════════════════════════════════════════
     void openSerialPort(const QString &portName,
                         int baudRate,
                         QSerialPort::DataBits dataBits,
@@ -49,6 +47,7 @@ public slots:
     void resetRecvCount();
     void setExpectedResponse(const QByteArray &expected);
     void setHexDisplayMode(bool hexMode);
+    void setSuffixMode(int mode);   // ★ 新增：设置发送后缀模式
 
 signals:
     void serialOpened();
@@ -73,6 +72,9 @@ private:
     QString formatByteArray(const QByteArray &data) const;
     void emitData(const QByteArray &data);
 
+    // ★ 新增：统一构建发送数据（unescape → 去尾 → 加后缀）
+    QByteArray buildSendData(const QString &text, bool hexMode) const;
+
     QSerialPort *m_serialPort   = nullptr;
     QTimer      *m_bufferTimer  = nullptr;
     QTimer      *m_interCmdTimer = nullptr;   // ★ 命令间隔定时器（工作线程，1ms轮询）
@@ -83,6 +85,8 @@ private:
     int        m_totalRecv = 0;
     QByteArray m_expectedResponse;
     bool       m_hexDisplay = false;
+
+    int        m_suffixMode = 0;   // ★ 新增：发送后缀模式 0=None, 1=CR, 2=LF, 3=CRLF
 
     QAtomicInt m_opened{0};
 

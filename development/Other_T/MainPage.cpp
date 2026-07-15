@@ -48,7 +48,7 @@ void MainPage::initNavigation() {
 // ═══════════════════════════════════════════════════════════════
 void MainPage::initWindowConfig() {
     m_mainWindow->resize(1200, 750);
-    m_mainWindow->setWindowTitle("Ainuo 通用通讯可靠性测试软件V3.4.8");
+    m_mainWindow->setWindowTitle("Ainuo 通用通讯可靠性测试软件V3.4.9");
 
     // 用户信息卡片
     m_mainWindow->setUserInfoCardTitle("Ainuo 通讯可靠性");
@@ -182,22 +182,47 @@ void MainPage::createHelpPage() {
             QString::fromUtf8("支持通讯方式：串口 (RS-232/485)  /  网口 (TCP 客户端)  /  CAN  /  GPIB")
         }));
 
-    // ════════════════ 2. 网口通讯 ════════════════
+    // ════════════════ 2. 发送后缀（通用功能）════════════════
     lay->addWidget(createHelpSection(
-        QString::fromUtf8("2. 网口通讯"),
+        QString::fromUtf8("2. 发送后缀（串口 / 网口 / GPIB 通用）"),
         QStringList{
-            QString::fromUtf8("2.1  配置网络参数"),
+            QString::fromUtf8("「发送后缀」是三个通讯模块共用的核心功能，位于各模块的「设置」页面中。"),
+            QString::fromUtf8("作用：发送命令时，自动在命令末尾追加指定的控制字符作为终止符。"),
+            QString(),
+            QString::fromUtf8("后缀选项与追加的实际字节："),
+            QString::fromUtf8("  • 无 (None) — 不追加任何字节"),
+            QString::fromUtf8("  • CR (\\r)   — 追加回车符 0x0D（1 字节）"),
+            QString::fromUtf8("  • LF (\\n)   — 追加换行符 0x0A（1 字节，大多数 SCPI 仪器推荐）"),
+            QString::fromUtf8("  • CRLF (\\r\\n) — 追加回车+换行 0x0D 0x0A（2 字节）"),
+            QString(),
+            QString::fromUtf8("后缀处理流程（buildSendData 统一入口）："),
+            QString::fromUtf8("  ① unescape — 将命令中 \\r \\n 字面量转为真实控制字符"),
+            QString::fromUtf8("  ② 去尾 — 去除命令末尾已有的 \\r \\n（避免与后缀重复）"),
+            QString::fromUtf8("  ③ 加后缀 — 根据下拉框选择追加对应的终止字节"),
+            QString(),
+            QString::fromUtf8("建议：Excel 命令列中不要手动写 \\n，统一通过后缀下拉框控制终止符。"),
+            QString::fromUtf8("      如果仪器发命令后无响应，请优先尝试切换后缀为 LF (\\n)。")
+        }));
+
+    // ════════════════ 3. 网口通讯 ════════════════
+    lay->addWidget(createHelpSection(
+        QString::fromUtf8("3. 网口通讯"),
+        QStringList{
+            QString::fromUtf8("3.1  配置网络参数"),
             QString::fromUtf8("    在「网络设置」页中输入目标设备的 IP 地址和端口号。"),
             QString::fromUtf8("    可选勾选「禁用 Nagle 算法」以降低发送延迟（适合小数据包高频发送场景）。"),
             QString::fromUtf8("    可选勾选「以HEX格式发送」以十六进制方式编码命令。"),
+            QString::fromUtf8("    通过「发送后缀」下拉框选择命令终止符（详见第 2 节）。"),
+            QString::fromUtf8("    可选勾选「比对时去除返回值中的 \\r\\n」以忽略返回值中的换行差异。"),
+            QString::fromUtf8("    可选勾选「启用粘包分割」以按分隔符拆分连续返回的多条数据。"),
             QString::fromUtf8("    点击「连接网络」，软件将在 3 秒内尝试建立 TCP 连接。"),
             QString::fromUtf8("    连接成功后 LED 指示灯变为绿色。"),
             QString(),
-            QString::fromUtf8("2.2  单条命令发送"),
+            QString::fromUtf8("3.2  单条命令发送"),
             QString::fromUtf8("    在「单条发送」页中输入命令文本，点击「通过网口发送」。"),
             QString::fromUtf8("    发送和接收日志实时显示在下方列表中。"),
             QString(),
-            QString::fromUtf8("2.3  表格批量发送"),
+            QString::fromUtf8("3.3  表格批量发送"),
             QString::fromUtf8("    ① 点击「下载示例模板」获取标准格式的 Excel 文件"),
             QString::fromUtf8("    ② 按模板格式编写命令表（A列=命令，B列=期望返回值，C列=命令间隔ms）"),
             QString::fromUtf8("    ③ 点击「打开 Excel 并读取」加载文件到表格"),
@@ -206,66 +231,63 @@ void MainPage::createHelpPage() {
             QString::fromUtf8("    ⑥ 点击「开始发送」启动批量测试"),
             QString::fromUtf8("    ⑦ 点击「读取返回值」会仅发送一次并记录实际返回值（预扫模式）"),
             QString(),
-            QString::fromUtf8("2.4  错误统计"),
+            QString::fromUtf8("3.4  错误统计"),
             QString::fromUtf8("    超时错误：在超时时间内未收到设备回复"),
             QString::fromUtf8("    内容错误：设备回复的内容与 Excel 中定义的期望值不一致"),
             QString::fromUtf8("    错误列表支持自动滚动和清空操作")
         }));
 
-    // ════════════════ 3. 串口通讯 ════════════════
+    // ════════════════ 4. 串口通讯 ════════════════
     lay->addWidget(createHelpSection(
-        QString::fromUtf8("3. 串口通讯"),
+        QString::fromUtf8("4. 串口通讯"),
         QStringList{
-            QString::fromUtf8("3.1  配置串口参数"),
+            QString::fromUtf8("4.1  配置串口参数"),
             QString::fromUtf8("    在「串口设置」中选择端口号、波特率、数据位、停止位、校验位。"),
             QString::fromUtf8("    可选勾选「合并串口接收数据(20ms超时)」以避免数据帧被拆分显示。"),
             QString::fromUtf8("    可选勾选「以HEX格式发送」切换十六进制模式。"),
+            QString::fromUtf8("    通过「发送后缀」下拉框选择命令终止符（详见第 2 节）。"),
+            QString::fromUtf8("    可选勾选「比对时去除返回值中的 \\r\\n」以忽略返回值中的换行差异。"),
+            QString::fromUtf8("    可选勾选「启用粘包分割」以按分隔符拆分连续返回的多条数据。"),
             QString::fromUtf8("    点击「打开串口」建立连接，LED 指示灯变为绿色。"),
             QString(),
-            QString::fromUtf8("3.2  单条命令与表格批量发送"),
-            QString::fromUtf8("    操作方式与网口通讯一致，请参考第 2 节的说明。")
+            QString::fromUtf8("4.2  单条命令与表格批量发送"),
+            QString::fromUtf8("    操作方式与网口通讯一致，请参考第 3 节的说明。")
         }));
 
-    // <<< 修改：GPIB 已完整实现，替换预留接口说明为完整帮助文档 >>>
-    // ════════════════ 4. GPIB 通讯 ════════════════
+    // ════════════════ 5. GPIB 通讯 ════════════════
     lay->addWidget(createHelpSection(
-        QString::fromUtf8("4. GPIB 通讯"),
+        QString::fromUtf8("5. GPIB 通讯"),
         QStringList{
-            QString::fromUtf8("4.1  配置 GPIB 参数"),
+            QString::fromUtf8("5.1  配置 GPIB 参数"),
             QString::fromUtf8("    在「GPIB设置」页中输入板卡号（通常为 0）、仪器主地址（0-30）。"),
             QString::fromUtf8("    如需使用副地址（某些多通道仪器），可填入副地址（0=不使用）。"),
             QString::fromUtf8("    设置超时时间（建议 3000ms，可根据仪器响应速度调整）。"),
-            QString::fromUtf8("    「发送后缀」下拉框：选择发送命令后自动追加的结束符。"),
-            QString::fromUtf8("        - 无 (None)：不追加任何字节（仪器靠硬件 EOI 信号识别结束）"),
-            QString::fromUtf8("        - LF (\\n)：追加换行符 0x0A，适合大多数 SCPI 仪器（推荐）"),
-            QString::fromUtf8("        - CR (\\r)：追加回车符 0x0D"),
-            QString::fromUtf8("        - CRLF (\\r\\n)：追加回车+换行双字符"),
-            QString::fromUtf8("    如果仪器发送命令后无响应，请尝试将后缀切换为 LF (\\n)。"),
+            QString::fromUtf8("    通过「发送后缀」下拉框选择命令终止符（详见第 2 节）。"),
             QString::fromUtf8("    结束字符默认为换行符 \\n，启用后 viRead 会在收到换行符时终止读取。"),
             QString::fromUtf8("    可选勾选「发送时附加 EOI 信号」，大多数 GPIB 仪器需要此信号标识命令结束。"),
             QString::fromUtf8("    可选勾选「以HEX格式发送」切换十六进制模式。"),
             QString::fromUtf8("    点击「打开 GPIB」建立连接，LED 指示灯变为绿色。"),
             QString(),
-            QString::fromUtf8("4.2  前置条件"),
+            QString::fromUtf8("5.2  前置条件"),
             QString::fromUtf8("    a) 必须安装 NI-VISA 运行时驱动（NI-488.2 或 NI-VISA 独立包）。"),
             QString::fromUtf8("    b) GPIB 控制器（如 NI GPIB-USB-HS）需正确插入并被系统识别。"),
             QString::fromUtf8("    c) 可在 NI-MAX（Measurement & Automation Explorer）中验证设备可见性。"),
             QString::fromUtf8("    d) 确认仪器 GPIB 地址与软件中填写的主地址一致。"),
             QString(),
-            QString::fromUtf8("4.3  单条命令发送"),
+            QString::fromUtf8("5.3  单条命令发送"),
             QString::fromUtf8("    在「单条发送」页中输入 SCPI 命令文本，点击「通过 GPIB 发送」。"),
             QString::fromUtf8("    发送和接收日志实时显示在下方列表中。"),
             QString(),
-            QString::fromUtf8("4.4  表格批量发送"),
-            QString::fromUtf8("    操作方式与网口通讯一致，请参考第 2.3 节的说明。"),
+            QString::fromUtf8("5.4  表格批量发送"),
+            QString::fromUtf8("    操作方式与网口通讯一致，请参考第 3.3 节的说明。"),
             QString::fromUtf8("    支持「读取返回值（捕获）」模式，自动将仪器返回值填入 Excel B 列。"),
             QString(),
-            QString::fromUtf8("4.5  错误统计"),
+            QString::fromUtf8("5.5  错误统计"),
             QString::fromUtf8("    超时错误：在超时时间内未收到仪器回复"),
             QString::fromUtf8("    内容错误：仪器回复的内容与 Excel 中定义的期望值不一致"),
             QString::fromUtf8("    错误列表支持自动滚动和清空操作"),
             QString(),
-            QString::fromUtf8("4.6  常见 GPIB 问题"),
+            QString::fromUtf8("5.6  常见 GPIB 问题"),
             QString::fromUtf8("    Q: 打开 GPIB 时提示「未找到目标资源」？"),
             QString::fromUtf8("    A: 检查板卡号和主地址是否正确，仪器是否上电，NI-MAX 中是否可见该设备。"),
             QString(),
@@ -276,17 +298,17 @@ void MainPage::createHelpPage() {
             QString::fromUtf8("    A: 检查 GPIB 线缆连接是否牢固，仪器是否上电且处于远程控制模式。")
         }));
 
-    // ════════════════ 5. CAN 通讯 ════════════════
+    // ════════════════ 6. CAN 通讯 ════════════════
     lay->addWidget(createHelpSection(
-        QString::fromUtf8("5. CAN 通讯"),
+        QString::fromUtf8("6. CAN 通讯"),
         QStringList{
             QString::fromUtf8("CAN 通讯模块目前为预留接口，具体功能将在后续版本中完善。"),
             QString::fromUtf8("如需使用请联系开发者获取技术支持。")
         }));
 
-    // ════════════════ 6. Excel 模板格式 ════════════════
+    // ════════════════ 7. Excel 模板格式 ════════════════
     lay->addWidget(createHelpSection(
-        QString::fromUtf8("6. Excel 模板格式"),
+        QString::fromUtf8("7. Excel 模板格式"),
         QStringList{
             QString::fromUtf8("Excel 文件必须包含表头行（第 1 行），数据从第 2 行开始。"),
             QString::fromUtf8("表格结构："),
@@ -296,18 +318,23 @@ void MainPage::createHelpPage() {
             QString(),
             QString::fromUtf8("命令文本说明："),
             QString::fromUtf8("  普通模式：直接输入 ASCII 命令，如  *IDN?"),
+            QString::fromUtf8("            建议不要在命令末尾添加 \\n，统一通过「发送后缀」控制"),
             QString::fromUtf8("  HEX 模式：输入十六进制字符串（空格分隔），如  2A 49 44 4E 3F"),
-            QString::fromUtf8("            勾选「以HEX格式发送」后生效"),
+            QString::fromUtf8("            勾选「以HEX格式发送」后生效（HEX 模式不追加后缀）"),
             QString(),
             QString::fromUtf8("期望返回值说明："),
             QString::fromUtf8("  普通模式：直接输入期望的 ASCII 文本"),
             QString::fromUtf8("  HEX 模式：输入期望的十六进制字符串"),
-            QString::fromUtf8("  留空则不对该命令的返回值进行校验")
+            QString::fromUtf8("  留空则不对该命令的返回值进行校验"),
+            QString(),
+            QString::fromUtf8("设置命令（无回复）说明："),
+            QString::fromUtf8("  对于 *RST、CONF:VOLT:DC 10 等设备不回复的设置命令，"),
+            QString::fromUtf8("  只需将 B 列留空，软件会自动识别并在延时后直接发送下一条。")
         }));
 
-    // ════════════════ 7. 常见问题 ════════════════
+    // ════════════════ 8. 常见问题 ════════════════
     lay->addWidget(createHelpSection(
-        QString::fromUtf8("7. 常见问题"),
+        QString::fromUtf8("8. 常见问题"),
         QStringList{
             QString::fromUtf8("Q: 连接网络超时（3秒弹窗）？"),
             QString::fromUtf8("A: 请检查 IP 地址和端口号是否正确，目标设备是否在线，防火墙是否阻止了连接。"),
@@ -317,6 +344,15 @@ void MainPage::createHelpPage() {
             QString(),
             QString::fromUtf8("Q: 发送命令后未收到回复？"),
             QString::fromUtf8("A: 检查连接状态 LED 是否为绿色；检查命令格式是否正确；适当增大全局超时时间。"),
+            QString::fromUtf8("   ★ 如果是串口/网口/GPIB 仪器不响应，请优先检查「发送后缀」设置。"),
+            QString::fromUtf8("      大多数 SCPI 仪器需要 LF (\\n) 作为命令终止符。"),
+            QString(),
+            QString::fromUtf8("Q: 发送后缀应该怎么选？"),
+            QString::fromUtf8("A: 如果不确定，按以下顺序尝试："),
+            QString::fromUtf8("   ① 先选 LF (\\n) — 绝大多数 SCPI 仪器的标准终止符"),
+            QString::fromUtf8("   ② 如果仍无响应，尝试 CRLF (\\r\\n) — 部分 PLC / 工控设备需要"),
+            QString::fromUtf8("   ③ 对于 GPIB 仪器，可以先试「无 (None)」— 靠 EOI 硬件信号终止"),
+            QString::fromUtf8("   ④ HEX 模式下不追加后缀，请直接在命令中编码所需的终止字节"),
             QString(),
             QString::fromUtf8("Q: Excel 文件读取失败？"),
             QString::fromUtf8("A: 请确保使用 .xlsx 格式，且表头和数据格式符合模板规范。可先下载示例模板参考。"),
@@ -325,12 +361,14 @@ void MainPage::createHelpPage() {
             QString::fromUtf8("A: Nagle 算法会合并小数据包以提升网络效率。对于 SCPI 指令这种小包高频场景，"),
             QString::fromUtf8("   建议禁用（勾选该选项）以避免延迟。"),
             QString(),
+            QString::fromUtf8("Q: 命令中已包含 \\n，又选了后缀会重复吗？"),
+            QString::fromUtf8("A: 不会。软件在追加后缀前会自动去除命令末尾已有的 \\r 和 \\n，确保不重复。"),
+            QString(),
             QString::fromUtf8("Q: GPIB 发送命令后仪器不响应？"),
             QString::fromUtf8("A: 首先检查 GPIB 连接状态 LED 是否为绿色。若连接正常但仍无响应："),
             QString::fromUtf8("   ① 在 GPIB 设置页中尝试切换「发送后缀」为 LF (\\n)；"),
-            QString::fromUtf8("   ② 检查 Excel 命令列中是否有多余的 \\n 字符（软件会自动处理但建议清理）；"),
-            QString::fromUtf8("   ③ 适当增大超时时间（如 5000ms），部分老旧仪器响应较慢；"),
-            QString::fromUtf8("   ④ 确认仪器支持的命令格式无误（可先用 NI-MAX 手动测试）。")
+            QString::fromUtf8("   ② 适当增大超时时间（如 5000ms），部分老旧仪器响应较慢；"),
+            QString::fromUtf8("   ③ 确认仪器支持的命令格式无误（可先用 NI-MAX 手动测试）。")
         }));
 
     scrollArea->setWidget(scrollContent);
@@ -345,7 +383,14 @@ void MainPage::createHelpPage() {
 // ═══════════════════════════════════════════════════════════════
 void MainPage::createAboutPage() {
     _MainAboutPage = new QWidget();
-    QVBoxLayout *lay = new QVBoxLayout(_MainAboutPage);
+
+    // ──── 可滚动区域 ────
+    QScrollArea *scrollArea = new QScrollArea();
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+
+    QWidget *scrollContent = new QWidget();
+    QVBoxLayout *lay = new QVBoxLayout(scrollContent);
     lay->setContentsMargins(40, 40, 40, 40);
     lay->setSpacing(16);
 
@@ -356,7 +401,7 @@ void MainPage::createAboutPage() {
     lay->addWidget(title);
 
     // ──── 版本 ────
-    ElaText *version = new ElaText(QString::fromUtf8("版本: v3.4.8"));
+    ElaText *version = new ElaText(QString::fromUtf8("版本: v3.4.9"));
     version->setTextPixelSize(18);
     version->setTextStyle(ElaTextType::Subtitle);
     lay->addWidget(version);
@@ -393,7 +438,7 @@ void MainPage::createAboutPage() {
         infoLayout->addLayout(row);
     };
 
-    addInfo(QString::fromUtf8("软件版本："), "v3.4.8");
+    addInfo(QString::fromUtf8("软件版本："), "v3.4.9");
     addInfo(QString::fromUtf8("发布日期："), QString::fromUtf8("2026 年 7 月"));
     addInfo(QString::fromUtf8("开发者："),   "Cossiant");
     addInfo(QString::fromUtf8("开发环境："), "Qt 5.15 + MinGW");
@@ -416,13 +461,17 @@ void MainPage::createAboutPage() {
         QString::fromUtf8("\u2022  Excel 表格批量导入命令，自动逐条发送"),
         QString::fromUtf8("\u2022  自动校验返回值，统计超时和内容错误"),
         QString::fromUtf8("\u2022  支持 HEX 和 ASCII 两种命令编码格式"),
+        QString::fromUtf8("\u2022  全模块发送后缀选择（无 / CR / LF / CRLF），自动去重"),
+        QString::fromUtf8("\u2022  buildSendData() 统一数据构建（unescape → 去尾 → 加后缀）"),
         QString::fromUtf8("\u2022  独立单条命令发送模式，便于调试"),
         QString::fromUtf8("\u2022  实时收发日志，带毫秒级时间戳"),
         QString::fromUtf8("\u2022  错误统计卡片 + 6列详细错误列表"),
         QString::fromUtf8("\u2022  Nagle 算法可选禁用（网口低延迟模式）"),
-        QString::fromUtf8("\u2022  GPIB 仪器地址配置 + 发送后缀(CR/LF/CRLF) + EOI / 结束字符控制"),
+        QString::fromUtf8("\u2022  GPIB 仪器地址配置 + EOI / 结束字符控制"),
         QString::fromUtf8("\u2022  命令间隔精确延时控制（1ms 精度，EMA 补偿）"),
-        QString::fromUtf8("\u2022  多线程架构，收发与 UI 完全分离")
+        QString::fromUtf8("\u2022  多线程架构，收发与 UI 完全分离"),
+        QString::fromUtf8("\u2022  粘包分割（串口 / 网口），按分隔符拆分连续数据"),
+        QString::fromUtf8("\u2022  比对时去除返回值 \\r\\n，灵活适配不同仪器")
     };
 
     for (const QString &feat : features) {
@@ -434,6 +483,29 @@ void MainPage::createAboutPage() {
 
     lay->addWidget(featureGroup);
 
+    // ──── 更新日志摘要 ────
+    QGroupBox *changelogGroup = new QGroupBox(QString::fromUtf8("V3.4.9 更新要点"));
+    changelogGroup->setStyleSheet(infoGroup->styleSheet());
+    QVBoxLayout *changelogLayout = new QVBoxLayout(changelogGroup);
+    changelogLayout->setSpacing(4);
+    changelogLayout->setContentsMargins(20, 20, 20, 20);
+
+    QStringList changelog = {
+        QString::fromUtf8("\u2022  串口 / 网口新增「发送后缀」功能，对齐 GPIB 模块"),
+        QString::fromUtf8("\u2022  全模块 buildSendData() 统一数据构建（unescape + 去尾 + 加后缀）"),
+        QString::fromUtf8("\u2022  单条发送和 Excel 批量发送共享同一后缀逻辑，行为完全一致"),
+        QString::fromUtf8("\u2022  帮助文档重构，新增发送后缀专题说明章节")
+    };
+
+    for (const QString &log : changelog) {
+        ElaText *lt = new ElaText(log);
+        lt->setTextPixelSize(13);
+        lt->setWordWrap(true);
+        changelogLayout->addWidget(lt);
+    }
+
+    lay->addWidget(changelogGroup);
+
     lay->addStretch();
 
     // ──── 底部版权 ────
@@ -444,8 +516,15 @@ void MainPage::createAboutPage() {
 
     ElaText *copyright = new ElaText(QString::fromUtf8("\u00a9 2026 Cossiant. All rights reserved."));
     copyright->setTextPixelSize(12);
-    copyright->setStyleSheet("color: rgba(128,128,128,180);");
+    copyright->setAlignment(Qt::AlignCenter);
     lay->addWidget(copyright);
+
+    // ──── 将内容挂到滚动区 ────
+    scrollArea->setWidget(scrollContent);
+
+    QVBoxLayout *outer = new QVBoxLayout(_MainAboutPage);
+    outer->setContentsMargins(0, 0, 0, 0);
+    outer->addWidget(scrollArea);
 }
 
 // ═══════════════════════════════════════════════════════════════

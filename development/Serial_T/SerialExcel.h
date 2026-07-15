@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QTimer>
 #include <QByteArray>
+#include <QQueue>
 
 class SerialPage;
 class SerialWork;
@@ -52,6 +53,9 @@ private:
     QString    m_lastCmd;
     QByteArray m_expectData;
     bool       m_minDelayOk  = false;   // ★ 由 interCmdDelayFinished 设置
+    // ★ 粘包分割队列
+    QQueue<QByteArray> m_stickyQueue;
+    QByteArray stickyDelimiter() const;
 
     QTimer* m_timeoutTimer = nullptr;   // 全局超时（仍在主线程）
 };

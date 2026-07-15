@@ -1,5 +1,6 @@
 // SerialWork.cpp
 // ★ 升级：1ms QTimer轮询 + QElapsedTimer + 微秒忙等 + EMA补偿
+// ★ 新增：发送后缀功能
 
 #include "SerialWork.h"
 #include <QDebug>
@@ -76,6 +77,51 @@ QByteArray SerialWork::expectedResponse() const
 void SerialWork::setHexDisplayMode(bool hexMode)
 {
     m_hexDisplay = hexMode;
+}
+// 设置发送后缀模式
+void SerialWork::setSuffixMode(int mode)
+{
+    m_suffixMode = mode;
+    qDebug() << "SerialWork: 后缀模式 =" << mode
+             << (mode == 0 ? "None" : mode == 1 ? "CR" : mode == 2 ? "LF" : "CRLF");
+}
+
+// 统一构建发送数据（对齐 GPIBWork::buildSendData）
+QByteArray SerialWork::buildSendData(const QString &text, bool hexMode) const
+{
+    if (hexMode) {
+        QString hex = text;
+        hex.remove(' ');
+        return QByteArray::fromHex(hex.toLatin1());
+    }
+
+    // Step 1: 将用户输入的 \r \n 转义还原为真实控制字符
+    QString unescaped = text;
+    unescaped.replace(QLatin1String("\\r"), QLatin1String("\r"));
+    unescaped.replace(QLatin1String("\\n"), QLatin1String("\n"));
+
+    QByteArray data = unescaped.toUtf8();
+
+    // Step 2: 去掉末尾已有的 \r \n（避免与后缀重复）
+    while (!data.isEmpty()) {
+        char last = data.at(data.size() - 1);
+        if (last == '\r' || last == '\n')
+            data.chop(1);
+        else
+            break;
+    }
+
+    // Step 3: 追加用户选择的后缀
+    //   0 = None, 1 = CR (\r), 2 = LF (\n), 3 = CRLF (\r\n)
+    switch (m_suffixMode) {
+        case 1:   data.append('\r');          break;   // CR
+        case 2:   data.append('\n');          break;   // LF
+        case 3:   data.append("\r\n");        break;   // CRLF
+        case 0:                                break;   // None
+        default:                               break;
+    }
+
+    return data;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -182,18 +228,10 @@ void SerialWork::sendString(const QString &text, bool hexMode)
     if (!isOpen() || text.isEmpty())
         return;
 
-    QByteArray data;
-    if (hexMode) {
-        QString hex = text;
-        hex.remove(' ');
-        data = QByteArray::fromHex(hex.toLatin1());
-    } else {
-        data = text.toUtf8();
-    }
+    QByteArray data = buildSendData(text, hexMode);   // ★ 使用统一构建方法
 
     sendData(data);
 }
-
 // ═══════════════════════════════════════════════════════════════
 //  ★★★ 核心：发送 + 1ms轮询精确延时 + 微秒忙等 + EMA补偿 ★★★
 //  ★ 对齐 GPIBWork：计时起点在 write 之前 + forceRead 控制读取
@@ -208,15 +246,8 @@ void SerialWork::sendStringWithDelay(const QString &text, bool hexMode,
 
     m_expectedResponse = expectedResponse;
 
-    // ── 构建数据 ──
-    QByteArray data;
-    if (hexMode) {
-        QString hex = text;
-        hex.remove(' ');
-        data = QByteArray::fromHex(hex.toLatin1());
-    } else {
-        data = text.toUtf8();
-    }
+    // ── 构建数据（★ 使用统一构建方法）──
+    QByteArray data = buildSendData(text, hexMode);
 
     // ★ 对齐 GPIB：在 write 之前启动高精度计时
     //    delayMs > 0 时才启动，delayMs == 0 时跳过整个延时逻辑
@@ -258,53 +289,37 @@ void SerialWork::sendStringWithDelay(const QString &text, bool hexMode,
     emit sendLogLine(QString("[%1] TX → %2").arg(timeStr, display));
 
     // ★ 对齐 GPIB：forceRead 控制是否需要等待设备回复
-    //   forceRead=true（捕获模式）→ 等待 readyRead 异步回调
-    //   forceRead=false 且期望非空 → 等待 readyRead 用于校验
-    //   forceRead=false 且期望为空 → 设置命令，立即 emit 空响应
     bool shouldRead = forceRead || !m_expectedResponse.isEmpty();
 
     if (!shouldRead) {
-        // ★ 无期望响应也不强制读取 → 发出空响应信号让流程继续
-        //    对齐 GPIBWork：emit responseReceived(QByteArray())
         emit responseReceived(QByteArray());
     }
-    // shouldRead 时：不额外处理，由 readyRead → onReadyRead → emitData → responseReceived 异步完成
 
     // ═══════════════════════════════════════════════════════════
     //  精确延时（对齐 GPIB：计时起点在 write 之前）
-    //  delayMs == 0 → 直接 emit interCmdDelayFinished()
-    //  delayMs >  0 → 计算剩余时间，启动 1ms 轮询
     // ═══════════════════════════════════════════════════════════
     if (delayMs > 0) {
         qint64 alreadyElapsed = m_preciseDelayTimer.elapsed();
 
         if (alreadyElapsed >= delayMs) {
-            // write + waitForBytesWritten 已经消耗了所有延时
             emit interCmdDelayFinished();
         } else {
-            // 计算剩余需要等待的时间
             int remainingMs = static_cast<int>(delayMs - alreadyElapsed);
-
-            // EMA 补偿
             int compensatedMs = remainingMs + m_timingCompensationMs;
             if (compensatedMs < 0) compensatedMs = 0;
 
-            // 钳位补偿范围 ±100ms
             const int MAX_COMPENSATION = 100;
             m_timingCompensationMs = qBound(-MAX_COMPENSATION,
                                              m_timingCompensationMs,
                                              MAX_COMPENSATION);
 
-            // m_targetDelayMs = 从计时起点算起的绝对目标时间（毫秒）
             m_targetDelayMs = static_cast<int>(alreadyElapsed + compensatedMs);
-            m_interCmdTimer->start();  // 每1ms触发 onInterCmdDelay()
+            m_interCmdTimer->start();
         }
     } else {
-        // delayMs == 0：无需等待，立即通知主线程
         emit interCmdDelayFinished();
     }
 }
-
 // ═══════════════════════════════════════════════════════════════
 //  1ms 轮询回调：检测是否到期 → 微秒忙等 → 误差补偿 → 发射信号
 // ═══════════════════════════════════════════════════════════════

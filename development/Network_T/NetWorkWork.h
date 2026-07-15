@@ -1,6 +1,7 @@
-// NetworkWork.h
+// NetWorkWork.h
 // 精确延时：1ms QTimer轮询 + QElapsedTimer + 微秒忙等 + EMA补偿
 // ★ 对齐 GPIBWork：sendStringWithDelay 添加 forceRead 参数
+// ★ 新增：发送后缀功能
 
 #ifndef UNTITLED_NETWORKWORK_H
 #define UNTITLED_NETWORKWORK_H
@@ -43,6 +44,7 @@ public slots:
     void resetRecvCount();
     void setExpectedResponse(const QByteArray &expected);
     void setHexDisplayMode(bool hexMode);
+    void setSuffixMode(int mode);   // ★ 新增：设置发送后缀模式
 
 signals:
     void networkConnected();
@@ -66,11 +68,16 @@ private:
     QString formatByteArray(const QByteArray &data) const;
     void emitData(const QByteArray &data);
 
+    // ★ 新增：统一构建发送数据（unescape → 去尾 → 加后缀）
+    QByteArray buildSendData(const QString &text, bool hexMode) const;
+
     QTcpSocket  *m_tcpSocket     = nullptr;
 
     int        m_totalRecv = 0;
     QByteArray m_expectedResponse;
     bool       m_hexDisplay = false;
+
+    int        m_suffixMode = 0;   // ★ 新增：发送后缀模式 0=None, 1=CR, 2=LF, 3=CRLF
 
     QAtomicInt m_opened{0};
     QAtomicInt m_disconnecting{0};

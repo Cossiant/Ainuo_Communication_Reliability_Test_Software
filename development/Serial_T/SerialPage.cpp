@@ -109,6 +109,14 @@ SerialPage::SerialPage(ElaWindow *mainWindow, QObject *parent)
                                   Q_ARG(bool, checked));
     });
 
+    //后缀选择变更 → 同步到工作线程
+    connect(m_suffixComboBox, QOverload<int>::of(&ElaComboBox::currentIndexChanged),
+            this, [this](int index) {
+        QMetaObject::invokeMethod(m_serialWork, "setSuffixMode",
+                                  Qt::QueuedConnection,
+                                  Q_ARG(int, index));
+    });
+
     // ═══════════════════════════════════════════════════════════
     //  连接 SerialWork 信号 → UI 更新
     //  ★ 跨线程：SerialWork 在工作线程 emit，主线程接收
@@ -317,10 +325,9 @@ void SerialPage::createSettingsPage() {
     _SerialSettingTitle->setTextStyle(ElaTextType::Title);
 
     _SerialSettingLayout1->addWidget(_SerialSettingTitle);
-    // _SerialSettingLayout->addStretch();
 
     // ════════════════════════════════════════════════════════
-    //  串口参数 GroupBox （创建一个Group）
+    //  串口参数 GroupBox
     // ════════════════════════════════════════════════════════
     QGroupBox* _SerialSettingGroup = new QGroupBox("串口参数");
     QGridLayout* grid = new QGridLayout(_SerialSettingGroup);
@@ -332,7 +339,6 @@ void SerialPage::createSettingsPage() {
     portLabel->setTextPixelSize(15);
     m_serialPortComboBox = new ElaComboBox();
 
-    // 枚举系统可用串口
     QList<QSerialPortInfo> portList = QSerialPortInfo::availablePorts();
     if (portList.isEmpty()) {
         m_serialPortComboBox->addItem("无可用串口");
@@ -341,7 +347,6 @@ void SerialPage::createSettingsPage() {
             m_serialPortComboBox->addItem(info.portName());
     }
 
-    //添加波特率
     ElaText* baudLabel = new ElaText("波特率:");
     baudLabel->setTextPixelSize(15);
     m_baudRateComboBox = new ElaComboBox();
@@ -380,7 +385,7 @@ void SerialPage::createSettingsPage() {
     ElaText* statusLabel = new ElaText("串口状态:");
     statusLabel->setTextPixelSize(15);
     m_serialLED = new QLabel();
-    LED::setLED(m_serialLED, 0, 16);          // 0 = 灰色（未连接）
+    LED::setLED(m_serialLED, 0, 16);
 
     grid->addWidget(parityLabel,         2, 0);
     grid->addWidget(m_parityComboBox,    2, 1);
@@ -392,22 +397,43 @@ void SerialPage::createSettingsPage() {
     m_serialBufferCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
     m_serialHexSendCheckBox = new ElaCheckBox("以HEX格式发送（AN3.0）");
     m_serialHexSendCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
-    grid->addWidget(m_serialBufferCheckBox,   3, 0, 1, 2);   // 左半边
-    grid->addWidget(m_serialHexSendCheckBox,  3, 2, 1, 2);   // 右半边
+    grid->addWidget(m_serialBufferCheckBox,   3, 0, 1, 2);
+    grid->addWidget(m_serialHexSendCheckBox,  3, 2, 1, 2);
 
-    // ──── ★ 第 4 行：去除 \r\n 勾选框 ────
+    // ★ 新增：第 4 行 — 发送后缀
+    ElaText* suffixLabel = new ElaText("发送后缀:");
+    suffixLabel->setTextPixelSize(15);
+    m_suffixComboBox = new ElaComboBox();
+    m_suffixComboBox->addItems({"无 (None)", "CR (\\r)", "LF (\\n)", "CRLF (\\r\\n)"});
+    m_suffixComboBox->setCurrentIndex(0);  // 默认无后缀
+
+    grid->addWidget(suffixLabel,           6, 0);
+    grid->addWidget(m_suffixComboBox,      6, 2, 1, 2);
+
+    // ──── 第 5 行：去除 \r\n 勾选框（原第 4 行）────
     m_serialStripCRLFCheckBox = new ElaCheckBox("比对时去除返回值中的 \\r\\n");
     m_serialStripCRLFCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
     grid->addWidget(m_serialStripCRLFCheckBox, 4, 0, 1, 4);
 
-    // ──── 第 5 行：打开/关闭按钮 ────
+    // ──── ★ 第 6 行：粘包分割（原第 5 行）────
+    m_serialSplitStickyCheckBox = new ElaCheckBox("启用粘包分割（按分隔符拆分返回值）");
+    m_serialSplitStickyCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
+    grid->addWidget(m_serialSplitStickyCheckBox, 5, 0, 1, 2);
+
+    m_serialSplitDelimiterComboBox = new ElaComboBox();
+    m_serialSplitDelimiterComboBox->addItems({"\\n", "\\r", "\\r\\n"});
+    m_serialSplitDelimiterComboBox->setCurrentIndex(0);
+    m_serialSplitDelimiterComboBox->setStyleSheet("ElaComboBox { font-size: 14px; }");
+    grid->addWidget(m_serialSplitDelimiterComboBox, 5, 2, 1, 2);
+
+    // ──── 第 7 行：打开/关闭按钮（原第 6 行）────
     m_openSerialButton = new ElaPushButton("打开串口");
     m_openSerialButton->setFixedHeight(35);
     m_closeSerialButton = new ElaPushButton("关闭串口");
     m_closeSerialButton->setFixedHeight(35);
     m_closeSerialButton->setEnabled(false);
-    grid->addWidget(m_openSerialButton,       5, 0);
-    grid->addWidget(m_closeSerialButton,      5, 1);
+    grid->addWidget(m_openSerialButton,       7, 0);
+    grid->addWidget(m_closeSerialButton,      7, 1);
 
     _SerialSettingLayout1->addWidget(_SerialSettingGroup);
     _SerialSettingLayout1->addStretch();
