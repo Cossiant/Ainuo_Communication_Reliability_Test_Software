@@ -1,5 +1,6 @@
 // NetworkWork.cpp
-// 精确定时实现：1ms QTimer轮询 + QElapsedTimer + 微秒忙等 + EMA补偿
+// 精确延时：1ms QTimer轮询 + QElapsedTimer + 微秒忙等 + EMA补偿
+// ★ 对齐 GPIBWork：计时起点移到 write 之前 + forceRead 判断
 
 #include "NetworkWork.h"
 #include <QDebug>
@@ -217,10 +218,12 @@ void NetworkWork::sendString(const QString &text, bool hexMode)
 
 // ═══════════════════════════════════════════════════════════════
 //  ★★★ 核心：发送 + 1ms轮询精确延时 + 微秒忙等 + EMA补偿 ★★★
+//  ★ 对齐 GPIBWork：计时起点在 write 之前 + forceRead 控制读取
 // ═══════════════════════════════════════════════════════════════
 void NetworkWork::sendStringWithDelay(const QString &text, bool hexMode,
                                       const QByteArray &expectedResponse,
-                                      int delayMs)
+                                      int delayMs,
+                                      bool forceRead)
 {
     if (!isOpen() || text.isEmpty() || !m_tcpSocket)
         return;
@@ -237,42 +240,89 @@ void NetworkWork::sendStringWithDelay(const QString &text, bool hexMode,
         data = text.toUtf8();
     }
 
+    // ★ 对齐 GPIB：在 write 之前启动高精度计时
+    //    delayMs > 0 时才启动，delayMs == 0 时跳过整个延时逻辑
+    if (delayMs > 0) {
+        m_originalDelayMs = delayMs;
+        m_preciseDelayTimer.start();
+    }
+
     // ── 发送 ──
     qint64 written = m_tcpSocket->write(data);
     if (written == -1) {
         emit errorOccurred(QString("发送失败: %1").arg(m_tcpSocket->errorString()));
+
+        // ★ 发送失败但照样启动延时（保持与 GPIB 行为一致）
+        if (delayMs > 0) {
+            int compensatedMs = delayMs + m_timingCompensationMs;
+            if (compensatedMs < 0) compensatedMs = 0;
+
+            const int MAX_COMPENSATION = 100;
+            m_timingCompensationMs = qBound(-MAX_COMPENSATION,
+                                             m_timingCompensationMs,
+                                             MAX_COMPENSATION);
+
+            m_targetDelayMs   = compensatedMs;
+            m_interCmdTimer->start();
+        } else {
+            emit interCmdDelayFinished();
+        }
         return;
     }
 
-    // ★ 关键：等待数据刷新到 TCP 栈，消除发送侧的随机延迟
+    // ★ 等待数据刷新到 TCP 栈，消除发送侧的随机延迟
     if (m_tcpSocket->state() == QAbstractSocket::ConnectedState) {
-        m_tcpSocket->waitForBytesWritten(1);  // 最多等1ms
+        m_tcpSocket->waitForBytesWritten(1);
     }
 
     QString timeStr = QDateTime::currentDateTime().toString("HH:mm:ss.zzz");
     QString display = formatByteArray(data);
     emit sendLogLine(QString("[%1] TX → %2").arg(timeStr, display));
 
+    // ★ 对齐 GPIB：forceRead 控制是否需要等待设备回复
+    //   forceRead=true（捕获模式）→ 等待 readyRead 异步回调
+    //   forceRead=false 且期望非空 → 等待 readyRead 用于校验
+    //   forceRead=false 且期望为空 → 设置命令，立即 emit 空响应
+    bool shouldRead = forceRead || !m_expectedResponse.isEmpty();
+
+    if (!shouldRead) {
+        // ★ 无期望响应也不强制读取 → 发出空响应信号让流程继续
+        //    对齐 GPIBWork：emit responseReceived(QByteArray())
+        emit responseReceived(QByteArray());
+    }
+    // shouldRead 时：不额外处理，由 readyRead → onReadyRead → emitData → responseReceived 异步完成
+
     // ═══════════════════════════════════════════════════════════
-    //  精确延时（1ms轮询 + 微秒忙等 + EMA补偿）
+    //  精确延时（对齐 GPIB：计时起点在 write 之前）
+    //  delayMs == 0 → 直接 emit interCmdDelayFinished()
+    //  delayMs >  0 → 计算剩余时间，启动 1ms 轮询
     // ═══════════════════════════════════════════════════════════
     if (delayMs > 0) {
-        // 第1步：EMA补偿
-        int compensatedMs = delayMs + m_timingCompensationMs;
-        if (compensatedMs < 0) compensatedMs = 0;
+        qint64 alreadyElapsed = m_preciseDelayTimer.elapsed();
 
-        // 钳位补偿范围 ±100ms，防止单次异常抖动
-        const int MAX_COMPENSATION = 100;
-        m_timingCompensationMs = qBound(-MAX_COMPENSATION,
-                                         m_timingCompensationMs,
-                                         MAX_COMPENSATION);
+        if (alreadyElapsed >= delayMs) {
+            // write + waitForBytesWritten 已经消耗了所有延时
+            emit interCmdDelayFinished();
+        } else {
+            // 计算剩余需要等待的时间
+            int remainingMs = static_cast<int>(delayMs - alreadyElapsed);
 
-        // 第2步：启动1ms轮询 + 记录起始时间
-        m_targetDelayMs   = compensatedMs;
-        m_originalDelayMs = delayMs;
-        m_preciseDelayTimer.start();
-        m_interCmdTimer->start();  // 每1ms触发 onInterCmdDelay()
+            // EMA 补偿
+            int compensatedMs = remainingMs + m_timingCompensationMs;
+            if (compensatedMs < 0) compensatedMs = 0;
+
+            // 钳位补偿范围 ±100ms
+            const int MAX_COMPENSATION = 100;
+            m_timingCompensationMs = qBound(-MAX_COMPENSATION,
+                                             m_timingCompensationMs,
+                                             MAX_COMPENSATION);
+
+            // m_targetDelayMs = 从计时起点算起的绝对目标时间（毫秒）
+            m_targetDelayMs = static_cast<int>(alreadyElapsed + compensatedMs);
+            m_interCmdTimer->start();  // 每1ms触发 onInterCmdDelay()
+        }
     } else {
+        // delayMs == 0：无需等待，立即通知主线程
         emit interCmdDelayFinished();
     }
 }
@@ -290,12 +340,8 @@ void NetworkWork::onInterCmdDelay()
     }
 
     // ★ 距离目标 ≤1ms：进入忙等自旋，精准命中
-    //   用 nsecsElapsed() 获得纳秒级精度（QElapsedTimer 内部用 QPC）
     while (m_preciseDelayTimer.elapsed() < m_targetDelayMs) {
         // 自旋等待，不做任何事
-        // 在 Windows上 QElapsedTimer 基于 QueryPerformanceCounter，
-        // 精度可达微秒级。1ms 的自旋 ≈ 3,000,000 个 CPU 周期（3GHz），
-        // 开销极小。
     }
 
     // ★ 停止轮询

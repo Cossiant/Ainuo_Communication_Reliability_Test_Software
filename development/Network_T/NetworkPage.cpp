@@ -151,18 +151,16 @@ NetworkPage::NetworkPage(ElaWindow *mainWindow, QObject *parent)
         LED::setLED(m_networkLED, 0, 16);
     });
 
-    // ⑦ 错误提示
-    // ★ 修复：只在 m_isConnecting 为 true 时弹窗，防止与超时弹窗冲突
+    // ⑦ 错误提示（静默，不弹窗 — 对齐 GPIB）
     connect(m_networkWork, &NetworkWork::errorOccurred, this, [this](const QString &msg) {
         bool wasConnecting = m_isConnecting;
         m_isConnecting = false;
         m_connectTimeoutTimer->stop();
 
-        // ★ 只有在连接等待阶段才弹错误框，避免与超时弹窗重复
+        // ★ 静默记录，不弹窗打断用户批量操作
         if (wasConnecting) {
-            QMessageBox::critical(m_mainWindow, "网络错误", msg);
+            qDebug() << "NetworkPage: 连接阶段错误 -" << msg;
         } else {
-            // 非连接阶段的错误（如发送失败等），静默记录即可
             qDebug() << "NetworkPage: 非连接阶段错误 -" << msg;
         }
     });

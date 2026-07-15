@@ -1,5 +1,6 @@
 // NetworkWork.h
-// 精确定时版：1ms QTimer轮询 + QElapsedTimer + 微秒忙等 + EMA误差补偿
+// 精确延时：1ms QTimer轮询 + QElapsedTimer + 微秒忙等 + EMA补偿
+// ★ 对齐 GPIBWork：sendStringWithDelay 添加 forceRead 参数
 
 #ifndef UNTITLED_NETWORKWORK_H
 #define UNTITLED_NETWORKWORK_H
@@ -31,9 +32,14 @@ public slots:
     void disconnectFromHost();
     void sendData(const QByteArray &data);
     void sendString(const QString &text, bool hexMode);
+
+    // ★ forceRead: true=必须等待设备回复（捕获模式），
+    //              false=仅在 expectedResponse 非空时等待回复
     void sendStringWithDelay(const QString &text, bool hexMode,
                              const QByteArray &expectedResponse,
-                             int delayMs);
+                             int delayMs,
+                             bool forceRead = false);
+
     void resetRecvCount();
     void setExpectedResponse(const QByteArray &expected);
     void setHexDisplayMode(bool hexMode);
@@ -59,7 +65,6 @@ private slots:
 private:
     QString formatByteArray(const QByteArray &data) const;
     void emitData(const QByteArray &data);
-    void startPreciseDelay(int effectiveMs, int originalMs);
 
     QTcpSocket  *m_tcpSocket     = nullptr;
 

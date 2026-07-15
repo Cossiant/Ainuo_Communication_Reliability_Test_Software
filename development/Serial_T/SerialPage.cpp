@@ -158,7 +158,7 @@ SerialPage::SerialPage(ElaWindow *mainWindow, QObject *parent)
 
     // ⑦ 错误提示
     connect(m_serialWork, &SerialWork::errorOccurred, this, [this](const QString &msg) {
-        QMessageBox::critical(m_mainWindow, "串口错误", msg);
+        qDebug() << "SerialPage: 串口错误 -" << msg;
     });
 
     // ⑧ 发送日志行 → 写入两个 QListWidget

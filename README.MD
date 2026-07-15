@@ -1,6 +1,6 @@
 # Ainuo 通用通讯可靠性测试软件
 
-[![Version](https://img.shields.io/badge/version-v3.4.7-blue)](https://github.com)
+[![Version](https://img.shields.io/badge/version-v3.4.8-blue)](https://github.com)
 [![Qt](https://img.shields.io/badge/Qt-5.15-green)](https://www.qt.io/)
 [![License](https://img.shields.io/badge/license-MIT-orange)](LICENSE)
 
@@ -17,13 +17,13 @@
 | 模块 | 说明 |
 |------|------|
 | 🔌 **串口通讯** | RS-232 / RS-485，波特率/数据位/停止位/校验位可配置，支持 HEX/ASCII 模式 |
-| 🌐 **网口通讯** | TCP 客户端，支持 Nagle 算法禁用（低延迟），3 秒连接超时保护 |
+| 🌐 **网口通讯** | TCP 客户端，支持 Nagle 算法禁用（低延迟），静默超时断开 |
 | 🔬 **GPIB 通讯** | 基于 NI-VISA，支持板卡号/主副地址配置、发送后缀(无/CR/LF/CRLF)、EOI 信号、结束字符控制、连接超时保护 |
 | 🚗 **CAN 通讯** | 预留接口，后续版本完善 |
 | 📊 **Excel 批量发送** | 读取 .xlsx 命令表，自动逐条发送、校验响应、标记超时/内容错误 |
 | 📝 **单条命令调试** | 独立发送页，实时查看收发日志（毫秒级时间戳） |
 | 📈 **错误统计** | 6 列详细错误列表（序号/时间/类型/命令/期望值/实际值），颜色区分超时(橙)与内容错误(红) |
-| ⏱️ **精确延时** | 1ms 精度命令间隔控制，EMA 误差补偿算法 |
+| ⏱️ **精确延时** | 1ms 精度命令间隔控制，EMA 误差补偿算法，计时起点在 I/O 前（TX→TX 间隔 = max(I/O耗时, 设定延时)） |
 | 🧵 **多线程架构** | I/O 操作独立工作线程，UI 完全无阻塞 |
 | 🎨 **现代 UI** | 基于 ElaWidgetTools 的 Fluent Design 风格，支持明暗主题切换 |
 
@@ -148,7 +148,7 @@ cmake --build . --target untitled -j 14
 2. 按模板填写命令表：
 
    | 发送的命令 (A) | 正确的返回值 (B) | 到下一条命令的时间ms (C) |
-   |---------------|-----------------|------------------------|
+      |---------------|-----------------|------------------------|
    | `*IDN?` | 期望的返回值 | 50 |
    | `MEAS:VOLT:DC?` | （留空=不校验） | 200 |
 
@@ -157,7 +157,7 @@ cmake --build . --target untitled -j 14
 5. 点击 **「开始发送」** 启动批量测试
 6. 在 **「发送日志」** 和 **「错误统计」** 页面实时监控
 
-> 💡 **设置命令（无回复）:** 对于 `*RST`、`CONF:VOLT:DC 10` 等电源不回复的设置命令，只需将 B 列留空，软件会自动跳过等待回复，仅按 C 列延时后发送下一条。查询命令（如 `*IDN?`）在 B 列填写期望值即可自动校验。
+> 💡 **设置命令（无回复）:** 对于 `*RST`、`CONF:VOLT:DC 10` 等设备不回复的设置命令，只需将 B 列留空，软件会自动识别并在 Work 层 emit 空响应，仅按 C 列延时后立即发送下一条。查询命令（如 `*IDN?`）在 B 列填写期望值即可自动校验。
 
 ### 4. 读取返回值模式
 
@@ -199,7 +199,7 @@ GPIB 设置页中新增「发送后缀」下拉框，支持以下选项：
 ```
 
 - **XxxPage:** 页面 UI 创建 + 信号连接管理
-- **XxxWork:** 独立工作线程中的 I/O 操作（串口/网口/GPIB）
+- **XxxWork:** 独立工作线程中的 I/O 操作（串口/网口/GPIB），负责 forceRead 判断 + 精确延时
 - **XxxExcel:** 主线程中的批量发送流程控制 + 校验逻辑
 - **线程通讯:** 所有跨线程调用使用 `QMetaObject::invokeMethod(Qt::QueuedConnection)`
 
@@ -216,6 +216,14 @@ GPIB 设置页中新增「发送后缀」下拉框，支持以下选项：
 ---
 
 ## 📝 更新日志
+
+### V3.4.8 (2026-07)
+
+- 🔧 **串口/网口 `sendStringWithDelay` 架构对齐 GPIB：** 新增 `forceRead` 参数，设置命令（B 列为空 + 非捕获模式）的识别逻辑从 Excel 层收归 Work 层处理，三模块架构完全统一
+- ⚡ **串口/网口精确延时计时起点前移：** 高精度计时器在 `write` 之前启动（对齐 GPIB），TX→TX 实际间隔 = max(I/O 耗时, 设定延时)，消除额外累积偏差
+- 🔧 **串口/网口 Excel 批量发送流程统一：** 始终启动超时定时器，设置命令由 Work 层 emit 空响应驱动 `m_gotReply=true`，消除 Excel 层的特殊分支判断（`m_expectData.isEmpty() && !m_isCaptureMode`）
+- 🔇 **网口连接超时/错误弹窗静默化：** `QMessageBox` 弹窗改为 `qDebug()` 静默日志，批量发送时不再被弹窗中断用户操作
+- 📐 **三模块 `sendStringWithDelay` 函数签名统一**：SerialWork / NetworkWork / GPIBWork 均采用 `(text, hexMode, expectedResponse, delayMs, forceRead)` 五参数签名
 
 ### V3.4.7 (2026-07)
 

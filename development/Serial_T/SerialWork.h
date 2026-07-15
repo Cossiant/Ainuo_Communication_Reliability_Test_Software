@@ -1,5 +1,5 @@
 // SerialWork.h
-// ★ 升级：1ms 轮询 + 微秒忙等 + EMA 误差补偿（对齐 NetworkWork）
+// ★ 对齐 GPIBWork：sendStringWithDelay 添加 forceRead 参数
 
 #ifndef UNTITLED_SERIALWORK_H
 #define UNTITLED_SERIALWORK_H
@@ -39,12 +39,12 @@ public slots:
     void sendData(const QByteArray &data);
     void sendString(const QString &text, bool hexMode);
 
-    // ★ 发送命令 + 在工作线程启动精确延时（1ms轮询+忙等+EMA补偿）
-    // expectedResponse: 期望返回值（传回主线程比对）
-    // delayMs: 命令间隔（C 列），在工作线程用 PreciseTimer 计时
+    // ★ forceRead: true=必须等待设备回复（捕获模式），
+    //              false=仅在 expectedResponse 非空时等待回复
     void sendStringWithDelay(const QString &text, bool hexMode,
                              const QByteArray &expectedResponse,
-                             int delayMs);
+                             int delayMs,
+                             bool forceRead = false);
 
     void resetRecvCount();
     void setExpectedResponse(const QByteArray &expected);
@@ -87,7 +87,7 @@ private:
     QAtomicInt m_opened{0};
 
     // ═══════════════════════════════════════════════
-    //  精确延时 + 误差补偿（对齐 NetworkWork）
+    //  精确延时 + 误差补偿（对齐 GPIBWork / NetworkWork）
     // ═══════════════════════════════════════════════
     QElapsedTimer m_preciseDelayTimer;                // 高精度计时
     int           m_targetDelayMs        = 0;         // 本次补偿后目标（ms）

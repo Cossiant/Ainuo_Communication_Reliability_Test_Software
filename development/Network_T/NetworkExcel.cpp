@@ -174,12 +174,16 @@ void NetworkExcel::onTrySendNext()
         m_expectData.replace("\n", "");
     }
 
+    // ★ 对齐 GPIB：传递 forceRead 参数
+    //    捕获模式 → forceRead=true（必须等待设备回复）
+    //    普通模式 → forceRead=false（仅在期望值非空时等待）
     QMetaObject::invokeMethod(m_work, "sendStringWithDelay",
                               Qt::QueuedConnection,
                               Q_ARG(QString, cmdText),
                               Q_ARG(bool, hexMode),
                               Q_ARG(QByteArray, m_expectData),
-                              Q_ARG(int, delayMs));
+                              Q_ARG(int, delayMs),
+                              Q_ARG(bool, m_isCaptureMode));   // ★ forceRead
 
     m_totalSent++;
     m_page->m_logSentCountCard->setValue(QString::number(m_totalSent));
@@ -188,14 +192,10 @@ void NetworkExcel::onTrySendNext()
     m_gotReply   = false;
     m_minDelayOk = false;
 
-    // ★ 设置命令（预期回复为空且非捕获模式）：
-    //    设备不会回复，直接标记 m_gotReply=true，
-    //    等延时到期后立即发下一条，不做判断
-    if (m_expectData.isEmpty() && !m_isCaptureMode) {
-        m_gotReply = true;
-    } else {
-        m_timeoutTimer->start(globalTimeout);
-    }
+    // ★ 对齐 GPIB：始终启动超时定时器
+    //    设置命令（expected 为空 + 非捕获）由 Work 层 emit 空 response，
+    //    触发 onResponseReceived → m_gotReply=true，不会误判超时
+    m_timeoutTimer->start(globalTimeout);
 }
 
 // ═══════════════════════════════════════════════ 收到回复 ═══
