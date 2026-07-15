@@ -1,5 +1,6 @@
 // SerialWork.h
-// ★ 升级：1ms 轮询 + 微秒忙等 + EMA 误差补偿（对齐 NetworkWork）
+// ★ 对齐 GPIBWork：sendStringWithDelay 添加 forceRead 参数
+// ★ 新增：发送后缀功能
 
 #ifndef UNTITLED_SERIALWORK_H
 #define UNTITLED_SERIALWORK_H
@@ -26,9 +27,6 @@ public:
     int  timingCompensationMs() const { return m_timingCompensationMs; }
 
 public slots:
-    // ═══════════════════════════════════════════════════
-    //  所有可能从主线程调用的写操作必须是 slot
-    // ═══════════════════════════════════════════════════
     void openSerialPort(const QString &portName,
                         int baudRate,
                         QSerialPort::DataBits dataBits,
@@ -39,16 +37,17 @@ public slots:
     void sendData(const QByteArray &data);
     void sendString(const QString &text, bool hexMode);
 
-    // ★ 发送命令 + 在工作线程启动精确延时（1ms轮询+忙等+EMA补偿）
-    // expectedResponse: 期望返回值（传回主线程比对）
-    // delayMs: 命令间隔（C 列），在工作线程用 PreciseTimer 计时
+    // ★ forceRead: true=必须等待设备回复（捕获模式），
+    //              false=仅在 expectedResponse 非空时等待回复
     void sendStringWithDelay(const QString &text, bool hexMode,
                              const QByteArray &expectedResponse,
-                             int delayMs);
+                             int delayMs,
+                             bool forceRead = false);
 
     void resetRecvCount();
     void setExpectedResponse(const QByteArray &expected);
     void setHexDisplayMode(bool hexMode);
+    void setSuffixMode(int mode);   // ★ 新增：设置发送后缀模式
 
 signals:
     void serialOpened();
@@ -73,6 +72,9 @@ private:
     QString formatByteArray(const QByteArray &data) const;
     void emitData(const QByteArray &data);
 
+    // ★ 新增：统一构建发送数据（unescape → 去尾 → 加后缀）
+    QByteArray buildSendData(const QString &text, bool hexMode) const;
+
     QSerialPort *m_serialPort   = nullptr;
     QTimer      *m_bufferTimer  = nullptr;
     QTimer      *m_interCmdTimer = nullptr;   // ★ 命令间隔定时器（工作线程，1ms轮询）
@@ -84,10 +86,12 @@ private:
     QByteArray m_expectedResponse;
     bool       m_hexDisplay = false;
 
+    int        m_suffixMode = 0;   // ★ 新增：发送后缀模式 0=None, 1=CR, 2=LF, 3=CRLF
+
     QAtomicInt m_opened{0};
 
     // ═══════════════════════════════════════════════
-    //  精确延时 + 误差补偿（对齐 NetworkWork）
+    //  精确延时 + 误差补偿（对齐 GPIBWork / NetworkWork）
     // ═══════════════════════════════════════════════
     QElapsedTimer m_preciseDelayTimer;                // 高精度计时
     int           m_targetDelayMs        = 0;         // 本次补偿后目标（ms）

@@ -77,6 +77,12 @@ private:
     ElaPushButton* m_openNetworkButton       = nullptr;
     ElaPushButton* m_closeNetworkButton      = nullptr;
     QLabel*        m_networkLED              = nullptr;
+    // ★ 发送后缀（新增）
+    ElaComboBox*   m_suffixComboBox          = nullptr;
+
+    // ★ 粘包分割（新增）
+    ElaCheckBox*   m_networkSplitStickyCheckBox    = nullptr;
+    ElaComboBox*   m_networkSplitDelimiterComboBox = nullptr;
 
     // ★ 连接超时定时器（主线程，3 秒）
     QTimer*        m_connectTimeoutTimer     = nullptr;

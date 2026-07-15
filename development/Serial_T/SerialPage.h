@@ -81,6 +81,14 @@ private:
     ElaPushButton* m_openSerialButton  = nullptr;
     ElaPushButton* m_closeSerialButton = nullptr;
     QLabel*        m_serialLED         = nullptr;
+    // 发送后缀
+    ElaComboBox*   m_suffixComboBox    = nullptr;
+
+    // 粘包分割
+    ElaCheckBox*  m_serialSplitStickyCheckBox    = nullptr;
+    ElaComboBox*  m_serialSplitDelimiterComboBox = nullptr;
+
+
 
     // ═════════════ 单条发送控件 ═════════
     ElaLineEdit*   m_singleSendInput   = nullptr;

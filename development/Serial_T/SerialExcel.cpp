@@ -11,19 +11,18 @@
 #include <QTableWidgetItem>
 #include <QDateTime>
 
-SerialExcel::SerialExcel(SerialPage* page, QObject *parent)
-    : QObject(parent), m_page(page), m_work(page->m_serialWork)
-{
+SerialExcel::SerialExcel(SerialPage *page, QObject *parent)
+    : QObject(parent), m_page(page), m_work(page->m_serialWork) {
     connect(m_page->m_excelDownloadTplBtn, &ElaPushButton::clicked, this, &SerialExcel::onDownloadTemplate);
-    connect(m_page->m_excelOpenBtn,        &ElaPushButton::clicked, this, &SerialExcel::onOpenExcel);
-    connect(m_page->m_excelCaptureBtn,     &ElaPushButton::clicked, this, &SerialExcel::onCapture);
-    connect(m_page->m_excelSendBtn,        &ElaPushButton::clicked, this, &SerialExcel::onStartSend);
-    connect(m_page->m_excelStopBtn,        &ElaPushButton::clicked, this, &SerialExcel::onStopSend);
+    connect(m_page->m_excelOpenBtn, &ElaPushButton::clicked, this, &SerialExcel::onOpenExcel);
+    connect(m_page->m_excelCaptureBtn, &ElaPushButton::clicked, this, &SerialExcel::onCapture);
+    connect(m_page->m_excelSendBtn, &ElaPushButton::clicked, this, &SerialExcel::onStartSend);
+    connect(m_page->m_excelStopBtn, &ElaPushButton::clicked, this, &SerialExcel::onStopSend);
 
     // 全局超时定时器（仍在主线程，超时不需要高精度）
     m_timeoutTimer = new QTimer(this);
     m_timeoutTimer->setSingleShot(true);
-    m_timeoutTimer->setTimerType(Qt::PreciseTimer);   // 顺手也精确化
+    m_timeoutTimer->setTimerType(Qt::PreciseTimer); // 顺手也精确化
     connect(m_timeoutTimer, &QTimer::timeout, this, &SerialExcel::onGlobalTimeout);
 
     // ★ responseReceived 来自工作线程，自动 QueuedConnection
@@ -33,14 +32,12 @@ SerialExcel::SerialExcel(SerialPage* page, QObject *parent)
     connect(m_work, &SerialWork::interCmdDelayFinished, this, &SerialExcel::onInterCmdDelayFinished);
 }
 
-SerialExcel::~SerialExcel()
-{
+SerialExcel::~SerialExcel() {
     m_timeoutTimer->stop();
     m_isRunning = false;
 }
 
-void SerialExcel::setRunning(bool running)
-{
+void SerialExcel::setRunning(bool running) {
     m_isRunning = running;
     m_page->m_excelCaptureBtn->setEnabled(!running);
     m_page->m_excelSendBtn->setEnabled(!running);
@@ -51,21 +48,20 @@ void SerialExcel::setRunning(bool running)
 }
 
 // ═══════════════════════════════════════════════ ★ 读取返回值（捕获模式） ═══
-void SerialExcel::onCapture()
-{
+void SerialExcel::onCapture() {
     if (m_isRunning || !m_work || !m_work->isOpen()) return;
 
-    QTableWidget* table = m_page->m_excelTableWidget;
+    QTableWidget *table = m_page->m_excelTableWidget;
     int rowCount = table->rowCount();
     if (rowCount == 0) return;
 
     setRunning(true);
 
-    m_isCaptureMode = true;       // ★ 进入捕获模式
-    m_currentRow    = 0;
-    m_repeatLeft    = -1;         // 不限次数，由行数控制结束
-    m_totalSent     = 0;
-    m_pendingStop   = false;
+    m_isCaptureMode = true; // ★ 进入捕获模式
+    m_currentRow = 0;
+    m_repeatLeft = -1; // 不限次数，由行数控制结束
+    m_totalSent = 0;
+    m_pendingStop = false;
 
     m_page->clearExcelSendLog();
     m_page->m_logStartTimeCard->setValue(QDateTime::currentDateTime().toString("HH:mm:ss"));
@@ -74,8 +70,7 @@ void SerialExcel::onCapture()
 }
 
 // ═══════════════════════════════════════════════ 开始发送 ═══
-void SerialExcel::onStartSend()
-{
+void SerialExcel::onStartSend() {
     if (m_isRunning || !m_work || !m_work->isOpen()) return;
     if (m_page->m_excelTableWidget->rowCount() == 0) return;
 
@@ -84,11 +79,11 @@ void SerialExcel::onStartSend()
 
     setRunning(true);
 
-    m_isCaptureMode = false;      // ★ 普通发送模式
-    m_currentRow    = 0;
-    m_repeatLeft    = count;
-    m_totalSent     = 0;
-    m_pendingStop   = false;
+    m_isCaptureMode = false; // ★ 普通发送模式
+    m_currentRow = 0;
+    m_repeatLeft = count;
+    m_totalSent = 0;
+    m_pendingStop = false;
 
     m_page->clearExcelSendLog();
     m_page->m_logStartTimeCard->setValue(QDateTime::currentDateTime().toString("HH:mm:ss"));
@@ -96,12 +91,11 @@ void SerialExcel::onStartSend()
     onTrySendNext();
 }
 
-// ═══════════════════════════════════════════════ 停止 ═══
-void SerialExcel::onStopSend()
-{
+void SerialExcel::onStopSend() {
     m_timeoutTimer->stop();
     m_waiting = false;
-    m_isCaptureMode = false;       // ★ 退出捕获模式
+    m_isCaptureMode = false; // ★ 退出捕获模式
+    m_stickyQueue.clear(); // ★ 清空粘包队列
 
     // 清除期望值（跨线程）
     QMetaObject::invokeMethod(m_work, "setExpectedResponse",
@@ -112,14 +106,20 @@ void SerialExcel::onStopSend()
     qDebug() << "SerialExcel: 发送已停止，总计" << m_totalSent << "条";
 }
 
-// ═══════════════════════════════════════════════ 统一入口 ═══
-void SerialExcel::onTrySendNext()
-{
-    if (!m_isRunning || !m_work || !m_work->isOpen()) { onStopSend(); return; }
 
-    QTableWidget* table = m_page->m_excelTableWidget;
+// ═══════════════════════════════════════════════ 统一入口 ═══
+void SerialExcel::onTrySendNext() {
+    if (!m_isRunning || !m_work || !m_work->isOpen()) {
+        onStopSend();
+        return;
+    }
+
+    QTableWidget *table = m_page->m_excelTableWidget;
     int rowCount = table->rowCount();
-    if (rowCount == 0) { onStopSend(); return; }
+    if (rowCount == 0) {
+        onStopSend();
+        return;
+    }
 
     // ★ 捕获模式：所有行都发送完毕 → 停止
     if (m_isCaptureMode && m_currentRow >= rowCount) {
@@ -142,13 +142,13 @@ void SerialExcel::onTrySendNext()
     }
 
     // 读表格
-    QTableWidgetItem* cmdItem    = table->item(m_currentRow, 0);
-    QTableWidgetItem* expectItem = table->item(m_currentRow, 1);
-    QTableWidgetItem* delayItem  = table->item(m_currentRow, 2);
+    QTableWidgetItem *cmdItem = table->item(m_currentRow, 0);
+    QTableWidgetItem *expectItem = table->item(m_currentRow, 1);
+    QTableWidgetItem *delayItem = table->item(m_currentRow, 2);
 
-    QString cmdText     = cmdItem    ? cmdItem->text().trimmed()    : "";
+    QString cmdText = cmdItem ? cmdItem->text().trimmed() : "";
     QString expectedStr = expectItem ? expectItem->text().trimmed() : "";
-    int delayMs         = delayItem  ? delayItem->text().toInt()    : 100;
+    int delayMs = delayItem ? delayItem->text().toInt() : 100;
     if (delayMs < 0) delayMs = 100;
 
     int globalTimeout = m_page->m_excelTimeoutMs->text().toInt();
@@ -160,12 +160,53 @@ void SerialExcel::onTrySendNext()
     }
 
     m_currentRow++;
-
     if (cmdText.isEmpty()) {
         onTrySendNext();
         return;
     }
 
+    // ★ 粘包队列消费：队列非空时，不发真实命令，直接消费队列数据
+    if (m_page->m_serialSplitStickyCheckBox
+        && m_page->m_serialSplitStickyCheckBox->isChecked()
+        && !m_stickyQueue.isEmpty()) {
+        QByteArray queuedData = m_stickyQueue.dequeue();
+        m_totalSent++;
+        m_page->m_logSentCountCard->setValue(QString::number(m_totalSent));
+
+        m_waiting = true;
+        m_gotReply = true; // 已有数据，无需等硬件回复
+        m_minDelayOk = false;
+        m_lastRecvData = queuedData;
+        m_timeoutTimer->start(globalTimeout);
+
+        if (m_isCaptureMode) {
+            fillCaptureResult(queuedData);
+        }
+
+        QByteArray cmpData = queuedData;
+        bool hexMode = m_page->m_serialHexSendCheckBox->isChecked();
+        if (!hexMode && m_page->m_serialStripCRLFCheckBox->isChecked()) {
+            cmpData.replace("\r", "");
+            cmpData.replace("\n", "");
+        }
+        if (!m_expectData.isEmpty() && cmpData != m_expectData) {
+            m_page->addContentError(m_lastCmd, m_expectData, cmpData);
+        }
+
+        // 仍需遵守命令间隔延时
+        if (delayMs > 0) {
+            QTimer::singleShot(delayMs, this, [this]() {
+                if (m_waiting) {
+                    m_minDelayOk = true;
+                    finalizeAndNext();
+                }
+            });
+        } else {
+            m_minDelayOk = true;
+            finalizeAndNext();
+        }
+        return;
+    }
     // 解析期望值
     bool hexMode = m_page->m_serialHexSendCheckBox->isChecked();
     if (expectedStr.isEmpty()) {
@@ -175,8 +216,9 @@ void SerialExcel::onTrySendNext()
         QString unescaped = expectedStr;
         unescaped.replace(QLatin1String("\\r"), QLatin1String("\r"));
         unescaped.replace(QLatin1String("\\n"), QLatin1String("\n"));
-        m_expectData = hexMode ? QByteArray::fromHex(unescaped.toLatin1())
-                               : unescaped.toUtf8();
+        m_expectData = hexMode
+                           ? QByteArray::fromHex(unescaped.toLatin1())
+                           : unescaped.toUtf8();
     }
     m_lastCmd = cmdText;
 
@@ -186,24 +228,24 @@ void SerialExcel::onTrySendNext()
         m_expectData.replace("\n", "");
     }
 
-    // ★ 方案三：一次 invokeMethod 完成"发送 + 期望值 + 工作线程精确延时"
-    // 消除了原先两次 invokeMethod + 主线程定时器抖动的开销
+    // ★ 对齐 GPIB：传递 forceRead 参数
     QMetaObject::invokeMethod(m_work, "sendStringWithDelay",
                               Qt::QueuedConnection,
                               Q_ARG(QString, cmdText),
                               Q_ARG(bool, hexMode),
                               Q_ARG(QByteArray, m_expectData),
-                              Q_ARG(int, delayMs));
+                              Q_ARG(int, delayMs),
+                              Q_ARG(bool, m_isCaptureMode)); // ★ forceRead
 
     m_totalSent++;
     m_page->m_logSentCountCard->setValue(QString::number(m_totalSent));
 
     // 进入等待
-    m_waiting    = true;
-    m_gotReply   = false;
+    m_waiting = true;
+    m_gotReply = false;
     m_minDelayOk = false;
 
-    // 全局超时仍在主线程计时
+    // ★ 对齐 GPIB：始终启动超时定时器
     m_timeoutTimer->start(globalTimeout);
 }
 
@@ -211,6 +253,34 @@ void SerialExcel::onTrySendNext()
 void SerialExcel::onResponseReceived(QByteArray data)
 {
     if (!m_waiting) return;
+
+    // ★ 粘包分割：按分隔符拆分，第一段用于当前比对，剩余入队
+    bool splitMode = m_page->m_serialSplitStickyCheckBox
+                     && m_page->m_serialSplitStickyCheckBox->isChecked();
+    if (splitMode && !data.isEmpty()) {
+        QByteArray delim = stickyDelimiter();
+        QList<QByteArray> parts;
+        int start = 0;
+        int dlen  = delim.size();
+        while (start < data.size()) {
+            int idx = data.indexOf(delim, start);
+            if (idx == -1) {
+                QByteArray remaining = data.mid(start);
+                if (!remaining.isEmpty())
+                    parts.append(remaining);
+                break;
+            }
+            QByteArray segment = data.mid(start, idx - start + dlen);
+            if (!segment.isEmpty())
+                parts.append(segment);
+            start = idx + dlen;
+        }
+        if (!parts.isEmpty()) {
+            data = parts.takeFirst();
+            for (const QByteArray &p : parts)
+                m_stickyQueue.enqueue(p);
+        }
+    }
 
     m_gotReply     = true;
     m_lastRecvData = data;
@@ -238,18 +308,17 @@ void SerialExcel::onResponseReceived(QByteArray data)
 }
 
 // ═══════════════════════════════════════════════ ★ 工作线程精确延时到期 ═══
-void SerialExcel::onInterCmdDelayFinished()
-{
+void SerialExcel::onInterCmdDelayFinished() {
     if (!m_waiting) return;
 
     m_minDelayOk = true;
-    // 如果已经收到回复 → 发下一条
+    // ★ 设置命令时 m_gotReply 已在 onTrySendNext 中预设为 true，
+    //    延时到期后立即进入下一条
     if (m_gotReply) finalizeAndNext();
 }
 
 // ═══════════════════════════════════════════════ 全局超时 ═══
-void SerialExcel::onGlobalTimeout()
-{
+void SerialExcel::onGlobalTimeout() {
     if (!m_waiting) return;
 
     // ★ 捕获模式：超时也填入 "(超时)"
@@ -265,8 +334,7 @@ void SerialExcel::onGlobalTimeout()
 }
 
 // ═══════════════════════════════════════════════ 结算 → 下一条 ═══
-void SerialExcel::finalizeAndNext()
-{
+void SerialExcel::finalizeAndNext() {
     m_timeoutTimer->stop();
     m_waiting = false;
 
@@ -279,11 +347,10 @@ void SerialExcel::finalizeAndNext()
 }
 
 // ═══════════════════════════════════════════════ ★ 捕获模式：填入返回值 ═══
-void SerialExcel::fillCaptureResult(const QByteArray &data)
-{
+void SerialExcel::fillCaptureResult(const QByteArray &data) {
     // m_currentRow 已在上一条发送时递增，当前回复对应 row = m_currentRow - 1
     int row = m_currentRow - 1;
-    QTableWidget* table = m_page->m_excelTableWidget;
+    QTableWidget *table = m_page->m_excelTableWidget;
     if (row < 0 || row >= table->rowCount()) return;
 
     bool hexMode = m_page->m_serialHexSendCheckBox->isChecked();
@@ -296,7 +363,7 @@ void SerialExcel::fillCaptureResult(const QByteArray &data)
             displayText = data.toHex(' ').toUpper();
     }
 
-    QTableWidgetItem* item = table->item(row, 1);
+    QTableWidgetItem *item = table->item(row, 1);
     if (!item) {
         item = new QTableWidgetItem();
         table->setItem(row, 1, item);
@@ -311,13 +378,12 @@ void SerialExcel::fillCaptureResult(const QByteArray &data)
 }
 
 // ═══════════════════════════════════════════════ ★ 捕获模式：超时标记 ═══
-void SerialExcel::fillCaptureTimeout()
-{
+void SerialExcel::fillCaptureTimeout() {
     int row = m_currentRow - 1;
-    QTableWidget* table = m_page->m_excelTableWidget;
+    QTableWidget *table = m_page->m_excelTableWidget;
     if (row < 0 || row >= table->rowCount()) return;
 
-    QTableWidgetItem* item = table->item(row, 1);
+    QTableWidgetItem *item = table->item(row, 1);
     if (!item) {
         item = new QTableWidgetItem();
         table->setItem(row, 1, item);
@@ -331,8 +397,7 @@ void SerialExcel::fillCaptureTimeout()
 }
 
 // ═══════════════════════════════════════════════ 打开 Excel 并读取 ═══
-void SerialExcel::onOpenExcel()
-{
+void SerialExcel::onOpenExcel() {
     QString filePath = QFileDialog::getOpenFileName(
         m_page->m_mainWindow,
         "选择 Excel 文件",
@@ -350,8 +415,7 @@ void SerialExcel::onOpenExcel()
 }
 
 // ═══════════════════════════════════════════════ 加载到表格 ═══
-bool SerialExcel::loadExcelToTable(const QString &filePath)
-{
+bool SerialExcel::loadExcelToTable(const QString &filePath) {
     QXlsx::Document xlsx(filePath);
     if (!xlsx.load())
         return false;
@@ -371,7 +435,7 @@ bool SerialExcel::loadExcelToTable(const QString &filePath)
         return false;
     }
 
-    QTableWidget* table = m_page->m_excelTableWidget;
+    QTableWidget *table = m_page->m_excelTableWidget;
     table->clearContents();
     table->setRowCount(0);
     table->setColumnCount(3);
@@ -401,7 +465,7 @@ bool SerialExcel::loadExcelToTable(const QString &filePath)
         }
     }
 
-    bool hasData  = (dataRowCount > 0);
+    bool hasData = (dataRowCount > 0);
     bool portOpen = m_page->m_serialWork && m_page->m_serialWork->isOpen();
     m_page->m_excelSendBtn->setEnabled(hasData && portOpen);
     m_page->m_excelCaptureBtn->setEnabled(hasData && portOpen);
@@ -411,8 +475,7 @@ bool SerialExcel::loadExcelToTable(const QString &filePath)
 }
 
 // ═══════════════════════════════════════════════ 下载模板 ═══
-void SerialExcel::onDownloadTemplate()
-{
+void SerialExcel::onDownloadTemplate() {
     QString defaultPath = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation)
                           + "/串口通讯示例模板.xlsx";
 
@@ -431,8 +494,7 @@ void SerialExcel::onDownloadTemplate()
 }
 
 // ═══════════════════════════════════════════════ 生成模板 ═══
-bool SerialExcel::generateExcelTemplate(const QString &filePath)
-{
+bool SerialExcel::generateExcelTemplate(const QString &filePath) {
     QXlsx::Document xlsx;
 
     QXlsx::Format headerFormat;
@@ -463,25 +525,28 @@ bool SerialExcel::generateExcelTemplate(const QString &filePath)
     delayFormat.setVerticalAlignment(QXlsx::Format::AlignVCenter);
     delayFormat.setBorderStyle(QXlsx::Format::BorderThin);
 
-    xlsx.write(1, 1, "发送的命令",          headerFormat);
-    xlsx.write(1, 2, "正确的返回值",        headerFormat);
+    xlsx.write(1, 1, "发送的命令", headerFormat);
+    xlsx.write(1, 2, "正确的返回值", headerFormat);
     xlsx.write(1, 3, "到下一条命令的时间ms", headerFormat);
 
-    struct Sample { QString command; int delayMs; };
+    struct Sample {
+        QString command;
+        int delayMs;
+    };
     QList<Sample> samples = {
-        {"*IDN?",            50},
-        {"SYST:ERR?",       100},
-        {"MEAS:VOLT:DC?",   200},
+        {"*IDN?", 50},
+        {"SYST:ERR?", 100},
+        {"MEAS:VOLT:DC?", 200},
         {"CONF:VOLT:DC 10", 100},
-        {"READ?",           300},
-        {"SYST:LOC",         50},
-        {"*RST",            500},
+        {"READ?", 300},
+        {"SYST:LOC", 50},
+        {"*RST", 500},
     };
 
     for (int i = 0; i < samples.size(); ++i) {
         int row = i + 2;
         xlsx.write(row, 1, samples[i].command, cmdFormat);
-        xlsx.write(row, 2, "",                 returnFormat);
+        xlsx.write(row, 2, "", returnFormat);
         xlsx.write(row, 3, samples[i].delayMs, delayFormat);
     }
 
@@ -490,4 +555,15 @@ bool SerialExcel::generateExcelTemplate(const QString &filePath)
     xlsx.setColumnWidth(3, 25);
 
     return xlsx.saveAs(filePath);
+}
+
+// ═══════════════════════════════════════════════ ★ 获取粘包分隔符 ═══
+QByteArray SerialExcel::stickyDelimiter() const
+{
+    if (!m_page->m_serialSplitDelimiterComboBox)
+        return QByteArray("\n");
+    QString text = m_page->m_serialSplitDelimiterComboBox->currentText();
+    if (text == "\\r")      return QByteArray("\r");
+    if (text == "\\r\\n")   return QByteArray("\r\n");
+    return QByteArray("\n");
 }
