@@ -350,16 +350,6 @@ void NetworkPage::createSettingsPage() {
     grid->addWidget(m_networkHexSendCheckBox,  2, 0, 1, 2);
     grid->addWidget(m_nagleCheckBox,           2, 2, 1, 2);
 
-    // 发送后缀
-    ElaText* suffixLabel = new ElaText("发送后缀: ");
-    suffixLabel->setTextPixelSize(15);
-    m_suffixComboBox = new ElaComboBox();
-    m_suffixComboBox->addItems({"无 (None)", "CR (\\r)", "LF (\\n)", "CRLF (\\r\\n)"});
-    m_suffixComboBox->setCurrentIndex(0);  // 默认无后缀
-
-    grid->addWidget(suffixLabel,           5, 0);
-    grid->addWidget(m_suffixComboBox,      5, 2, 1, 2);
-
     // 去除 \r\n 勾选框
     m_networkStripCRLFCheckBox = new ElaCheckBox("比对时去除返回值中的 \\r\\n");
     m_networkStripCRLFCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
@@ -376,17 +366,59 @@ void NetworkPage::createSettingsPage() {
     m_networkSplitDelimiterComboBox->setStyleSheet("ElaComboBox { font-size: 14px; }");
     grid->addWidget(m_networkSplitDelimiterComboBox, 4, 2, 1, 2);
 
+    // 发送后缀
+    ElaText* suffixLabel = new ElaText("发送后缀: ");
+    suffixLabel->setTextPixelSize(15);
+    m_suffixComboBox = new ElaComboBox();
+    m_suffixComboBox->addItems({"无 (None)", "CR (\\r)", "LF (\\n)", "CRLF (\\r\\n)"});
+    m_suffixComboBox->setCurrentIndex(0);
+
+    grid->addWidget(suffixLabel,           5, 0);
+    grid->addWidget(m_suffixComboBox,      5, 2, 1, 2);
+
+    // ════════════════════════════════════════════════════════
+    //  ★ 第 6 行：区间判断（新增）
+    // ════════════════════════════════════════════════════════
+    m_networkAsciiRangeCheckBox = new ElaCheckBox("启用ASCII区间判断（如：期望3.00±0.5）");
+    m_networkAsciiRangeCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
+    grid->addWidget(m_networkAsciiRangeCheckBox, 6, 0, 1, 2);
+
+    ElaText* asciiRangeLabel = new ElaText("ASCII区间值:");
+    asciiRangeLabel->setTextPixelSize(15);
+    m_networkAsciiRangeEdit = new ElaLineEdit();
+    m_networkAsciiRangeEdit->setText("0.5");
+    m_networkAsciiRangeEdit->setPlaceholderText("如 0.5 表示 ±0.5");
+    grid->addWidget(asciiRangeLabel,           6, 2);
+    grid->addWidget(m_networkAsciiRangeEdit,    6, 3);
+
+    // ──── ★ 第 7 行：HEX 区间判断（预留）────
+    m_networkHexRangeCheckBox = new ElaCheckBox("启用HEX区间判断（预留）");
+    m_networkHexRangeCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
+    m_networkHexRangeCheckBox->setEnabled(false);
+    grid->addWidget(m_networkHexRangeCheckBox, 7, 0, 1, 2);
+
+    ElaText* hexRangeLabel = new ElaText("HEX区间值:");
+    hexRangeLabel->setTextPixelSize(15);
+    m_networkHexRangeEdit = new ElaLineEdit();
+    m_networkHexRangeEdit->setText("0.5");
+    m_networkHexRangeEdit->setPlaceholderText("预留");
+    m_networkHexRangeEdit->setEnabled(false);
+    grid->addWidget(hexRangeLabel,             7, 2);
+    grid->addWidget(m_networkHexRangeEdit,      7, 3);
+
+    // 连接按钮
     m_openNetworkButton = new ElaPushButton("连接网络");
     m_openNetworkButton->setFixedHeight(35);
     m_closeNetworkButton = new ElaPushButton("断开网络");
     m_closeNetworkButton->setFixedHeight(35);
     m_closeNetworkButton->setEnabled(false);
-    grid->addWidget(m_openNetworkButton,       6, 1);
-    grid->addWidget(m_closeNetworkButton,      6, 3);
+    grid->addWidget(m_openNetworkButton,       8, 1);
+    grid->addWidget(m_closeNetworkButton,      8, 3);
 
     _NetworkSettingLayout1->addWidget(_NetworkSettingGroup);
     _NetworkSettingLayout1->addStretch();
 }
+
 
 // ═══════════════════════════════════════════════════════════════
 //  页面：单条发送

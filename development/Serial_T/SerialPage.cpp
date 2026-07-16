@@ -400,22 +400,12 @@ void SerialPage::createSettingsPage() {
     grid->addWidget(m_serialBufferCheckBox,   3, 0, 1, 2);
     grid->addWidget(m_serialHexSendCheckBox,  3, 2, 1, 2);
 
-    // ★ 新增：第 4 行 — 发送后缀
-    ElaText* suffixLabel = new ElaText("发送后缀:");
-    suffixLabel->setTextPixelSize(15);
-    m_suffixComboBox = new ElaComboBox();
-    m_suffixComboBox->addItems({"无 (None)", "CR (\\r)", "LF (\\n)", "CRLF (\\r\\n)"});
-    m_suffixComboBox->setCurrentIndex(0);  // 默认无后缀
-
-    grid->addWidget(suffixLabel,           6, 0);
-    grid->addWidget(m_suffixComboBox,      6, 2, 1, 2);
-
-    // ──── 第 5 行：去除 \r\n 勾选框（原第 4 行）────
+    // ──── 第 4 行：去除 \r\n 勾选框 ────
     m_serialStripCRLFCheckBox = new ElaCheckBox("比对时去除返回值中的 \\r\\n");
     m_serialStripCRLFCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
     grid->addWidget(m_serialStripCRLFCheckBox, 4, 0, 1, 4);
 
-    // ──── ★ 第 6 行：粘包分割（原第 5 行）────
+    // ──── 第 5 行：粘包分割 ────
     m_serialSplitStickyCheckBox = new ElaCheckBox("启用粘包分割（按分隔符拆分返回值）");
     m_serialSplitStickyCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
     grid->addWidget(m_serialSplitStickyCheckBox, 5, 0, 1, 2);
@@ -426,14 +416,54 @@ void SerialPage::createSettingsPage() {
     m_serialSplitDelimiterComboBox->setStyleSheet("ElaComboBox { font-size: 14px; }");
     grid->addWidget(m_serialSplitDelimiterComboBox, 5, 2, 1, 2);
 
-    // ──── 第 7 行：打开/关闭按钮（原第 6 行）────
+    // ──── 第 6 行：发送后缀 ────
+    ElaText* suffixLabel = new ElaText("发送后缀:");
+    suffixLabel->setTextPixelSize(15);
+    m_suffixComboBox = new ElaComboBox();
+    m_suffixComboBox->addItems({"无 (None)", "CR (\\r)", "LF (\\n)", "CRLF (\\r\\n)"});
+    m_suffixComboBox->setCurrentIndex(0);
+
+    grid->addWidget(suffixLabel,           6, 0);
+    grid->addWidget(m_suffixComboBox,      6, 2, 1, 2);
+
+    // ════════════════════════════════════════════════════════
+    //  ★ 第 7 行：区间判断（新增）
+    // ════════════════════════════════════════════════════════
+    m_serialAsciiRangeCheckBox = new ElaCheckBox("启用ASCII区间判断（如：期望3.00±0.5）");
+    m_serialAsciiRangeCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
+    grid->addWidget(m_serialAsciiRangeCheckBox, 7, 0, 1, 2);
+
+    ElaText* asciiRangeLabel = new ElaText("ASCII区间值:");
+    asciiRangeLabel->setTextPixelSize(15);
+    m_serialAsciiRangeEdit = new ElaLineEdit();
+    m_serialAsciiRangeEdit->setText("0.5");
+    m_serialAsciiRangeEdit->setPlaceholderText("如 0.5 表示 ±0.5");
+    grid->addWidget(asciiRangeLabel,          7, 2);
+    grid->addWidget(m_serialAsciiRangeEdit,    7, 3);
+
+    // ──── ★ 第 8 行：HEX 区间判断（预留）────
+    m_serialHexRangeCheckBox = new ElaCheckBox("启用HEX区间判断（预留）");
+    m_serialHexRangeCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
+    m_serialHexRangeCheckBox->setEnabled(false);
+    grid->addWidget(m_serialHexRangeCheckBox, 8, 0, 1, 2);
+
+    ElaText* hexRangeLabel = new ElaText("HEX区间值:");
+    hexRangeLabel->setTextPixelSize(15);
+    m_serialHexRangeEdit = new ElaLineEdit();
+    m_serialHexRangeEdit->setText("0.5");
+    m_serialHexRangeEdit->setPlaceholderText("预留");
+    m_serialHexRangeEdit->setEnabled(false);
+    grid->addWidget(hexRangeLabel,            8, 2);
+    grid->addWidget(m_serialHexRangeEdit,      8, 3);
+
+    // ──── 第 9 行：打开/关闭按钮 ────
     m_openSerialButton = new ElaPushButton("打开串口");
     m_openSerialButton->setFixedHeight(35);
     m_closeSerialButton = new ElaPushButton("关闭串口");
     m_closeSerialButton->setFixedHeight(35);
     m_closeSerialButton->setEnabled(false);
-    grid->addWidget(m_openSerialButton,       7, 0);
-    grid->addWidget(m_closeSerialButton,      7, 1);
+    grid->addWidget(m_openSerialButton,       9, 0);
+    grid->addWidget(m_closeSerialButton,      9, 1);
 
     _SerialSettingLayout1->addWidget(_SerialSettingGroup);
     _SerialSettingLayout1->addStretch();

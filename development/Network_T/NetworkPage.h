@@ -1,3 +1,4 @@
+// NetworkPage.h
 //
 // Created by Cossiant on 2026/6/18.
 //
@@ -73,20 +74,24 @@ private:
     ElaLineEdit*   m_portEdit               = nullptr;
     ElaCheckBox*   m_networkHexSendCheckBox  = nullptr;
     ElaCheckBox*   m_nagleCheckBox           = nullptr;
-    ElaCheckBox*   m_networkStripCRLFCheckBox = nullptr;   // ★ 去除 \r\n
+    ElaCheckBox*   m_networkStripCRLFCheckBox = nullptr;
     ElaPushButton* m_openNetworkButton       = nullptr;
     ElaPushButton* m_closeNetworkButton      = nullptr;
     QLabel*        m_networkLED              = nullptr;
-    // ★ 发送后缀（新增）
     ElaComboBox*   m_suffixComboBox          = nullptr;
 
-    // ★ 粘包分割（新增）
+    // 粘包分割
     ElaCheckBox*   m_networkSplitStickyCheckBox    = nullptr;
     ElaComboBox*   m_networkSplitDelimiterComboBox = nullptr;
 
+    // ★ 区间判断控件（新增）
+    ElaCheckBox*   m_networkAsciiRangeCheckBox = nullptr;   // ASCII区间判断勾选框
+    ElaCheckBox*   m_networkHexRangeCheckBox   = nullptr;   // HEX区间判断勾选框（预留）
+    ElaLineEdit*   m_networkAsciiRangeEdit     = nullptr;   // ASCII区间值输入
+    ElaLineEdit*   m_networkHexRangeEdit       = nullptr;   // HEX区间值输入（预留）
+
     // ★ 连接超时定时器（主线程，3 秒）
     QTimer*        m_connectTimeoutTimer     = nullptr;
-    // ★ 防止超时与错误信号竞态导致重复弹窗 / 重复 disconnect
     bool           m_isConnecting            = false;
 
     // ═════════════ 单条发送控件 ═════════
@@ -107,16 +112,15 @@ private:
     QTableWidget*  m_excelTableWidget     = nullptr;
 
     // ═════════════ 发送日志控件 ═════════
-    // ═════════════ 发送日志控件 ═════════
     StatCard*      m_logSentCountCard = nullptr;
     StatCard*      m_logRecvCountCard = nullptr;
     StatCard*      m_logStartTimeCard = nullptr;
     QListWidget*   m_logSendList      = nullptr;
     QListWidget*   m_logRecvList      = nullptr;
     ElaPushButton* m_logClearBtn      = nullptr;
-    ElaPushButton* m_logPauseBtn      = nullptr;   // 新增：暂停/恢复日志更新
+    ElaPushButton* m_logPauseBtn      = nullptr;
     QLabel*        m_logLED           = nullptr;
-    bool           m_logPaused        = false;     // 新增：日志是否暂停
+    bool           m_logPaused        = false;
 
     // ═════════════ 错误统计 ═════════
     int m_errorSeq     = 0;

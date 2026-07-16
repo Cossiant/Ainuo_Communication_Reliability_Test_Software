@@ -14,6 +14,37 @@
 #include <QDebug>
 #include <QTableWidgetItem>
 #include <QDateTime>
+#include <cmath>
+
+// ═══════════════════════════════════════════════════════════════
+//  ★ 静态辅助函数：ASCII 区间比较
+//    将 received / expected 去除 \r\n 后解析为 double，
+//    判断差值是否在 tolerance 范围内
+// ═══════════════════════════════════════════════════════════════
+static bool rangeCompareAscii(const QByteArray &received,
+                               const QByteArray &expected,
+                               double tolerance)
+{
+    // 去除 \r \n 和空格
+    QByteArray recvClean = received;
+    QByteArray expectClean = expected;
+    recvClean.replace("\r", "").replace("\n", "").replace(" ", "");
+    expectClean.replace("\r", "").replace("\n", "").replace(" ", "");
+
+    if (recvClean.isEmpty() || expectClean.isEmpty())
+        return false;
+
+    bool ok1 = false, ok2 = false;
+    double recvVal   = recvClean.toDouble(&ok1);
+    double expectVal = expectClean.toDouble(&ok2);
+
+    if (!ok1 || !ok2)
+        return false;   // 无法解析为数字 → 判定为不匹配
+
+    return qAbs(recvVal - expectVal) <= tolerance;
+}
+
+// ═══════════════════════════════════════════════════════════════
 
 GPIBExcel::GPIBExcel(GPIBPage* page, QObject *parent)
     : QObject(parent), m_page(page), m_work(page->m_gpibWork)
@@ -168,9 +199,6 @@ void GPIBExcel::onTrySendNext()
     if (expectedStr.isEmpty()) {
         m_expectData = QByteArray();
     } else {
-        // ★ 将 Excel 中显示的转义字符 \r \n 还原为真实字节
-        //    这样用户手动输入 "ANRGL030A-350\r\n" 或捕获模式自动填入的
-        //    "ANRGL030A-350\r\n" 都能正确还原为仪器的原始返回值
         QString unescaped = expectedStr;
         unescaped.replace(QLatin1String("\\r"), QLatin1String("\r"));
         unescaped.replace(QLatin1String("\\n"), QLatin1String("\n"));
@@ -225,8 +253,32 @@ void GPIBExcel::onResponseReceived(QByteArray data)
         cmpData.replace("\n", "");
     }
 
-    if (!m_expectData.isEmpty() && cmpData != m_expectData) {
-        m_page->addContentError(m_lastCmd, m_expectData, cmpData);
+    // ═══════════════════════════════════════════════════════════
+    //  ★★★ 区间判断（新增）★★★
+    // ═══════════════════════════════════════════════════════════
+    if (!m_expectData.isEmpty()) {
+        bool match = false;
+
+        // ★ 优先判断 ASCII 区间模式（仅在非 HEX 模式下生效）
+        bool asciiRangeEnabled = m_page->m_gpibAsciiRangeCheckBox
+                                 && m_page->m_gpibAsciiRangeCheckBox->isChecked();
+
+        if (asciiRangeEnabled && !hexMode) {
+            double tolerance = m_page->m_gpibAsciiRangeEdit
+                               ? m_page->m_gpibAsciiRangeEdit->text().toDouble()
+                               : 0.5;
+            match = rangeCompareAscii(cmpData, m_expectData, tolerance);
+        }
+        // ★ 未来扩展：HEX 区间判断
+        // else if (hexRangeEnabled && hexMode) { ... }
+        else {
+            // 原有精确比对
+            match = (cmpData == m_expectData);
+        }
+
+        if (!match) {
+            m_page->addContentError(m_lastCmd, m_expectData, cmpData);
+        }
     }
 
     if (m_minDelayOk) finalizeAndNext();
@@ -286,7 +338,6 @@ void GPIBExcel::fillCaptureResult(const QByteArray &data)
             displayText = data.toHex(' ').toUpper();
     }
 
-    // ★ 将控制字符转义为可见字符串，避免在表格中被解释为换行
     displayText.replace(QLatin1Char('\r'), QLatin1String("\\r"));
     displayText.replace(QLatin1Char('\n'), QLatin1String("\\n"));
 

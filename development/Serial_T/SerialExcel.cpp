@@ -10,6 +10,32 @@
 #include <QDebug>
 #include <QTableWidgetItem>
 #include <QDateTime>
+#include <cmath>
+
+// ═══════════════════════════════════════════════════════════════
+//  ★ 静态辅助函数：ASCII 区间比较
+// ═══════════════════════════════════════════════════════════════
+static bool rangeCompareAscii(const QByteArray &received,
+                               const QByteArray &expected,
+                               double tolerance)
+{
+    QByteArray recvClean = received;
+    QByteArray expectClean = expected;
+    recvClean.replace("\r", "").replace("\n", "").replace(" ", "");
+    expectClean.replace("\r", "").replace("\n", "").replace(" ", "");
+
+    if (recvClean.isEmpty() || expectClean.isEmpty())
+        return false;
+
+    bool ok1 = false, ok2 = false;
+    double recvVal   = recvClean.toDouble(&ok1);
+    double expectVal = expectClean.toDouble(&ok2);
+
+    if (!ok1 || !ok2)
+        return false;
+
+    return qAbs(recvVal - expectVal) <= tolerance;
+}
 
 SerialExcel::SerialExcel(SerialPage *page, QObject *parent)
     : QObject(parent), m_page(page), m_work(page->m_serialWork) {
@@ -189,10 +215,23 @@ void SerialExcel::onTrySendNext() {
             cmpData.replace("\r", "");
             cmpData.replace("\n", "");
         }
-        if (!m_expectData.isEmpty() && cmpData != m_expectData) {
-            m_page->addContentError(m_lastCmd, m_expectData, cmpData);
+        // ★ 区间判断
+        if (!m_expectData.isEmpty()) {
+            bool match = false;
+            bool asciiRangeEnabled = m_page->m_serialAsciiRangeCheckBox
+                                     && m_page->m_serialAsciiRangeCheckBox->isChecked();
+            if (asciiRangeEnabled && !hexMode) {
+                double tolerance = m_page->m_serialAsciiRangeEdit
+                                   ? m_page->m_serialAsciiRangeEdit->text().toDouble()
+                                   : 0.5;
+                match = rangeCompareAscii(cmpData, m_expectData, tolerance);
+            } else {
+                match = (cmpData == m_expectData);
+            }
+            if (!match) {
+                m_page->addContentError(m_lastCmd, m_expectData, cmpData);
+            }
         }
-
         // 仍需遵守命令间隔延时
         if (delayMs > 0) {
             QTimer::singleShot(delayMs, this, [this]() {
@@ -299,8 +338,22 @@ void SerialExcel::onResponseReceived(QByteArray data)
     }
 
     // 比对
-    if (!m_expectData.isEmpty() && cmpData != m_expectData) {
-        m_page->addContentError(m_lastCmd, m_expectData, cmpData);
+    // ★ 区间判断
+    if (!m_expectData.isEmpty()) {
+        bool match = false;
+        bool asciiRangeEnabled = m_page->m_serialAsciiRangeCheckBox
+                                 && m_page->m_serialAsciiRangeCheckBox->isChecked();
+        if (asciiRangeEnabled && !hexMode) {
+            double tolerance = m_page->m_serialAsciiRangeEdit
+                               ? m_page->m_serialAsciiRangeEdit->text().toDouble()
+                               : 0.5;
+            match = rangeCompareAscii(cmpData, m_expectData, tolerance);
+        } else {
+            match = (cmpData == m_expectData);
+        }
+        if (!match) {
+            m_page->addContentError(m_lastCmd, m_expectData, cmpData);
+        }
     }
 
     // 延时已过 → 立刻下一条

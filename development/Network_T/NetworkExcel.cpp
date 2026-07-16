@@ -1,3 +1,5 @@
+// NetworkExcel.cpp
+
 #include "NetworkExcel.h"
 #include "NetworkPage.h"
 #include "NetworkWork.h"
@@ -10,6 +12,36 @@
 #include <QDebug>
 #include <QTableWidgetItem>
 #include <QDateTime>
+#include <cmath>
+
+// ═══════════════════════════════════════════════════════════════
+//  ★ 静态辅助函数：ASCII 区间比较
+//    将 received / expected 去除 \r \n 和空格后解析为 double，
+//    判断 |received - expected| <= tolerance
+// ═══════════════════════════════════════════════════════════════
+static bool rangeCompareAscii(const QByteArray &received,
+                               const QByteArray &expected,
+                               double tolerance)
+{
+    QByteArray recvClean = received;
+    QByteArray expectClean = expected;
+    recvClean.replace("\r", "").replace("\n", "").replace(" ", "");
+    expectClean.replace("\r", "").replace("\n", "").replace(" ", "");
+
+    if (recvClean.isEmpty() || expectClean.isEmpty())
+        return false;
+
+    bool ok1 = false, ok2 = false;
+    double recvVal   = recvClean.toDouble(&ok1);
+    double expectVal = expectClean.toDouble(&ok2);
+
+    if (!ok1 || !ok2)
+        return false;   // 无法解析为数字 → 判定为不匹配
+
+    return qAbs(recvVal - expectVal) <= tolerance;
+}
+
+// ═══════════════════════════════════════════════════════════════
 
 NetworkExcel::NetworkExcel(NetworkPage *page, QObject *parent)
     : QObject(parent), m_page(page), m_work(page->m_networkWork) {
@@ -182,8 +214,31 @@ void NetworkExcel::onTrySendNext() {
             cmpData.replace("\r", "");
             cmpData.replace("\n", "");
         }
-        if (!m_expectData.isEmpty() && cmpData != m_expectData) {
-            m_page->addContentError(m_lastCmd, m_expectData, cmpData);
+
+        // ═══════════════════════════════════════════════════════════
+        //  ★★★ 区间判断（新增）★★★
+        // ═══════════════════════════════════════════════════════════
+        if (!m_expectData.isEmpty()) {
+            bool match = false;
+
+            bool asciiRangeEnabled = m_page->m_networkAsciiRangeCheckBox
+                                     && m_page->m_networkAsciiRangeCheckBox->isChecked();
+
+            if (asciiRangeEnabled && !hexMode) {
+                double tolerance = m_page->m_networkAsciiRangeEdit
+                                   ? m_page->m_networkAsciiRangeEdit->text().toDouble()
+                                   : 0.5;
+                match = rangeCompareAscii(cmpData, m_expectData, tolerance);
+            }
+            // ★ 未来扩展：HEX 区间判断
+            // else if (hexRangeEnabled && hexMode) { ... }
+            else {
+                match = (cmpData == m_expectData);
+            }
+
+            if (!match) {
+                m_page->addContentError(m_lastCmd, m_expectData, cmpData);
+            }
         }
 
         if (delayMs > 0) {
@@ -289,8 +344,30 @@ void NetworkExcel::onResponseReceived(QByteArray data) {
         cmpData.replace("\n", "");
     }
 
-    if (!m_expectData.isEmpty() && cmpData != m_expectData) {
-        m_page->addContentError(m_lastCmd, m_expectData, cmpData);
+    // ═══════════════════════════════════════════════════════════
+    //  ★★★ 区间判断（新增）★★★
+    // ═══════════════════════════════════════════════════════════
+    if (!m_expectData.isEmpty()) {
+        bool match = false;
+
+        bool asciiRangeEnabled = m_page->m_networkAsciiRangeCheckBox
+                                 && m_page->m_networkAsciiRangeCheckBox->isChecked();
+
+        if (asciiRangeEnabled && !hexMode) {
+            double tolerance = m_page->m_networkAsciiRangeEdit
+                               ? m_page->m_networkAsciiRangeEdit->text().toDouble()
+                               : 0.5;
+            match = rangeCompareAscii(cmpData, m_expectData, tolerance);
+        }
+        // ★ 未来扩展：HEX 区间判断
+        // else if (hexRangeEnabled && hexMode) { ... }
+        else {
+            match = (cmpData == m_expectData);
+        }
+
+        if (!match) {
+            m_page->addContentError(m_lastCmd, m_expectData, cmpData);
+        }
     }
 
     if (m_minDelayOk) finalizeAndNext();

@@ -426,24 +426,54 @@ void GPIBPage::createSettingsPage() {
     grid->addWidget(suffixLabel,       4, 2);
     grid->addWidget(m_suffixComboBox,  4, 3);
 
-
     // ──── ★ 第 5 行：去除 \r\n 勾选框 ────
     m_gpibStripCRLFCheckBox = new ElaCheckBox("比对时去除返回值中的 \\r\\n");
     m_gpibStripCRLFCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
     grid->addWidget(m_gpibStripCRLFCheckBox, 5, 0, 1, 4);
 
-    // ──── 第 6 行：打开/关闭按钮 ────
+    // ════════════════════════════════════════════════════════
+    //  ★ 第 6 行：区间判断（新增）
+    // ════════════════════════════════════════════════════════
+    m_gpibAsciiRangeCheckBox = new ElaCheckBox("启用ASCII区间判断（如：期望3.00±0.5）");
+    m_gpibAsciiRangeCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
+    grid->addWidget(m_gpibAsciiRangeCheckBox, 6, 0, 1, 2);
+
+    ElaText* asciiRangeLabel = new ElaText("ASCII区间值:");
+    asciiRangeLabel->setTextPixelSize(15);
+    m_gpibAsciiRangeEdit = new ElaLineEdit();
+    m_gpibAsciiRangeEdit->setText("0.5");
+    m_gpibAsciiRangeEdit->setPlaceholderText("如 0.5 表示 ±0.5");
+    grid->addWidget(asciiRangeLabel,      6, 2);
+    grid->addWidget(m_gpibAsciiRangeEdit,  6, 3);
+
+    // ──── ★ 第 7 行：HEX 区间判断（预留）────
+    m_gpibHexRangeCheckBox = new ElaCheckBox("启用HEX区间判断（预留）");
+    m_gpibHexRangeCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
+    m_gpibHexRangeCheckBox->setEnabled(false);   // ★ 暂时禁用
+    grid->addWidget(m_gpibHexRangeCheckBox, 7, 0, 1, 2);
+
+    ElaText* hexRangeLabel = new ElaText("HEX区间值:");
+    hexRangeLabel->setTextPixelSize(15);
+    m_gpibHexRangeEdit = new ElaLineEdit();
+    m_gpibHexRangeEdit->setText("0.5");
+    m_gpibHexRangeEdit->setPlaceholderText("预留");
+    m_gpibHexRangeEdit->setEnabled(false);        // ★ 暂时禁用
+    grid->addWidget(hexRangeLabel,        7, 2);
+    grid->addWidget(m_gpibHexRangeEdit,   7, 3);
+
+    // ──── 第 8 行：打开/关闭按钮 ────
     m_openGpibButton = new ElaPushButton("打开 GPIB");
     m_openGpibButton->setFixedHeight(35);
     m_closeGpibButton = new ElaPushButton("关闭 GPIB");
     m_closeGpibButton->setFixedHeight(35);
     m_closeGpibButton->setEnabled(false);
-    grid->addWidget(m_openGpibButton,   6, 1);
-    grid->addWidget(m_closeGpibButton,  6, 3);
+    grid->addWidget(m_openGpibButton,   8, 1);
+    grid->addWidget(m_closeGpibButton,  8, 3);
 
     _GpibSettingLayout->addWidget(group);
     _GpibSettingLayout->addStretch();
 }
+
 
 // ═══════════════════════════════════════════════════════════════
 //  页面：单条发送

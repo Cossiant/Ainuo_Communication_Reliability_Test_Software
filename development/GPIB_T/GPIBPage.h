@@ -85,6 +85,12 @@ private:
     ElaPushButton* m_closeGpibButton        = nullptr;
     QLabel*        m_gpibLED                = nullptr;
 
+    // ★ 区间判断控件（新增）
+    ElaCheckBox*   m_gpibAsciiRangeCheckBox = nullptr;   // ASCII区间判断勾选框
+    ElaCheckBox*   m_gpibHexRangeCheckBox   = nullptr;   // HEX区间判断勾选框（预留）
+    ElaLineEdit*   m_gpibAsciiRangeEdit     = nullptr;   // ASCII区间值输入
+    ElaLineEdit*   m_gpibHexRangeEdit       = nullptr;   // HEX区间值输入（预留）
+
     // ★ 连接超时定时器（主线程，5 秒，GPIB 连接可能较慢）
     QTimer*        m_connectTimeoutTimer    = nullptr;
     bool           m_isConnecting           = false;
