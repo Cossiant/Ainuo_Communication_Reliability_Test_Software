@@ -26,6 +26,7 @@
 | ⏱️ **精确延时** | 1ms 精度命令间隔控制，EMA 误差补偿算法，计时起点在 I/O 前（TX→TX 间隔 = max(I/O耗时, 设定延时)） |
 | 🧵 **多线程架构** | I/O 操作独立工作线程，UI 完全无阻塞 |
 | 🎯 **区间判断** | 支持 ASCII 返回值区间容差校验（如期望 3.00±0.5），自动解析数字并判定是否在容差范围内 |
+| 🧩 **模块化架构** | Page / PageUI / PageSignals / ErrorHandler 四层分离，公共工具库（RangeComparer / StickySplitter） |
 | 🎨 **现代 UI** | 基于 ElaWidgetTools 的 Fluent Design 风格，支持明暗主题切换 |
 
 ---
@@ -50,16 +51,25 @@ ExcelSCPISender/
 ├── README.md
 ├── development/
 │   ├── Serial_T/                    # 串口通讯模块
-│   │   ├── SerialPage.h/.cpp        #   串口 UI 页面
-│   │   ├── SerialWork.h/.cpp        #   串口工作线程
+│   │   ├── SerialPage.h/.cpp        #   串口页面协调器（组装子模块）
+│   │   ├── SerialPageUI.h/.cpp      #   串口 UI 构建（5 个页面）
+│   │   ├── SerialPageSignals.h/.cpp #   串口线程管理 + 信号/槽连接
+│   │   ├── SerialErrorHandler.h/.cpp#   串口错误记录与统计
+│   │   ├── SerialWork.h/.cpp        #   串口 I/O 工作线程
 │   │   └── SerialExcel.h/.cpp       #   串口 Excel 批量发送
 │   ├── Network_T/                   # 网口通讯模块
-│   │   ├── NetworkPage.h/.cpp       #   网口 UI 页面
-│   │   ├── NetWorkWork.h/.cpp       #   网口工作线程
+│   │   ├── NetworkPage.h/.cpp       #   网口页面协调器（组装子模块）
+│   │   ├── NetworkPageUI.h/.cpp     #   网口 UI 构建（5 个页面）
+│   │   ├── NetworkPageSignals.h/.cpp#   网口线程管理 + 信号/槽连接
+│   │   ├── NetworkErrorHandler.h/.cpp#  网口错误记录与统计
+│   │   ├── NetworkWork.h/.cpp       #   网口 I/O 工作线程
 │   │   └── NetworkExcel.h/.cpp      #   网口 Excel 批量发送
 │   ├── GPIB_T/                      # GPIB 通讯模块
-│   │   ├── GPIBPage.h/.cpp          #   GPIB UI 页面
-│   │   ├── GPIBWork.h/.cpp          #   GPIB 工作线程（NI-VISA）
+│   │   ├── GPIBPage.h/.cpp          #   GPIB 页面协调器（组装子模块）
+│   │   ├── GPIBPageUI.h/.cpp        #   GPIB UI 构建（5 个页面）
+│   │   ├── GPIBPageSignals.h/.cpp   #   GPIB 线程管理 + 信号/槽连接
+│   │   ├── GPIBErrorHandler.h/.cpp  #   GPIB 错误记录与统计
+│   │   ├── GPIBWork.h/.cpp          #   GPIB I/O 工作线程（NI-VISA）
 │   │   └── GPIBExcel.h/.cpp         #   GPIB Excel 批量发送
 │   ├── CAN_T/                       # CAN 通讯模块（预留）
 │   │   ├── CANPage.h/.cpp
@@ -70,6 +80,8 @@ ExcelSCPISender/
 │   │   ├── ElaWidgetToolsDemo.h/.cpp#   主窗口入口
 │   │   ├── LED.h/.cpp               #   状态指示灯组件
 │   │   ├── StatCard.h/.cpp          #   统计卡片组件
+│   │   ├── RangeComparer.h/.cpp     # ★ 公共区间比较工具（三模块共享）
+│   │   ├── StickySplitter.h/.cpp    # ★ 公共粘包分割工具（串口/网口共享）
 │   │   └── main.cpp                 #   程序入口
 │   ├── Old/                         # 历史遗留代码
 │   ├── ico/                         # 应用图标资源
@@ -208,7 +220,7 @@ Step 3: 加后缀 — 根据下拉框选择追加 None / 0x0D / 0x0A / 0x0D+0x0A
 3. 在 Excel B 列填入**标准期望值**（如 `3.00\r\n`）
 4. 软件会将实际返回值去除 `\r` `\n` 后解析为数字，判定 `|实际值 - 期望值| ≤ 区间值` 即为通过
 
-> **示例：** 期望值 `3.00`，区间值 `0.5` → 实际返回 `2.50` ~ `3.50` 均判定正确，超出范围则记录内容错误。
+> **示例：** 期望值 `3.00`，区间值 `0.5` → 实际返回 `2.50` ~ `3.50` 均判定正确，超出范围则记录内容错误。区间比较由公共工具 `RangeComparer` 统一实现，三模块共享代码无冗余。
 
 ---
 
@@ -219,7 +231,7 @@ Step 3: 加后缀 — 根据下拉框选择追加 None / 0x0D / 0x0A / 0x0D+0x0A
 │  主线程 (GUI Thread)                                 │
 │  ┌──────────┐  ┌────────────┐  ┌─────────────────┐  │
 │  │ UI 响应   │  │ XxxExcel   │  │ 校验 + 错误记录  │  │
-│  │ 按钮/表格 │  │ 流程控制    │  │ (信号驱动)      │  │
+│  │ PageUI   │  │ 流程控制    │  │ ErrorHandler   │  │
 │  └──────────┘  └────────────┘  └─────────────────┘  │
 │       ↑              ↑↓ QueuedConnection    ↑        │
 │       │              │         │            │        │
@@ -232,10 +244,27 @@ Step 3: 加后缀 — 根据下拉框选择追加 None / 0x0D / 0x0A / 0x0D+0x0A
 └─────────────────────────────────────────────────────┘
 ```
 
-- **XxxPage:** 页面 UI 创建 + 信号连接管理
-- **XxxWork:** 独立工作线程中的 I/O 操作（串口/网口/GPIB），负责 `buildSendData()` 数据构建 + forceRead 判断 + 精确延时
-- **XxxExcel:** 主线程中的批量发送流程控制 + 校验逻辑（含区间判断）
-- **线程通讯:** 所有跨线程调用使用 `QMetaObject::invokeMethod(Qt::QueuedConnection)`
+### 模块分层（V3.4.10 重构）
+
+每个通讯模块（Serial / Network / GPIB）均采用统一的四层分离架构：
+
+| 子模块 | 职责 | 典型行数 |
+|--------|------|----------|
+| **XxxPage** | 页面协调器：持有各子模块指针，串联初始化流程 | ~70 |
+| **XxxPageUI** | 纯 UI 构建：`createSettingsPage()` / `createSendPage()` / `createExcelSendPage()` / `createLogPage()` / `createErrorLogPage()` | ~550 |
+| **XxxPageSignals** | 线程创建 + 全部 `connect()` 信号/槽连接 + 超时定时器 | ~250 |
+| **XxxErrorHandler** | 错误计数器维护 + 错误表格写入 + 颜色标记 + 自动滚动 | ~140 |
+| **XxxWork** | 独立工作线程中的阻塞 I/O 操作（不变） | ~500 |
+| **XxxExcel** | 主线程批量发送流程控制 + 校验逻辑（含区间判断） | ~350 |
+
+### 公共工具库（V3.4.10 新增）
+
+| 工具 | 位置 | 职责 | 共享方 |
+|------|------|------|--------|
+| **RangeComparer** | `Other_T/RangeComparer.h/.cpp` | ASCII 区间比较：解析数字、计算差值、判定容差 | 串口 / 网口 / GPIB |
+| **StickySplitter** | `Other_T/StickySplitter.h/.cpp` | 粘包分割：按分隔符拆分字节流、管理分割队列 | 串口 / 网口 |
+
+- **线程通讯:** 所有跨线程调用使用 `QMetaObject::invokeMethod(Qt::QueuedConnection)`，Work 对象通过 `moveToThread()` 移入独立线程
 
 ---
 
@@ -256,7 +285,10 @@ Step 3: 加后缀 — 根据下拉框选择追加 None / 0x0D / 0x0A / 0x0D+0x0A
 - ✨ **全模块新增 ASCII 区间判断功能：** 串口/网口/GPIB 设置页新增「启用ASCII区间判断」勾选框和「ASCII区间值」输入框，支持对返回值进行数值区间容差校验（如期望 `3.00±0.5`，实际值在 `2.50~3.50` 之间即判定正确）
 - ✨ **HEX 区间判断控件预留：** 设置页同步添加 HEX 区间判断勾选框和输入框（暂时禁用），为后续 HEX 格式区间判断升级做准备
 - 🔧 **区间判断逻辑：** 自动去除返回值中的 `\r` `\n` 和空格后解析为 `double`，若无法解析为数字则判定不匹配
-- 📝 README 新增「ASCII 区间判断」使用说明章节，补充功能特性表
+- 🧩 **代码架构大重构 —— 四层分离：** 每个通讯模块（串口/网口/GPIB）的 `XxxPage` 拆分为 `XxxPage`（协调器）、`XxxPageUI`（UI 构建）、`XxxPageSignals`（线程+信号）、`XxxErrorHandler`（错误处理）四个独立文件，原 1000 行单文件瘦身至 70 行协调器 + 4 个职责清晰的子模块
+- 🧩 **公共工具库提取：** 新增 `RangeComparer`（区间比较）和 `StickySplitter`（粘包分割）两个公共命名空间工具，三模块共享消除代码冗余（`rangeCompareAscii()` 从 3 处重复收敛为 1 处）
+- 🔧 **XxxExcel 重构：** `SerialExcel` / `NetworkExcel` / `GPIBExcel` 统一改用公共 `RangeComparer` 和 `StickySplitter`，移除内嵌重复函数
+- 📝 README 新增「模块分层」架构说明和「公共工具库」表格，更新项目结构树
 
 ### V3.4.9 (2026-07)
 
@@ -329,4 +361,5 @@ MIT License. 详见 [LICENSE](LICENSE) 文件。
 <p align="center">
   <sub>Made with ❤️ for instrument automation testing</sub>
 </p>
-```
+
+---

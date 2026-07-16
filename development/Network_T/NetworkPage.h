@@ -1,4 +1,5 @@
 // NetworkPage.h
+// 页面协调器：持有各子模块指针，串联初始化流程
 //
 // Created by Cossiant on 2026/6/18.
 //
@@ -32,6 +33,9 @@
 #include "NetworkWork.h"
 
 class NetworkWork;
+class NetworkPageUI;
+class NetworkPageSignals;
+class NetworkErrorHandler;
 class QTableWidget;
 class QListWidget;
 class StatCard;
@@ -50,13 +54,21 @@ class NetworkPage : public QObject {
     Q_OBJECT
     friend class NetworkWork;
     friend class NetworkExcel;
+    friend class NetworkPageUI;
+    friend class NetworkPageSignals;
+    friend class NetworkErrorHandler;
 public:
     explicit NetworkPage(ElaWindow* mainWindow, QObject *parent = nullptr);
     ~NetworkPage();
 private:
     ElaWindow* m_mainWindow;
-    NetworkWork*  m_networkWork  = nullptr;
-    NetworkExcel* m_networkFunc  = nullptr;
+
+    // ★ 子模块
+    NetworkPageUI*        m_ui        = nullptr;
+    NetworkPageSignals*   m_signals   = nullptr;
+    NetworkErrorHandler*  m_errors    = nullptr;
+    NetworkWork*          m_networkWork  = nullptr;
+    NetworkExcel*         m_networkFunc  = nullptr;
 
     QThread*      m_networkThread = nullptr;
     // ═════════════ 页面 ═════════
@@ -84,11 +96,11 @@ private:
     ElaCheckBox*   m_networkSplitStickyCheckBox    = nullptr;
     ElaComboBox*   m_networkSplitDelimiterComboBox = nullptr;
 
-    // ★ 区间判断控件（新增）
-    ElaCheckBox*   m_networkAsciiRangeCheckBox = nullptr;   // ASCII区间判断勾选框
-    ElaCheckBox*   m_networkHexRangeCheckBox   = nullptr;   // HEX区间判断勾选框（预留）
-    ElaLineEdit*   m_networkAsciiRangeEdit     = nullptr;   // ASCII区间值输入
-    ElaLineEdit*   m_networkHexRangeEdit       = nullptr;   // HEX区间值输入（预留）
+    // 区间判断控件
+    ElaCheckBox*   m_networkAsciiRangeCheckBox = nullptr;
+    ElaCheckBox*   m_networkHexRangeCheckBox   = nullptr;
+    ElaLineEdit*   m_networkAsciiRangeEdit     = nullptr;
+    ElaLineEdit*   m_networkHexRangeEdit       = nullptr;
 
     // ★ 连接超时定时器（主线程，3 秒）
     QTimer*        m_connectTimeoutTimer     = nullptr;
@@ -138,21 +150,14 @@ private:
     // ═════════════ 初始化方法 ═════════
     void initNetworkPage();
     void initNavigation();
-    void initwindowConfig();
+    void initWindowConfig();
 
-    void createSettingsPage();
-    void createSendPage();
-    void createExcelSendPage();
-    void createLogPage();
-    void createErrorLogPage();
-
-    // ═════════════ 错误记录 ═════════
+    // ═════════════ 错误记录（委托给 NetworkErrorHandler）═════════
     void addTimeoutError(const QString &command, const QByteArray &expected);
     void addContentError(const QString &command, const QByteArray &expected, const QByteArray &actual);
     void clearErrors();
     void clearSingleSendLog();
     void clearExcelSendLog();
 };
-
 
 #endif //UNTITLED_NETWORKPAGE_H

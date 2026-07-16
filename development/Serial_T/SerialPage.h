@@ -1,4 +1,5 @@
 // SerialPage.h
+// 页面协调器：持有各子模块指针，串联初始化流程
 //
 // Created by Cossiant on 2026/6/18.
 //
@@ -33,6 +34,9 @@
 #include "SerialWork.h"
 
 class SerialWork;
+class SerialPageUI;
+class SerialPageSignals;
+class SerialErrorHandler;
 class QTableWidget;
 class QListWidget;
 class StatCard;
@@ -51,13 +55,21 @@ class SerialPage : public QObject {
     Q_OBJECT
     friend class SerialWork;
     friend class SerialExcel;
+    friend class SerialPageUI;
+    friend class SerialPageSignals;
+    friend class SerialErrorHandler;
 public:
     explicit SerialPage(ElaWindow* mainWindow, QObject *parent = nullptr);
     ~SerialPage();
 private:
     ElaWindow* m_mainWindow;
-    SerialWork* m_serialWork = nullptr;
-    SerialExcel* m_serialFunc = nullptr;
+
+    // ★ 子模块
+    SerialPageUI*        m_ui         = nullptr;
+    SerialPageSignals*   m_signals    = nullptr;
+    SerialErrorHandler*  m_errors     = nullptr;
+    SerialWork*          m_serialWork = nullptr;
+    SerialExcel*         m_serialFunc = nullptr;
 
     QThread*     m_serialThread  = nullptr;
     // ═════════════ 页面 ═════════
@@ -82,18 +94,17 @@ private:
     ElaPushButton* m_openSerialButton  = nullptr;
     ElaPushButton* m_closeSerialButton = nullptr;
     QLabel*        m_serialLED         = nullptr;
-    // 发送后缀
     ElaComboBox*   m_suffixComboBox    = nullptr;
 
     // 粘包分割
     ElaCheckBox*  m_serialSplitStickyCheckBox    = nullptr;
     ElaComboBox*  m_serialSplitDelimiterComboBox = nullptr;
 
-    // ★ 区间判断控件（新增）
-    ElaCheckBox*  m_serialAsciiRangeCheckBox = nullptr;   // ASCII区间判断勾选框
-    ElaCheckBox*  m_serialHexRangeCheckBox   = nullptr;   // HEX区间判断勾选框（预留）
-    ElaLineEdit*  m_serialAsciiRangeEdit     = nullptr;   // ASCII区间值输入
-    ElaLineEdit*  m_serialHexRangeEdit       = nullptr;   // HEX区间值输入（预留）
+    // 区间判断控件
+    ElaCheckBox*  m_serialAsciiRangeCheckBox = nullptr;
+    ElaCheckBox*  m_serialHexRangeCheckBox   = nullptr;
+    ElaLineEdit*  m_serialAsciiRangeEdit     = nullptr;
+    ElaLineEdit*  m_serialHexRangeEdit       = nullptr;
 
     // ═════════════ 单条发送控件 ═════════
     ElaLineEdit*   m_singleSendInput   = nullptr;
@@ -107,9 +118,9 @@ private:
     ElaPushButton* m_excelDownloadTplBtn = nullptr;
     ElaPushButton* m_excelSendBtn        = nullptr;
     ElaPushButton* m_excelStopBtn        = nullptr;
-    ElaPushButton* m_excelCaptureBtn = nullptr;
-    ElaLineEdit*   m_excelRepeatCount = nullptr;
-    ElaLineEdit*   m_excelTimeoutMs   = nullptr;
+    ElaPushButton* m_excelCaptureBtn     = nullptr;
+    ElaLineEdit*   m_excelRepeatCount    = nullptr;
+    ElaLineEdit*   m_excelTimeoutMs      = nullptr;
     QTableWidget*  m_excelTableWidget    = nullptr;
 
     // ═════════════ 发送日志控件 ═════════
@@ -119,41 +130,33 @@ private:
     QListWidget*  m_logSendList      = nullptr;
     QListWidget*  m_logRecvList      = nullptr;
     ElaPushButton* m_logClearBtn     = nullptr;
-    ElaPushButton* m_logPauseBtn      = nullptr;
-    QLabel*        m_logLED           = nullptr;
-    bool           m_logPaused        = false;
+    ElaPushButton* m_logPauseBtn     = nullptr;
+    QLabel*        m_logLED          = nullptr;
+    bool           m_logPaused       = false;
 
     // ═════════════ 错误统计 ═════════
-    int m_errorSeq        = 0;
-    int m_timeoutCount    = 0;
-    int m_contentCount    = 0;
+    int m_errorSeq     = 0;
+    int m_timeoutCount = 0;
+    int m_contentCount = 0;
 
     // ═════════════ 错误日志控件 ═════════
     StatCard*        m_errorTotalCard   = nullptr;
     StatCard*        m_errorTimeoutCard = nullptr;
     StatCard*        m_errorContentCard = nullptr;
-    QTableWidget*    m_errorTable        = nullptr;
-    ElaPushButton*   m_errorClearBtn     = nullptr;
-    ElaToggleSwitch* m_errorAutoScroll   = nullptr;
+    QTableWidget*    m_errorTable       = nullptr;
+    ElaPushButton*   m_errorClearBtn    = nullptr;
+    ElaToggleSwitch* m_errorAutoScroll  = nullptr;
 
     // ═════════════ 初始化方法 ═════════
-    void initSerialPage();
     void initNavigation();
-    void initwindowConfig();
+    void initWindowConfig();
 
-    void createSettingsPage();
-    void createSendPage();
-    void createExcelSendPage();
-    void createLogPage();
-    void createErrorLogPage();
-
-    // ═════════════ 错误记录 ═════════
+    // ═════════════ 错误记录（委托给 SerialErrorHandler）═════════
     void addTimeoutError(const QString &command, const QByteArray &expected);
     void addContentError(const QString &command, const QByteArray &expected, const QByteArray &actual);
     void clearErrors();
     void clearSingleSendLog();
     void clearExcelSendLog();
 };
-
 
 #endif //UNTITLED_SERIALPAGE_H

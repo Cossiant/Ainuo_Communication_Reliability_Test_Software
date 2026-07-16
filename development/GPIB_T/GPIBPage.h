@@ -1,5 +1,5 @@
 // GPIBPage.h
-// GPIB 通讯页面：UI + 线程管理 + 信号连接
+// 页面协调器：持有各子模块指针，串联初始化流程
 // 对齐 SerialPage / NetworkPage 架构
 
 #pragma once
@@ -32,6 +32,9 @@
 #include "GPIBWork.h"
 
 class GPIBWork;
+class GPIBPageUI;
+class GPIBPageSignals;
+class GPIBErrorHandler;
 class QTableWidget;
 class QListWidget;
 class StatCard;
@@ -50,13 +53,21 @@ class GPIBPage : public QObject {
     Q_OBJECT
     friend class GPIBWork;
     friend class GPIBExcel;
+    friend class GPIBPageUI;
+    friend class GPIBPageSignals;
+    friend class GPIBErrorHandler;
 public:
     explicit GPIBPage(ElaWindow* mainWindow, QObject *parent = nullptr);
     ~GPIBPage();
 private:
     ElaWindow* m_mainWindow;
-    GPIBWork*  m_gpibWork  = nullptr;
-    GPIBExcel* m_gpibFunc  = nullptr;
+
+    // ★ 子模块
+    GPIBPageUI*        m_ui      = nullptr;
+    GPIBPageSignals*   m_signals = nullptr;
+    GPIBErrorHandler*  m_errors  = nullptr;
+    GPIBWork*          m_gpibWork  = nullptr;
+    GPIBExcel*         m_gpibFunc  = nullptr;
 
     QThread*   m_gpibThread = nullptr;
 
@@ -80,16 +91,16 @@ private:
     ElaCheckBox*   m_sendEndEnabledCheckBox  = nullptr;
     ElaCheckBox*   m_gpibHexSendCheckBox     = nullptr;
     ElaCheckBox*   m_gpibStripCRLFCheckBox   = nullptr;
-    ElaComboBox*   m_suffixComboBox         = nullptr;   //发送后缀选择
+    ElaComboBox*   m_suffixComboBox         = nullptr;
     ElaPushButton* m_openGpibButton         = nullptr;
     ElaPushButton* m_closeGpibButton        = nullptr;
     QLabel*        m_gpibLED                = nullptr;
 
-    // ★ 区间判断控件（新增）
-    ElaCheckBox*   m_gpibAsciiRangeCheckBox = nullptr;   // ASCII区间判断勾选框
-    ElaCheckBox*   m_gpibHexRangeCheckBox   = nullptr;   // HEX区间判断勾选框（预留）
-    ElaLineEdit*   m_gpibAsciiRangeEdit     = nullptr;   // ASCII区间值输入
-    ElaLineEdit*   m_gpibHexRangeEdit       = nullptr;   // HEX区间值输入（预留）
+    // 区间判断控件
+    ElaCheckBox*   m_gpibAsciiRangeCheckBox = nullptr;
+    ElaCheckBox*   m_gpibHexRangeCheckBox   = nullptr;
+    ElaLineEdit*   m_gpibAsciiRangeEdit     = nullptr;
+    ElaLineEdit*   m_gpibHexRangeEdit       = nullptr;
 
     // ★ 连接超时定时器（主线程，5 秒，GPIB 连接可能较慢）
     QTimer*        m_connectTimeoutTimer    = nullptr;
@@ -137,17 +148,10 @@ private:
     ElaToggleSwitch* m_errorAutoScroll  = nullptr;
 
     // ═════════════ 初始化方法 ═════════
-    void initGpibPage();
     void initNavigation();
-    void initwindowConfig();
+    void initWindowConfig();
 
-    void createSettingsPage();
-    void createSendPage();
-    void createExcelSendPage();
-    void createLogPage();
-    void createErrorLogPage();
-
-    // ═════════════ 错误记录 ═════════
+    // ═════════════ 错误记录（委托给 GPIBErrorHandler）═════════
     void addTimeoutError(const QString &command, const QByteArray &expected);
     void addContentError(const QString &command, const QByteArray &expected, const QByteArray &actual);
     void clearErrors();

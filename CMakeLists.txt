@@ -81,6 +81,28 @@ add_executable(untitled WIN32
         development/GPIB_T/GPIBWork.h
         development/GPIB_T/GPIBExcel.cpp
         development/GPIB_T/GPIBExcel.h
+        development/Other_T/RangeComparer.cpp
+        development/Other_T/RangeComparer.h
+        development/Other_T/StickySplitter.cpp
+        development/Other_T/StickySplitter.h
+        development/Network_T/NetworkPageUI.cpp
+        development/Network_T/NetworkPageUI.h
+        development/Network_T/NetworkPageSignals.cpp
+        development/Network_T/NetworkPageSignals.h
+        development/Network_T/NetworkErrorHandler.cpp
+        development/Network_T/NetworkErrorHandler.h
+        development/Serial_T/SerialPageUI.cpp
+        development/Serial_T/SerialPageUI.h
+        development/Serial_T/SerialPageSignals.cpp
+        development/Serial_T/SerialPageSignals.h
+        development/Serial_T/SerialErrorHandler.cpp
+        development/Serial_T/SerialErrorHandler.h
+        development/GPIB_T/GPIBPageUI.cpp
+        development/GPIB_T/GPIBPageUI.h
+        development/GPIB_T/GPIBPageSignals.cpp
+        development/GPIB_T/GPIBPageSignals.h
+        development/GPIB_T/GPIBErrorHandler.cpp
+        development/GPIB_T/GPIBErrorHandler.h
 )
 
 target_link_libraries(untitled

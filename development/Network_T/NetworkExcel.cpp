@@ -1,9 +1,12 @@
 // NetworkExcel.cpp
+// ★ 重构：使用公共 RangeComparer / StickySplitter
 
 #include "NetworkExcel.h"
 #include "NetworkPage.h"
 #include "NetworkWork.h"
 #include "ElaWindow.h"
+#include "../Other_T/RangeComparer.h"
+#include "../Other_T/StickySplitter.h"
 #include "xlsxdocument.h"
 #include "xlsxformat.h"
 #include <QFileDialog>
@@ -12,34 +15,6 @@
 #include <QDebug>
 #include <QTableWidgetItem>
 #include <QDateTime>
-#include <cmath>
-
-// ═══════════════════════════════════════════════════════════════
-//  ★ 静态辅助函数：ASCII 区间比较
-//    将 received / expected 去除 \r \n 和空格后解析为 double，
-//    判断 |received - expected| <= tolerance
-// ═══════════════════════════════════════════════════════════════
-static bool rangeCompareAscii(const QByteArray &received,
-                               const QByteArray &expected,
-                               double tolerance)
-{
-    QByteArray recvClean = received;
-    QByteArray expectClean = expected;
-    recvClean.replace("\r", "").replace("\n", "").replace(" ", "");
-    expectClean.replace("\r", "").replace("\n", "").replace(" ", "");
-
-    if (recvClean.isEmpty() || expectClean.isEmpty())
-        return false;
-
-    bool ok1 = false, ok2 = false;
-    double recvVal   = recvClean.toDouble(&ok1);
-    double expectVal = expectClean.toDouble(&ok2);
-
-    if (!ok1 || !ok2)
-        return false;   // 无法解析为数字 → 判定为不匹配
-
-    return qAbs(recvVal - expectVal) <= tolerance;
-}
 
 // ═══════════════════════════════════════════════════════════════
 
@@ -73,6 +48,28 @@ void NetworkExcel::setRunning(bool running) {
     m_page->m_excelOpenBtn->setEnabled(!running);
     m_page->m_excelRepeatCount->setEnabled(!running);
     m_page->m_excelTimeoutMs->setEnabled(!running);
+}
+
+// ═══════════════════════════════ 区间判断（使用公共工具）════════
+bool NetworkExcel::tryRangeCompare(const QByteArray &received,
+                                    const QByteArray &expected,
+                                    bool hexMode) const
+{
+    if (expected.isEmpty()) return true;  // 无期望值 → 通过
+
+    // ★ ASCII 区间模式
+    if (!hexMode
+        && m_page->m_networkAsciiRangeCheckBox
+        && m_page->m_networkAsciiRangeCheckBox->isChecked())
+    {
+        double tolerance = m_page->m_networkAsciiRangeEdit
+                           ? m_page->m_networkAsciiRangeEdit->text().toDouble()
+                           : 0.5;
+        return RangeComparer::compareAscii(received, expected, tolerance);
+    }
+
+    // ★ 精确比对
+    return (received == expected);
 }
 
 // ═══════════════════════════════════════════════ 捕获模式 ═══
@@ -124,7 +121,7 @@ void NetworkExcel::onStopSend() {
     m_timeoutTimer->stop();
     m_waiting = false;
     m_isCaptureMode = false;
-    m_stickyQueue.clear(); // ★ 清空粘包队列
+    m_stickyQueue.clear();
 
     QMetaObject::invokeMethod(m_work, "setExpectedResponse",
                               Qt::QueuedConnection,
@@ -136,17 +133,11 @@ void NetworkExcel::onStopSend() {
 
 // ═══════════════════════════════════════════════ 统一入口 ═══
 void NetworkExcel::onTrySendNext() {
-    if (!m_isRunning || !m_work || !m_work->isOpen()) {
-        onStopSend();
-        return;
-    }
+    if (!m_isRunning || !m_work || !m_work->isOpen()) { onStopSend(); return; }
 
     QTableWidget *table = m_page->m_excelTableWidget;
     int rowCount = table->rowCount();
-    if (rowCount == 0) {
-        onStopSend();
-        return;
-    }
+    if (rowCount == 0) { onStopSend(); return; }
 
     if (m_isCaptureMode && m_currentRow >= rowCount) {
         onStopSend();
@@ -178,19 +169,13 @@ void NetworkExcel::onTrySendNext() {
 
     int globalTimeout = m_page->m_excelTimeoutMs->text().toInt();
     if (globalTimeout < 0) globalTimeout = 500;
-
-    if (m_isCaptureMode && globalTimeout < 2000) {
-        globalTimeout = 2000;
-    }
+    if (m_isCaptureMode && globalTimeout < 2000) globalTimeout = 2000;
 
     m_currentRow++;
 
-    if (cmdText.isEmpty()) {
-        onTrySendNext();
-        return;
-    }
+    if (cmdText.isEmpty()) { onTrySendNext(); return; }
 
-    // ★ 粘包队列消费
+    // ★ 粘包队列消费（使用 StickySplitter）
     if (m_page->m_networkSplitStickyCheckBox
         && m_page->m_networkSplitStickyCheckBox->isChecked()
         && !m_stickyQueue.isEmpty()) {
@@ -204,9 +189,7 @@ void NetworkExcel::onTrySendNext() {
         m_lastRecvData = queuedData;
         m_timeoutTimer->start(globalTimeout);
 
-        if (m_isCaptureMode) {
-            fillCaptureResult(queuedData);
-        }
+        if (m_isCaptureMode) fillCaptureResult(queuedData);
 
         QByteArray cmpData = queuedData;
         bool hexMode = m_page->m_networkHexSendCheckBox->isChecked();
@@ -215,38 +198,12 @@ void NetworkExcel::onTrySendNext() {
             cmpData.replace("\n", "");
         }
 
-        // ═══════════════════════════════════════════════════════════
-        //  ★★★ 区间判断（新增）★★★
-        // ═══════════════════════════════════════════════════════════
-        if (!m_expectData.isEmpty()) {
-            bool match = false;
-
-            bool asciiRangeEnabled = m_page->m_networkAsciiRangeCheckBox
-                                     && m_page->m_networkAsciiRangeCheckBox->isChecked();
-
-            if (asciiRangeEnabled && !hexMode) {
-                double tolerance = m_page->m_networkAsciiRangeEdit
-                                   ? m_page->m_networkAsciiRangeEdit->text().toDouble()
-                                   : 0.5;
-                match = rangeCompareAscii(cmpData, m_expectData, tolerance);
-            }
-            // ★ 未来扩展：HEX 区间判断
-            // else if (hexRangeEnabled && hexMode) { ... }
-            else {
-                match = (cmpData == m_expectData);
-            }
-
-            if (!match) {
-                m_page->addContentError(m_lastCmd, m_expectData, cmpData);
-            }
-        }
+        if (!tryRangeCompare(cmpData, m_expectData, hexMode))
+            m_page->addContentError(m_lastCmd, m_expectData, cmpData);
 
         if (delayMs > 0) {
             QTimer::singleShot(delayMs, this, [this]() {
-                if (m_waiting) {
-                    m_minDelayOk = true;
-                    finalizeAndNext();
-                }
+                if (m_waiting) { m_minDelayOk = true; finalizeAndNext(); }
             });
         } else {
             m_minDelayOk = true;
@@ -263,9 +220,8 @@ void NetworkExcel::onTrySendNext() {
         QString unescaped = expectedStr;
         unescaped.replace(QLatin1String("\\r"), QLatin1String("\r"));
         unescaped.replace(QLatin1String("\\n"), QLatin1String("\n"));
-        m_expectData = hexMode
-                           ? QByteArray::fromHex(unescaped.toLatin1())
-                           : unescaped.toUtf8();
+        m_expectData = hexMode ? QByteArray::fromHex(unescaped.toLatin1())
+                               : unescaped.toUtf8();
     }
     m_lastCmd = cmdText;
 
@@ -274,16 +230,13 @@ void NetworkExcel::onTrySendNext() {
         m_expectData.replace("\n", "");
     }
 
-    // ★ 对齐 GPIB：传递 forceRead 参数
-    //    捕获模式 → forceRead=true（必须等待设备回复）
-    //    普通模式 → forceRead=false（仅在期望值非空时等待）
     QMetaObject::invokeMethod(m_work, "sendStringWithDelay",
                               Qt::QueuedConnection,
                               Q_ARG(QString, cmdText),
                               Q_ARG(bool, hexMode),
                               Q_ARG(QByteArray, m_expectData),
                               Q_ARG(int, delayMs),
-                              Q_ARG(bool, m_isCaptureMode)); // ★ forceRead
+                              Q_ARG(bool, m_isCaptureMode));
 
     m_totalSent++;
     m_page->m_logSentCountCard->setValue(QString::number(m_totalSent));
@@ -291,10 +244,6 @@ void NetworkExcel::onTrySendNext() {
     m_waiting = true;
     m_gotReply = false;
     m_minDelayOk = false;
-
-    // ★ 对齐 GPIB：始终启动超时定时器
-    //    设置命令（expected 为空 + 非捕获）由 Work 层 emit 空 response，
-    //    触发 onResponseReceived → m_gotReply=true，不会误判超时
     m_timeoutTimer->start(globalTimeout);
 }
 
@@ -302,27 +251,12 @@ void NetworkExcel::onTrySendNext() {
 void NetworkExcel::onResponseReceived(QByteArray data) {
     if (!m_waiting) return;
 
-    // ★ 粘包分割
+    // ★ 粘包分割（使用 StickySplitter）
     bool splitMode = m_page->m_networkSplitStickyCheckBox
                      && m_page->m_networkSplitStickyCheckBox->isChecked();
     if (splitMode && !data.isEmpty()) {
         QByteArray delim = stickyDelimiter();
-        QList<QByteArray> parts;
-        int start = 0;
-        int dlen  = delim.size();
-        while (start < data.size()) {
-            int idx = data.indexOf(delim, start);
-            if (idx == -1) {
-                QByteArray remaining = data.mid(start);
-                if (!remaining.isEmpty())
-                    parts.append(remaining);
-                break;
-            }
-            QByteArray segment = data.mid(start, idx - start + dlen);
-            if (!segment.isEmpty())
-                parts.append(segment);
-            start = idx + dlen;
-        }
+        QList<QByteArray> parts = StickySplitter::split(data, delim);
         if (!parts.isEmpty()) {
             data = parts.takeFirst();
             for (const QByteArray &p : parts)
@@ -333,9 +267,7 @@ void NetworkExcel::onResponseReceived(QByteArray data) {
     m_gotReply = true;
     m_lastRecvData = data;
 
-    if (m_isCaptureMode) {
-        fillCaptureResult(data);
-    }
+    if (m_isCaptureMode) fillCaptureResult(data);
 
     QByteArray cmpData = data;
     bool hexMode = m_page->m_networkHexSendCheckBox->isChecked();
@@ -344,31 +276,9 @@ void NetworkExcel::onResponseReceived(QByteArray data) {
         cmpData.replace("\n", "");
     }
 
-    // ═══════════════════════════════════════════════════════════
-    //  ★★★ 区间判断（新增）★★★
-    // ═══════════════════════════════════════════════════════════
-    if (!m_expectData.isEmpty()) {
-        bool match = false;
-
-        bool asciiRangeEnabled = m_page->m_networkAsciiRangeCheckBox
-                                 && m_page->m_networkAsciiRangeCheckBox->isChecked();
-
-        if (asciiRangeEnabled && !hexMode) {
-            double tolerance = m_page->m_networkAsciiRangeEdit
-                               ? m_page->m_networkAsciiRangeEdit->text().toDouble()
-                               : 0.5;
-            match = rangeCompareAscii(cmpData, m_expectData, tolerance);
-        }
-        // ★ 未来扩展：HEX 区间判断
-        // else if (hexRangeEnabled && hexMode) { ... }
-        else {
-            match = (cmpData == m_expectData);
-        }
-
-        if (!match) {
-            m_page->addContentError(m_lastCmd, m_expectData, cmpData);
-        }
-    }
+    // ★ 区间判断（使用 RangeComparer）
+    if (!tryRangeCompare(cmpData, m_expectData, hexMode))
+        m_page->addContentError(m_lastCmd, m_expectData, cmpData);
 
     if (m_minDelayOk) finalizeAndNext();
 }
@@ -376,24 +286,16 @@ void NetworkExcel::onResponseReceived(QByteArray data) {
 // ═══════════════════════════════════════════════ 延时到期 ═══
 void NetworkExcel::onInterCmdDelayFinished() {
     if (!m_waiting) return;
-
     m_minDelayOk = true;
-    // ★ 设置命令时 m_gotReply 已在 onTrySendNext 中预设为 true，
-    //    延时到期后立即进入下一条
     if (m_gotReply) finalizeAndNext();
 }
 
 // ═══════════════════════════════════════════════ 全局超时 ═══
 void NetworkExcel::onGlobalTimeout() {
     if (!m_waiting) return;
-
-    if (m_isCaptureMode) {
-        fillCaptureTimeout();
-    }
-
-    if (!m_gotReply && !m_expectData.isEmpty()) {
+    if (m_isCaptureMode) fillCaptureTimeout();
+    if (!m_gotReply && !m_expectData.isEmpty())
         m_page->addTimeoutError(m_lastCmd, m_expectData);
-    }
     finalizeAndNext();
 }
 
@@ -401,11 +303,9 @@ void NetworkExcel::onGlobalTimeout() {
 void NetworkExcel::finalizeAndNext() {
     m_timeoutTimer->stop();
     m_waiting = false;
-
     QMetaObject::invokeMethod(m_work, "setExpectedResponse",
                               Qt::QueuedConnection,
                               Q_ARG(QByteArray, QByteArray()));
-
     onTrySendNext();
 }
 
@@ -421,18 +321,13 @@ void NetworkExcel::fillCaptureResult(const QByteArray &data) {
         displayText = data.toHex(' ').toUpper();
     } else {
         displayText = QString::fromUtf8(data);
-        if (displayText.isEmpty())
-            displayText = data.toHex(' ').toUpper();
+        if (displayText.isEmpty()) displayText = data.toHex(' ').toUpper();
     }
 
     QTableWidgetItem *item = table->item(row, 1);
-    if (!item) {
-        item = new QTableWidgetItem();
-        table->setItem(row, 1, item);
-    }
+    if (!item) { item = new QTableWidgetItem(); table->setItem(row, 1, item); }
     displayText.replace(QLatin1Char('\r'), QLatin1String("\\r"));
     displayText.replace(QLatin1Char('\n'), QLatin1String("\\n"));
-
     item->setText(displayText);
 
     qDebug() << "NetworkExcel: 捕获模式 — 第" << (row + 1) << "行返回值已填入:" << displayText;
@@ -445,13 +340,8 @@ void NetworkExcel::fillCaptureTimeout() {
     if (row < 0 || row >= table->rowCount()) return;
 
     QTableWidgetItem *item = table->item(row, 1);
-    if (!item) {
-        item = new QTableWidgetItem();
-        table->setItem(row, 1, item);
-    }
-    if (item->text().isEmpty()) {
-        item->setText("(超时)");
-    }
+    if (!item) { item = new QTableWidgetItem(); table->setItem(row, 1, item); }
+    if (item->text().isEmpty()) item->setText("(超时)");
 
     qDebug() << "NetworkExcel: 捕获模式 — 第" << (row + 1) << "行超时";
 }
@@ -459,35 +349,23 @@ void NetworkExcel::fillCaptureTimeout() {
 // ═══════════════════════════════════════════════ 打开 Excel ═══
 void NetworkExcel::onOpenExcel() {
     QString filePath = QFileDialog::getOpenFileName(
-        m_page->m_mainWindow,
-        "选择 Excel 文件",
+        m_page->m_mainWindow, "选择 Excel 文件",
         QStandardPaths::writableLocation(QStandardPaths::DesktopLocation),
-        "Excel 文件 (*.xlsx *.xls)"
-    );
-
-    if (filePath.isEmpty())
-        return;
-
-    if (!loadExcelToTable(filePath)) {
-        QMessageBox::critical(m_page->m_mainWindow, "错误",
-                              "无法读取 Excel 文件:\n" + filePath);
-    }
+        "Excel 文件 (*.xlsx *.xls)");
+    if (filePath.isEmpty()) return;
+    if (!loadExcelToTable(filePath))
+        QMessageBox::critical(m_page->m_mainWindow, "错误", "无法读取 Excel 文件:\n" + filePath);
 }
 
 bool NetworkExcel::loadExcelToTable(const QString &filePath) {
     QXlsx::Document xlsx(filePath);
-    if (!xlsx.load())
-        return false;
-
+    if (!xlsx.load()) return false;
     QStringList sheetNames = xlsx.sheetNames();
-    if (sheetNames.isEmpty())
-        return false;
-
+    if (sheetNames.isEmpty()) return false;
     xlsx.selectSheet(sheetNames.at(0));
 
     int maxRow = xlsx.dimension().rowCount();
     int maxCol = qMin(xlsx.dimension().columnCount(), 3);
-
     if (maxRow < 2) {
         QMessageBox::information(m_page->m_mainWindow, "提示",
                                  "Excel 文件为空（至少需要表头 + 一行数据）。");
@@ -498,28 +376,21 @@ bool NetworkExcel::loadExcelToTable(const QString &filePath) {
     table->clearContents();
     table->setRowCount(0);
     table->setColumnCount(3);
-    table->setHorizontalHeaderLabels({
-        "发送的命令", "正确的返回值", "到下一条命令的时间ms"
-    });
+    table->setHorizontalHeaderLabels({"发送的命令", "正确的返回值", "到下一条命令的时间ms"});
 
     int dataRowCount = maxRow - 1;
     table->setRowCount(dataRowCount);
-
     for (int row = 2; row <= maxRow; ++row) {
         int tableRow = row - 2;
         for (int col = 1; col <= maxCol; ++col) {
             QVariant cell = xlsx.read(row, col);
             QString text;
-            if (cell.isNull()) {
-                text = "";
-            } else if (cell.type() == QVariant::Double) {
+            if (cell.isNull()) text = "";
+            else if (cell.type() == QVariant::Double) {
                 if (cell.toDouble() == qint64(cell.toDouble()))
                     text = QString::number(qint64(cell.toDouble()));
-                else
-                    text = cell.toString();
-            } else {
-                text = cell.toString().trimmed();
-            }
+                else text = cell.toString();
+            } else text = cell.toString().trimmed();
             table->setItem(tableRow, col - 1, new QTableWidgetItem(text));
         }
     }
@@ -528,7 +399,6 @@ bool NetworkExcel::loadExcelToTable(const QString &filePath) {
     bool portOpen = m_page->m_networkWork && m_page->m_networkWork->isOpen();
     m_page->m_excelSendBtn->setEnabled(hasData && portOpen);
     m_page->m_excelCaptureBtn->setEnabled(hasData && portOpen);
-
     qDebug() << "NetworkExcel: 加载了" << dataRowCount << "行数据";
     return true;
 }
@@ -536,24 +406,17 @@ bool NetworkExcel::loadExcelToTable(const QString &filePath) {
 void NetworkExcel::onDownloadTemplate() {
     QString defaultPath = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation)
                           + "/网口通讯示例模板.xlsx";
-
     QString filePath = QFileDialog::getSaveFileName(
         m_page->m_mainWindow, "保存示例模板", defaultPath, "Excel 文件 (*.xlsx)");
-
-    if (filePath.isEmpty())
-        return;
-
-    if (!generateExcelTemplate(filePath)) {
+    if (filePath.isEmpty()) return;
+    if (!generateExcelTemplate(filePath))
         QMessageBox::critical(m_page->m_mainWindow, "错误", "生成模板文件失败！");
-    } else {
-        QMessageBox::information(m_page->m_mainWindow, "成功",
-                                 "示例模板已保存到:\n" + filePath);
-    }
+    else
+        QMessageBox::information(m_page->m_mainWindow, "成功", "示例模板已保存到:\n" + filePath);
 }
 
 bool NetworkExcel::generateExcelTemplate(const QString &filePath) {
     QXlsx::Document xlsx;
-
     QXlsx::Format headerFormat;
     headerFormat.setFontBold(true);
     headerFormat.setFontSize(11);
@@ -586,39 +449,26 @@ bool NetworkExcel::generateExcelTemplate(const QString &filePath) {
     xlsx.write(1, 2, "正确的返回值", headerFormat);
     xlsx.write(1, 3, "到下一条命令的时间ms", headerFormat);
 
-    struct Sample {
-        QString command;
-        int delayMs;
-    };
+    struct Sample { QString command; int delayMs; };
     QList<Sample> samples = {
-        {"*IDN?", 50},
-        {"SYST:ERR?", 100},
-        {"MEAS:VOLT:DC?", 200},
-        {"CONF:VOLT:DC 10", 100},
-        {"READ?", 300},
-        {"SYST:LOC", 50},
-        {"*RST", 500},
+        {"*IDN?", 50}, {"SYST:ERR?", 100}, {"MEAS:VOLT:DC?", 200},
+        {"CONF:VOLT:DC 10", 100}, {"READ?", 300}, {"SYST:LOC", 50}, {"*RST", 500},
     };
-
     for (int i = 0; i < samples.size(); ++i) {
         int row = i + 2;
         xlsx.write(row, 1, samples[i].command, cmdFormat);
         xlsx.write(row, 2, "", returnFormat);
         xlsx.write(row, 3, samples[i].delayMs, delayFormat);
     }
-
     xlsx.setColumnWidth(1, 35);
     xlsx.setColumnWidth(2, 35);
     xlsx.setColumnWidth(3, 25);
-
     return xlsx.saveAs(filePath);
 }
 
 QByteArray NetworkExcel::stickyDelimiter() const {
     if (!m_page->m_networkSplitDelimiterComboBox)
         return QByteArray("\n");
-    QString text = m_page->m_networkSplitDelimiterComboBox->currentText();
-    if (text == "\\r") return QByteArray("\r");
-    if (text == "\\r\\n") return QByteArray("\r\n");
-    return QByteArray("\n");
+    return StickySplitter::delimiterFromComboText(
+        m_page->m_networkSplitDelimiterComboBox->currentText());
 }
