@@ -55,9 +55,9 @@ bool NetworkExcel::tryRangeCompare(const QByteArray &received,
                                     const QByteArray &expected,
                                     bool hexMode) const
 {
-    if (expected.isEmpty()) return true;  // 无期望值 → 通过
+    if (expected.isEmpty()) return true;
 
-    // ★ ASCII 区间模式
+    // ── ASCII 区间模式 ──
     if (!hexMode
         && m_page->m_networkAsciiRangeCheckBox
         && m_page->m_networkAsciiRangeCheckBox->isChecked())
@@ -68,7 +68,29 @@ bool NetworkExcel::tryRangeCompare(const QByteArray &received,
         return RangeComparer::compareAscii(received, expected, tolerance);
     }
 
-    // ★ 精确比对
+    // ── AN3.0 HEX 区间模式（自动识别命令码，两侧同构解析后逐字段对比）──
+    if (hexMode
+        && m_page->m_networkHexRangeCheckBox
+        && m_page->m_networkHexRangeCheckBox->isChecked())
+    {
+        double tolerance = m_page->m_networkHexRangeEdit
+                           ? m_page->m_networkHexRangeEdit->text().toDouble()
+                           : 0.5;
+
+        QString detail;
+        bool pass = RangeComparer::compareHexFrame(
+            expected,      // 列B参考帧（HEX二进制）
+            received,      // 设备实时回复（HEX二进制）
+            tolerance,
+            detail);
+
+        qDebug() << "NetworkExcel:[AN3.0区间]" << detail
+                 << "→" << (pass ? "合格" : "不合格");
+
+        return pass;
+    }
+
+    // ── 精确逐字节比对 ──
     return (received == expected);
 }
 

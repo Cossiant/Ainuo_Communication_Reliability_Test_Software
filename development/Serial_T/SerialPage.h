@@ -105,6 +105,9 @@ private:
     ElaCheckBox*  m_serialHexRangeCheckBox   = nullptr;
     ElaLineEdit*  m_serialAsciiRangeEdit     = nullptr;
     ElaLineEdit*  m_serialHexRangeEdit       = nullptr;
+    // AN3.0 产品系列选择
+    ElaComboBox*   m_serialProductComboBox = nullptr;
+
 
     // ═════════════ 单条发送控件 ═════════
     ElaLineEdit*   m_singleSendInput   = nullptr;

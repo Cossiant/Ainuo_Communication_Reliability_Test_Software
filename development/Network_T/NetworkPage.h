@@ -101,8 +101,11 @@ private:
     ElaCheckBox*   m_networkHexRangeCheckBox   = nullptr;
     ElaLineEdit*   m_networkAsciiRangeEdit     = nullptr;
     ElaLineEdit*   m_networkHexRangeEdit       = nullptr;
+    // AN3.0 产品系列选择
+    ElaComboBox*   m_networkProductComboBox = nullptr;
 
-    // ★ 连接超时定时器（主线程，3 秒）
+
+    // 连接超时定时器（主线程，3 秒）
     QTimer*        m_connectTimeoutTimer     = nullptr;
     bool           m_isConnecting            = false;
 

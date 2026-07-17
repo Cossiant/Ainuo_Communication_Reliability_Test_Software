@@ -5,6 +5,7 @@
 #include "GPIBWork.h"
 #include "GPIBExcel.h"
 #include "../Other_T/LED.h"
+#include "../Other_T/An30Layout.h"
 
 #include "ElaComboBox.h"
 #include "ElaCheckBox.h"
@@ -119,12 +120,40 @@ void GPIBPageSignals::connectAllSignals()
                                   Q_ARG(bool, hexMode));
     });
 
-    // ── ④ HEX 勾选框 ──
+    // ── ④ HEX 勾选框 → 同步显示模式 + 联动 HEX 区间判断控件 ──
     connect(m_page->m_gpibHexSendCheckBox, &ElaCheckBox::toggled, m_page, [this](bool checked) {
+        // 原有：同步 HEX 显示模式
         QMetaObject::invokeMethod(m_page->m_gpibWork, "setHexDisplayMode",
                                   Qt::QueuedConnection,
                                   Q_ARG(bool, checked));
+
+        // 联动 HEX 区间判断控件的启用/禁用
+        if (m_page->m_gpibHexRangeCheckBox) {
+            m_page->m_gpibHexRangeCheckBox->setEnabled(checked);
+            if (!checked) {
+                // 取消 HEX 发送时，关闭区间判断并禁用偏差值输入
+                m_page->m_gpibHexRangeCheckBox->setChecked(false);
+                if (m_page->m_gpibHexRangeEdit)
+                    m_page->m_gpibHexRangeEdit->setEnabled(false);
+            }
+        }
     });
+
+    // HEX 区间判断勾选 → 联动偏差值输入框
+    if (m_page->m_gpibHexRangeCheckBox && m_page->m_gpibHexRangeEdit) {
+        connect(m_page->m_gpibHexRangeCheckBox, &ElaCheckBox::toggled,
+                m_page, [this](bool checked) {
+            m_page->m_gpibHexRangeEdit->setEnabled(checked);
+        });
+    }
+
+    // 产品系列切换 → 更新 An30Layout
+    connect(m_page->m_gpibProductComboBox, QOverload<int>::of(&ElaComboBox::currentIndexChanged),
+            m_page, [this](int index) {
+        An30Layout::instance().setProduct(
+            index == 0 ? An30Product::RGL : An30Product::EVH);
+    });
+
 
     // ── ⑤ 后缀选择变更 → 同步到工作线程 ──
     connect(m_page->m_suffixComboBox, QOverload<int>::of(&ElaComboBox::currentIndexChanged),

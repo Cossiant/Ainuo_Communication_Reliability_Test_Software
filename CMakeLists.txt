@@ -103,6 +103,8 @@ add_executable(untitled WIN32
         development/GPIB_T/GPIBPageSignals.h
         development/GPIB_T/GPIBErrorHandler.cpp
         development/GPIB_T/GPIBErrorHandler.h
+        development/Other_T/An30Layout.cpp
+        development/Other_T/An30Layout.h
 )
 
 target_link_libraries(untitled

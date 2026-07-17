@@ -48,7 +48,7 @@ void MainPage::initNavigation() {
 // ═══════════════════════════════════════════════════════════════
 void MainPage::initWindowConfig() {
     m_mainWindow->resize(1200, 750);
-    m_mainWindow->setWindowTitle("Ainuo 通用通讯可靠性测试软件V3.4.10");
+    m_mainWindow->setWindowTitle("Ainuo 通用通讯可靠性测试软件V3.4.11");
 
     // 用户信息卡片
     m_mainWindow->setUserInfoCardTitle("Ainuo 通讯可靠性");
@@ -332,6 +332,57 @@ void MainPage::createHelpPage() {
             QString::fromUtf8("  只需将 B 列留空，软件会自动识别并在延时后直接发送下一条。")
         }));
 
+        // ════════════════ 7.5 AN3.0 HEX 区间判断 ════════════════
+    lay->addWidget(createHelpSection(
+        QString::fromUtf8("7.5  AN3.0 HEX 区间判断（V3.4.11 新增）"),
+        QStringList{
+            QString::fromUtf8("适用于 RGL 系列可回馈交流源载一体机的 AN3.0 二进制协议。"),
+            QString::fromUtf8("软件会根据应答帧中的命令码自动匹配字段布局（偏移、字节长度、除数），"),
+            QString::fromUtf8("将参考帧和实时帧同构解析为物理值后逐字段对比。"),
+            QString(),
+            QString::fromUtf8("使用步骤："),
+            QString::fromUtf8("    a) 在设置页勾选「以HEX格式发送（AN3.0）」，HEX 区间判断控件自动解禁。"),
+            QString::fromUtf8("    b) 勾选「启用HEX区间判断（AN3.0自动解析）」，输入容差值（如 0.5）。"),
+            QString::fromUtf8("    c) 先用捕获模式获取参考帧，自动填入 Excel B 列。"),
+            QString::fromUtf8("    d) 切换到发送模式，软件自动解析并逐字段对比。"),
+            QString(),
+            QString::fromUtf8("支持的查询命令（22 条）："),
+            QString::fromUtf8("    查询输出测量值    F0 A4 — 15 字段（电压/电流/功率/频率/峰值等）"),
+            QString::fromUtf8("    查询状态/报警码    F0 EB — 2 字段（状态码/报警码）"),
+            QString::fromUtf8("    查询常规参数      A5 41 — 3 字段（设定交流/直流电压/频率）"),
+            QString::fromUtf8("    查询更多设置      A5 40 — 10 字段（转换率/波形/模式等）"),
+            QString::fromUtf8("    查询序列参数      A5 AE — 13 字段（步号/起止电压/频率等）"),
+            QString::fromUtf8("    查询输出限值      A5 80 — 4 字段"),
+            QString::fromUtf8("    查询输出保护      A5 81 — 4 字段"),
+            QString::fromUtf8("    查询输出波形      A5 82 — 8 字段"),
+            QString::fromUtf8("    查询输出其他      A5 83 — 9 字段"),
+            QString::fromUtf8("    查询系统状态      A5 90 — 6 字段"),
+            QString::fromUtf8("    查询第二组系统    A5 EF — 4 字段"),
+            QString::fromUtf8("    查询输出模式      A5 20 — 1 字段"),
+            QString::fromUtf8("    查询恒流参数      A5 A3 — 4 字段"),
+            QString::fromUtf8("    查询恒流更多      A5 B0 — 7 字段"),
+            QString::fromUtf8("    查询恒有功        A5 A6 — 4 字段"),
+            QString::fromUtf8("    查询恒有功更多    A5 B2 — 3 字段"),
+            QString::fromUtf8("    查询恒视在        A5 A5 — 4 字段"),
+            QString::fromUtf8("    查询恒视在更多    A5 B1 — 3 字段"),
+            QString::fromUtf8("    查询恒阻参数      A5 A4 — 1 字段"),
+            QString::fromUtf8("    查询恒阻更多      A5 BF — 1 字段"),
+            QString::fromUtf8("    查询RLC参数       A5 A7 — 6 字段"),
+            QString::fromUtf8("    查询间谐波参数    A5 32 — 4 字段"),
+            QString::fromUtf8("    查询谐波更多      A5 62 — 4 字段"),
+            QString(),
+            QString::fromUtf8("比对示例（查询常规参数 0xA5 0x41）："),
+            QString::fromUtf8("    发送: 7B 00 08 01 A5 AA 58 7D"),
+            QString::fromUtf8("    参考帧(列B): 7B 00 11 01 A5 41 00 55 F0 00 00 00 00 C3 50 4A 7D"),
+            QString::fromUtf8("    解析: 设定交流电压=220.00V  设定直流电压=0.00V  设定频率=50.000Hz"),
+            QString::fromUtf8("    容差=0.5: 实时帧解析值在 [参考±0.5] 范围内 → 合格 ✅"),
+            QString(),
+            QString::fromUtf8("注意："),
+            QString::fromUtf8("    ① 列B必须填完整HEX帧（含帧头7B到帧尾7D），不能只填部分字节。"),
+            QString::fromUtf8("    ② 参考帧与实时帧命令码必须一致，否则直接判定不合格。"),
+            QString::fromUtf8("    ③ 不勾选HEX区间判断时，HEX模式仍使用精确逐字节比对。"),
+        }));
+
     // ════════════════ 8. 常见问题 ════════════════
     lay->addWidget(createHelpSection(
         QString::fromUtf8("8. 常见问题"),
@@ -401,7 +452,7 @@ void MainPage::createAboutPage() {
     lay->addWidget(title);
 
     // ──── 版本 ────
-    ElaText *version = new ElaText(QString::fromUtf8("版本: v3.4.10"));
+    ElaText *version = new ElaText(QString::fromUtf8("版本: v3.4.11"));
     version->setTextPixelSize(18);
     version->setTextStyle(ElaTextType::Subtitle);
     lay->addWidget(version);
@@ -438,7 +489,7 @@ void MainPage::createAboutPage() {
         infoLayout->addLayout(row);
     };
 
-    addInfo(QString::fromUtf8("软件版本："), "v3.4.10");
+    addInfo(QString::fromUtf8("软件版本："), "v3.4.11");
     addInfo(QString::fromUtf8("发布日期："), QString::fromUtf8("2026 年 7 月"));
     addInfo(QString::fromUtf8("开发者："),   "Cossiant");
     addInfo(QString::fromUtf8("开发环境："), "Qt 5.15 + MinGW");
@@ -457,21 +508,21 @@ void MainPage::createAboutPage() {
     featureLayout->setContentsMargins(20, 20, 20, 20);
 
     QStringList features = {
-        QString::fromUtf8("\u2022  支持串口 / 网口 / CAN / GPIB 四种通讯方式"),
-        QString::fromUtf8("\u2022  Excel 表格批量导入命令，自动逐条发送"),
-        QString::fromUtf8("\u2022  自动校验返回值，统计超时和内容错误"),
-        QString::fromUtf8("\u2022  支持 HEX 和 ASCII 两种命令编码格式"),
-        QString::fromUtf8("\u2022  全模块发送后缀选择（无 / CR / LF / CRLF），自动去重"),
-        QString::fromUtf8("\u2022  buildSendData() 统一数据构建（unescape → 去尾 → 加后缀）"),
-        QString::fromUtf8("\u2022  独立单条命令发送模式，便于调试"),
-        QString::fromUtf8("\u2022  实时收发日志，带毫秒级时间戳"),
-        QString::fromUtf8("\u2022  错误统计卡片 + 6列详细错误列表"),
-        QString::fromUtf8("\u2022  Nagle 算法可选禁用（网口低延迟模式）"),
-        QString::fromUtf8("\u2022  GPIB 仪器地址配置 + EOI / 结束字符控制"),
-        QString::fromUtf8("\u2022  命令间隔精确延时控制（1ms 精度，EMA 补偿）"),
-        QString::fromUtf8("\u2022  多线程架构，收发与 UI 完全分离"),
-        QString::fromUtf8("\u2022  粘包分割（串口 / 网口），按分隔符拆分连续数据"),
-        QString::fromUtf8("\u2022  比对时去除返回值 \\r\\n，灵活适配不同仪器")
+        QString::fromUtf8("支持串口 / 网口 / CAN / GPIB 四种通讯方式"),
+        QString::fromUtf8("Excel 表格批量导入命令，自动逐条发送"),
+        QString::fromUtf8("自动校验返回值，统计超时和内容错误"),
+        QString::fromUtf8("支持 HEX 和 ASCII 两种命令编码格式"),
+        QString::fromUtf8("全模块发送后缀选择（无 / CR / LF / CRLF），自动去重"),
+        QString::fromUtf8("buildSendData() 统一数据构建（unescape → 去尾 → 加后缀）"),
+        QString::fromUtf8("独立单条命令发送模式，便于调试"),
+        QString::fromUtf8("实时收发日志，带毫秒级时间戳"),
+        QString::fromUtf8("错误统计卡片 + 6列详细错误列表"),
+        QString::fromUtf8("Nagle 算法可选禁用（网口低延迟模式）"),
+        QString::fromUtf8("GPIB 仪器地址配置 + EOI / 结束字符控制"),
+        QString::fromUtf8("命令间隔精确延时控制（1ms 精度，EMA 补偿）"),
+        QString::fromUtf8("多线程架构，收发与 UI 完全分离"),
+        QString::fromUtf8("粘包分割（串口 / 网口），按分隔符拆分连续数据"),
+        QString::fromUtf8("比对时去除返回值 \\r\\n，灵活适配不同仪器")
     };
 
     for (const QString &feat : features) {
@@ -484,17 +535,23 @@ void MainPage::createAboutPage() {
     lay->addWidget(featureGroup);
 
     // ──── 更新日志摘要 ────
-    QGroupBox *changelogGroup = new QGroupBox(QString::fromUtf8("V3.4.9 更新要点"));
+    QGroupBox *changelogGroup = new QGroupBox(QString::fromUtf8("V3.4.11 更新要点"));
     changelogGroup->setStyleSheet(infoGroup->styleSheet());
     QVBoxLayout *changelogLayout = new QVBoxLayout(changelogGroup);
     changelogLayout->setSpacing(4);
     changelogLayout->setContentsMargins(20, 20, 20, 20);
 
     QStringList changelog = {
-        QString::fromUtf8("\u2022  串口 / 网口新增「发送后缀」功能，对齐 GPIB 模块"),
-        QString::fromUtf8("\u2022  全模块 buildSendData() 统一数据构建（unescape + 去尾 + 加后缀）"),
-        QString::fromUtf8("\u2022  单条发送和 Excel 批量发送共享同一后缀逻辑，行为完全一致"),
-        QString::fromUtf8("\u2022  帮助文档重构，新增发送后缀专题说明章节")
+        QString::fromUtf8("AN3.0 HEX 区间判断：串口/网口/GPIB 设置页「HEX区间判断」全面启用"),
+        QString::fromUtf8("基于 An30Layout 命令码自动匹配字段布局，零配置使用"),
+        QString::fromUtf8("注册全部 22 条 AN3.0 查询命令（F0 A4 / A5 41 / F0 EB 等）"),
+        QString::fromUtf8("参考帧与实时帧同构解析后逐字段对比，误差 ±tolerance 判定"),
+        QString::fromUtf8("Excel B 列支持直接填入 HEX 捕获帧，自动识别命令码无需手动配置"),
+        QString::fromUtf8("新增 An30FieldExtractor / An30Layout 公共解析库"),
+        QString::fromUtf8("RangeComparer 新增 compareHexFrame() 公共方法"),
+        QString::fromUtf8("HEX 区间判断与 HEX 发送勾选框三级联动（HEX→区间→偏差值）"),
+        QString::fromUtf8("修复 HEX 区间模式重复记录错误统计的 Bug"),
+        QString::fromUtf8("帮助文档新增「AN3.0 HEX 区间判断」专题章节"),
     };
 
     for (const QString &log : changelog) {
@@ -505,6 +562,7 @@ void MainPage::createAboutPage() {
     }
 
     lay->addWidget(changelogGroup);
+
 
     lay->addStretch();
 

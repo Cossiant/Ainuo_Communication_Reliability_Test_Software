@@ -115,21 +115,22 @@ void GPIBPageUI::createSettingsPage() {
     m_page->m_gpibHexSendCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
     grid->addWidget(m_page->m_gpibHexSendCheckBox, 4, 0, 1, 2);
 
+    // ──── 第 4 行：去除 \r\n 勾选框 ────
+    m_page->m_gpibStripCRLFCheckBox = new ElaCheckBox("比对时去除返回值中的 \\r\\n");
+    m_page->m_gpibStripCRLFCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
+    grid->addWidget(m_page->m_gpibStripCRLFCheckBox, 4, 2, 1, 4);
+
+    // ──── 第 5 行：发送后缀添加 ────
     ElaText* suffixLabel = new ElaText("发送后缀:");
     suffixLabel->setTextPixelSize(15);
     m_page->m_suffixComboBox = new ElaComboBox();
     m_page->m_suffixComboBox->addItems({"无 (None)", "CR (\\r)", "LF (\\n)", "CRLF (\\r\\n)"});
     m_page->m_suffixComboBox->setCurrentIndex(0);
 
-    grid->addWidget(suffixLabel,       4, 2);
-    grid->addWidget(m_page->m_suffixComboBox,  4, 3);
+    grid->addWidget(suffixLabel,       5, 0);
+    grid->addWidget(m_page->m_suffixComboBox,  5, 2,1,2);
 
-    // ──── 第 5 行：去除 \r\n 勾选框 ────
-    m_page->m_gpibStripCRLFCheckBox = new ElaCheckBox("比对时去除返回值中的 \\r\\n");
-    m_page->m_gpibStripCRLFCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
-    grid->addWidget(m_page->m_gpibStripCRLFCheckBox, 5, 0, 1, 4);
-
-    // ★ 第 6 行：区间判断（ASCII）
+    // 第 6 行：区间判断（ASCII）
     m_page->m_gpibAsciiRangeCheckBox = new ElaCheckBox("启用ASCII区间判断（如：期望3.00±0.5）");
     m_page->m_gpibAsciiRangeCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
     grid->addWidget(m_page->m_gpibAsciiRangeCheckBox, 6, 0, 1, 2);
@@ -142,20 +143,30 @@ void GPIBPageUI::createSettingsPage() {
     grid->addWidget(asciiRangeLabel,      6, 2);
     grid->addWidget(m_page->m_gpibAsciiRangeEdit,  6, 3);
 
-    // ★ 第 7 行：HEX 区间判断（预留）
-    m_page->m_gpibHexRangeCheckBox = new ElaCheckBox("启用HEX区间判断（预留）");
+    // ★ 第 7 行：HEX 区间判断（AN3.0 自动解析命令码）
+    m_page->m_gpibHexRangeCheckBox = new ElaCheckBox("启用HEX区间判断（AN3.0自动解析）");
     m_page->m_gpibHexRangeCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
-    m_page->m_gpibHexRangeCheckBox->setEnabled(false);
+    m_page->m_gpibHexRangeCheckBox->setEnabled(false);   // 初始禁用，等勾选HEX发送后启用
     grid->addWidget(m_page->m_gpibHexRangeCheckBox, 7, 0, 1, 2);
 
     ElaText* hexRangeLabel = new ElaText("HEX区间值:");
     hexRangeLabel->setTextPixelSize(15);
     m_page->m_gpibHexRangeEdit = new ElaLineEdit();
     m_page->m_gpibHexRangeEdit->setText("0.5");
-    m_page->m_gpibHexRangeEdit->setPlaceholderText("预留");
-    m_page->m_gpibHexRangeEdit->setEnabled(false);
+    m_page->m_gpibHexRangeEdit->setPlaceholderText("如 0.5 表示 ±0.5");
+    m_page->m_gpibHexRangeEdit->setEnabled(false);       // 初始禁用，勾选区间判断后启用
     grid->addWidget(hexRangeLabel,        7, 2);
     grid->addWidget(m_page->m_gpibHexRangeEdit,   7, 3);
+
+    // ★ 第 8行：AN3.0 产品系列选择
+    ElaText* productLabel = new ElaText("产品系列:");
+    productLabel->setTextPixelSize(15);
+    m_page->m_gpibProductComboBox = new ElaComboBox();
+    m_page->m_gpibProductComboBox->addItems({"RGL系列 (交流源载)", "EVH系列 (直流电源)"});
+    m_page->m_gpibProductComboBox->setCurrentIndex(0);
+    m_page->m_gpibProductComboBox->setStyleSheet("ElaComboBox { font-size: 14px; }");
+    grid->addWidget(productLabel,                    8, 0);
+    grid->addWidget(m_page->m_gpibProductComboBox, 8, 2, 1, 2);
 
     // ──── 第 8 行：打开/关闭按钮 ────
     m_page->m_openGpibButton = new ElaPushButton("打开 GPIB");
@@ -163,8 +174,8 @@ void GPIBPageUI::createSettingsPage() {
     m_page->m_closeGpibButton = new ElaPushButton("关闭 GPIB");
     m_page->m_closeGpibButton->setFixedHeight(35);
     m_page->m_closeGpibButton->setEnabled(false);
-    grid->addWidget(m_page->m_openGpibButton,   8, 1);
-    grid->addWidget(m_page->m_closeGpibButton,  8, 3);
+    grid->addWidget(m_page->m_openGpibButton,   9, 1);
+    grid->addWidget(m_page->m_closeGpibButton,  9, 3);
 
     _GpibSettingLayout->addWidget(group);
     _GpibSettingLayout->addStretch();

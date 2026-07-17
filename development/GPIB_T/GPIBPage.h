@@ -101,8 +101,11 @@ private:
     ElaCheckBox*   m_gpibHexRangeCheckBox   = nullptr;
     ElaLineEdit*   m_gpibAsciiRangeEdit     = nullptr;
     ElaLineEdit*   m_gpibHexRangeEdit       = nullptr;
+    //AN3.0 产品系列选择
+    ElaComboBox*   m_gpibProductComboBox = nullptr;
 
-    // ★ 连接超时定时器（主线程，5 秒，GPIB 连接可能较慢）
+
+    //连接超时定时器（主线程，5 秒，GPIB 连接可能较慢）
     QTimer*        m_connectTimeoutTimer    = nullptr;
     bool           m_isConnecting           = false;
 

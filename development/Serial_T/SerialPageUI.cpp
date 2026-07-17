@@ -152,29 +152,39 @@ void SerialPageUI::createSettingsPage() {
     grid->addWidget(asciiRangeLabel,          7, 2);
     grid->addWidget(m_page->m_serialAsciiRangeEdit,    7, 3);
 
-    // ★ 第 8 行：HEX 区间判断（预留）
-    m_page->m_serialHexRangeCheckBox = new ElaCheckBox("启用HEX区间判断（预留）");
+    // ★ 第 8 行：HEX 区间判断（AN3.0 自动解析命令码）
+    m_page->m_serialHexRangeCheckBox = new ElaCheckBox("启用HEX区间判断（AN3.0自动解析）");
     m_page->m_serialHexRangeCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
-    m_page->m_serialHexRangeCheckBox->setEnabled(false);
+    m_page->m_serialHexRangeCheckBox->setEnabled(false);   // 初始禁用，等勾选HEX发送后启用
     grid->addWidget(m_page->m_serialHexRangeCheckBox, 8, 0, 1, 2);
 
     ElaText* hexRangeLabel = new ElaText("HEX区间值:");
     hexRangeLabel->setTextPixelSize(15);
     m_page->m_serialHexRangeEdit = new ElaLineEdit();
     m_page->m_serialHexRangeEdit->setText("0.5");
-    m_page->m_serialHexRangeEdit->setPlaceholderText("预留");
-    m_page->m_serialHexRangeEdit->setEnabled(false);
-    grid->addWidget(hexRangeLabel,            8, 2);
+    m_page->m_serialHexRangeEdit->setPlaceholderText("如 0.5 表示 ±0.5");
+    m_page->m_serialHexRangeEdit->setEnabled(false);       // 初始禁用，勾选区间判断后启用
+    grid->addWidget(hexRangeLabel,             8, 2);
     grid->addWidget(m_page->m_serialHexRangeEdit,      8, 3);
 
-    // ──── 第 9 行：打开/关闭按钮 ────
+    // 第 9行：AN3.0 产品系列选择
+    ElaText* productLabel = new ElaText("产品系列:");
+    productLabel->setTextPixelSize(15);
+    m_page->m_serialProductComboBox = new ElaComboBox();
+    m_page->m_serialProductComboBox->addItems({"RGL系列 (交流源载)", "EVH系列 (直流电源)"});
+    m_page->m_serialProductComboBox->setCurrentIndex(0);
+    m_page->m_serialProductComboBox->setStyleSheet("ElaComboBox { font-size: 14px; }");
+    grid->addWidget(productLabel,                    9, 0);
+    grid->addWidget(m_page->m_serialProductComboBox, 9, 2, 1, 2);
+
+    // ──── 第 10 行：打开/关闭按钮 ────
     m_page->m_openSerialButton = new ElaPushButton("打开串口");
     m_page->m_openSerialButton->setFixedHeight(35);
     m_page->m_closeSerialButton = new ElaPushButton("关闭串口");
     m_page->m_closeSerialButton->setFixedHeight(35);
     m_page->m_closeSerialButton->setEnabled(false);
-    grid->addWidget(m_page->m_openSerialButton,       9, 0);
-    grid->addWidget(m_page->m_closeSerialButton,      9, 1);
+    grid->addWidget(m_page->m_openSerialButton,       10, 0);
+    grid->addWidget(m_page->m_closeSerialButton,      10, 1);
 
     _SerialSettingLayout1->addWidget(_SerialSettingGroup);
     _SerialSettingLayout1->addStretch();

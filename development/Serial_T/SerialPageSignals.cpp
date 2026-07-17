@@ -5,6 +5,7 @@
 #include "SerialWork.h"
 #include "SerialExcel.h"
 #include "../Other_T/LED.h"
+#include "../Other_T/An30Layout.h"
 
 #include "ElaComboBox.h"
 #include "ElaCheckBox.h"
@@ -104,12 +105,40 @@ void SerialPageSignals::connectAllSignals()
                                   Q_ARG(bool, hexMode));
     });
 
-    // ── ④ HEX 勾选框 ──
+    // ── ④ HEX 勾选框 → 同步显示模式 + 联动 HEX 区间判断控件 ──
     connect(m_page->m_serialHexSendCheckBox, &ElaCheckBox::toggled, m_page, [this](bool checked) {
+        // 原有：同步 HEX 显示模式
         QMetaObject::invokeMethod(m_page->m_serialWork, "setHexDisplayMode",
                                   Qt::QueuedConnection,
                                   Q_ARG(bool, checked));
+
+        // 联动 HEX 区间判断控件的启用/禁用
+        if (m_page->m_serialHexRangeCheckBox) {
+            m_page->m_serialHexRangeCheckBox->setEnabled(checked);
+            if (!checked) {
+                // 取消 HEX 发送时，关闭区间判断并禁用偏差值输入
+                m_page->m_serialHexRangeCheckBox->setChecked(false);
+                if (m_page->m_serialHexRangeEdit)
+                    m_page->m_serialHexRangeEdit->setEnabled(false);
+            }
+        }
     });
+
+    // HEX 区间判断勾选 → 联动偏差值输入框
+    if (m_page->m_serialHexRangeCheckBox && m_page->m_serialHexRangeEdit) {
+        connect(m_page->m_serialHexRangeCheckBox, &ElaCheckBox::toggled,
+                m_page, [this](bool checked) {
+            m_page->m_serialHexRangeEdit->setEnabled(checked);
+        });
+    }
+
+    // ★ 新增：产品系列切换 → 更新 An30Layout
+    connect(m_page->m_serialProductComboBox, QOverload<int>::of(&ElaComboBox::currentIndexChanged),
+            m_page, [this](int index) {
+        An30Layout::instance().setProduct(
+            index == 0 ? An30Product::RGL : An30Product::EVH);
+    });
+
 
     // ── ⑤ 后缀选择变更 → 同步到工作线程 ──
     connect(m_page->m_suffixComboBox, QOverload<int>::of(&ElaComboBox::currentIndexChanged),

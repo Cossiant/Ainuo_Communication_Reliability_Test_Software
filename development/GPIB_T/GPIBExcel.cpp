@@ -60,6 +60,7 @@ bool GPIBExcel::tryRangeCompare(const QByteArray &received,
 {
     if (expected.isEmpty()) return true;
 
+    // ── ASCII 区间模式 ──
     if (!hexMode
         && m_page->m_gpibAsciiRangeCheckBox
         && m_page->m_gpibAsciiRangeCheckBox->isChecked())
@@ -70,6 +71,31 @@ bool GPIBExcel::tryRangeCompare(const QByteArray &received,
         return RangeComparer::compareAscii(received, expected, tolerance);
     }
 
+    // ── AN3.0 HEX 区间模式（自动识别命令码，两侧同构解析后逐字段对比）──
+    if (hexMode
+        && m_page->m_gpibHexRangeCheckBox
+        && m_page->m_gpibHexRangeCheckBox->isChecked())
+    {
+        double tolerance = m_page->m_gpibHexRangeEdit
+                           ? m_page->m_gpibHexRangeEdit->text().toDouble()
+                           : 0.5;
+
+        QString detail;
+        bool pass = RangeComparer::compareHexFrame(
+            expected,      // 列B参考帧（HEX二进制）
+            received,      // 设备实时回复（HEX二进制）
+            tolerance,
+            detail);
+
+        qDebug() << "GPIBExcel:[AN3.0区间]" << detail
+                 << "→" << (pass ? "合格" : "不合格");
+
+        // ★ 不在 tryRangeCompare 里调用 addContentError
+        // 调用方 onResponseReceived 统一处理
+        return pass;
+    }
+
+    // ── 精确逐字节比对 ──
     return (received == expected);
 }
 
