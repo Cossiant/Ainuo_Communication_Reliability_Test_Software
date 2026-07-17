@@ -1,5 +1,6 @@
 // GPIBExcel.h
 // GPIB Excel 批量发送 / 捕获，对齐 SerialExcel / NetworkExcel
+// ★ 重构：使用公共 RangeComparer
 
 #pragma once
 
@@ -34,6 +35,11 @@ private:
     void finalizeAndNext();
     void fillCaptureResult(const QByteArray &data);
     void fillCaptureTimeout();
+
+    // ★ 区间判断辅助（使用公共 RangeComparer）
+    bool tryRangeCompare(const QByteArray &received,
+                         const QByteArray &expected,
+                         bool hexMode) const;
 
     GPIBPage* m_page = nullptr;
     GPIBWork* m_work = nullptr;

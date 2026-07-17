@@ -1,9 +1,11 @@
+// SerialPage.h
+// 页面协调器：持有各子模块指针，串联初始化流程
 //
 // Created by Cossiant on 2026/6/18.
 //
 #pragma once
 
-#include <QObject>          // ← 改为继承 QObject
+#include <QObject>
 #include <QWidget>
 #include <QVBoxLayout>
 #include <QFileDialog>
@@ -11,8 +13,8 @@
 #include <QLabel>
 #include <QSerialPortInfo>
 #include <QGroupBox>
-#include <QHBoxLayout>          // ← 新增
-#include <QListWidget>          // ← 新增
+#include <QHBoxLayout>
+#include <QListWidget>
 #include <QTableWidget>
 #include <QDateTime>
 #include <QTableWidget>
@@ -32,10 +34,13 @@
 #include "SerialWork.h"
 
 class SerialWork;
+class SerialPageUI;
+class SerialPageSignals;
+class SerialErrorHandler;
 class QTableWidget;
 class QListWidget;
 class StatCard;
-class ElaWindow;            // ← 前向声明，不再 include 头文件
+class ElaWindow;
 class ElaText;
 class ElaPushButton;
 class ElaComboBox;
@@ -50,15 +55,23 @@ class SerialPage : public QObject {
     Q_OBJECT
     friend class SerialWork;
     friend class SerialExcel;
+    friend class SerialPageUI;
+    friend class SerialPageSignals;
+    friend class SerialErrorHandler;
 public:
     explicit SerialPage(ElaWindow* mainWindow, QObject *parent = nullptr);
     ~SerialPage();
 private:
     ElaWindow* m_mainWindow;
-    SerialWork* m_serialWork = nullptr; // ← 内部持有 SerialWork
-    SerialExcel* m_serialFunc = nullptr; // ← 内部持有 SerialFunction
 
-    QThread*     m_serialThread  = nullptr;   // ★ 工作线程
+    // ★ 子模块
+    SerialPageUI*        m_ui         = nullptr;
+    SerialPageSignals*   m_signals    = nullptr;
+    SerialErrorHandler*  m_errors     = nullptr;
+    SerialWork*          m_serialWork = nullptr;
+    SerialExcel*         m_serialFunc = nullptr;
+
+    QThread*     m_serialThread  = nullptr;
     // ═════════════ 页面 ═════════
     QWidget *_SerialSettingPage = nullptr;
     QWidget *_SerialSendPage = nullptr;
@@ -77,17 +90,23 @@ private:
     ElaComboBox*  m_parityComboBox     = nullptr;
     ElaCheckBox*  m_serialBufferCheckBox = nullptr;
     ElaCheckBox*  m_serialHexSendCheckBox  = nullptr;
-    ElaCheckBox*  m_serialStripCRLFCheckBox = nullptr;   // ★ 去除 \r\n
+    ElaCheckBox*  m_serialStripCRLFCheckBox = nullptr;
     ElaPushButton* m_openSerialButton  = nullptr;
     ElaPushButton* m_closeSerialButton = nullptr;
     QLabel*        m_serialLED         = nullptr;
-    // 发送后缀
     ElaComboBox*   m_suffixComboBox    = nullptr;
 
     // 粘包分割
     ElaCheckBox*  m_serialSplitStickyCheckBox    = nullptr;
     ElaComboBox*  m_serialSplitDelimiterComboBox = nullptr;
 
+    // 区间判断控件
+    ElaCheckBox*  m_serialAsciiRangeCheckBox = nullptr;
+    ElaCheckBox*  m_serialHexRangeCheckBox   = nullptr;
+    ElaLineEdit*  m_serialAsciiRangeEdit     = nullptr;
+    ElaLineEdit*  m_serialHexRangeEdit       = nullptr;
+    // AN3.0 产品系列选择
+    ElaComboBox*   m_serialProductComboBox = nullptr;
 
 
     // ═════════════ 单条发送控件 ═════════
@@ -102,53 +121,45 @@ private:
     ElaPushButton* m_excelDownloadTplBtn = nullptr;
     ElaPushButton* m_excelSendBtn        = nullptr;
     ElaPushButton* m_excelStopBtn        = nullptr;
-    ElaPushButton* m_excelCaptureBtn = nullptr;   // 读取返回值（预扫）
-    ElaLineEdit*   m_excelRepeatCount = nullptr;  // ← 新增：发送次数
-    ElaLineEdit*   m_excelTimeoutMs   = nullptr;
+    ElaPushButton* m_excelCaptureBtn     = nullptr;
+    ElaLineEdit*   m_excelRepeatCount    = nullptr;
+    ElaLineEdit*   m_excelTimeoutMs      = nullptr;
     QTableWidget*  m_excelTableWidget    = nullptr;
 
     // ═════════════ 发送日志控件 ═════════
-    StatCard*     m_logSentCountCard = nullptr;   // 总计发送
-    StatCard*     m_logRecvCountCard = nullptr;   // 总计接收
-    StatCard*     m_logStartTimeCard = nullptr;   // 开始时间
-    QListWidget*  m_logSendList      = nullptr;   // 发送日志（左）
-    QListWidget*  m_logRecvList      = nullptr;   // 接收日志（右）
-    ElaPushButton* m_logClearBtn     = nullptr;   // 清空日志
-    ElaPushButton* m_logPauseBtn      = nullptr;   // 暂停恢复日志更新
-    QLabel*        m_logLED           = nullptr;
-    bool           m_logPaused        = false;      // 日志是否暂停
+    StatCard*     m_logSentCountCard = nullptr;
+    StatCard*     m_logRecvCountCard = nullptr;
+    StatCard*     m_logStartTimeCard = nullptr;
+    QListWidget*  m_logSendList      = nullptr;
+    QListWidget*  m_logRecvList      = nullptr;
+    ElaPushButton* m_logClearBtn     = nullptr;
+    ElaPushButton* m_logPauseBtn     = nullptr;
+    QLabel*        m_logLED          = nullptr;
+    bool           m_logPaused       = false;
 
     // ═════════════ 错误统计 ═════════
-    int m_errorSeq        = 0;
-    int m_timeoutCount    = 0;
-    int m_contentCount    = 0;
+    int m_errorSeq     = 0;
+    int m_timeoutCount = 0;
+    int m_contentCount = 0;
 
     // ═════════════ 错误日志控件 ═════════
-    StatCard*        m_errorTotalCard   = nullptr;   // ← 改
-    StatCard*        m_errorTimeoutCard = nullptr;   // ← 改
-    StatCard*        m_errorContentCard = nullptr;   // ← 改
-    QTableWidget*    m_errorTable        = nullptr;
-    ElaPushButton*   m_errorClearBtn     = nullptr;
-    ElaToggleSwitch* m_errorAutoScroll   = nullptr;
+    StatCard*        m_errorTotalCard   = nullptr;
+    StatCard*        m_errorTimeoutCard = nullptr;
+    StatCard*        m_errorContentCard = nullptr;
+    QTableWidget*    m_errorTable       = nullptr;
+    ElaPushButton*   m_errorClearBtn    = nullptr;
+    ElaToggleSwitch* m_errorAutoScroll  = nullptr;
 
     // ═════════════ 初始化方法 ═════════
-    void initSerialPage();
     void initNavigation();
-    void initwindowConfig();
+    void initWindowConfig();
 
-    void createSettingsPage();
-    void createSendPage();
-    void createExcelSendPage();
-    void createLogPage();
-    void createErrorLogPage();
-
-    // ═════════════ 错误记录 ═════════
+    // ═════════════ 错误记录（委托给 SerialErrorHandler）═════════
     void addTimeoutError(const QString &command, const QByteArray &expected);
     void addContentError(const QString &command, const QByteArray &expected, const QByteArray &actual);
     void clearErrors();
     void clearSingleSendLog();
     void clearExcelSendLog();
 };
-
 
 #endif //UNTITLED_SERIALPAGE_H

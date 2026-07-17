@@ -1,3 +1,6 @@
+// NetworkExcel.h
+// ★ 重构：使用公共 RangeComparer / StickySplitter
+
 #pragma once
 
 #include <QObject>
@@ -34,6 +37,11 @@ private:
     void fillCaptureResult(const QByteArray &data);
     void fillCaptureTimeout();
 
+    // ★ 区间判断辅助（使用公共 RangeComparer）
+    bool tryRangeCompare(const QByteArray &received,
+                         const QByteArray &expected,
+                         bool hexMode) const;
+
     NetworkPage* m_page = nullptr;
     NetworkWork* m_work = nullptr;
 
@@ -52,7 +60,6 @@ private:
     QByteArray m_expectData;
     bool      m_minDelayOk  = false;
 
-    // ★ 粘包分割队列（新增）
     QQueue<QByteArray> m_stickyQueue;
     QByteArray stickyDelimiter() const;
 

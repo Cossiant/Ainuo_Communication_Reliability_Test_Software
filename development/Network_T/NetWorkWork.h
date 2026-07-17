@@ -34,8 +34,6 @@ public slots:
     void sendData(const QByteArray &data);
     void sendString(const QString &text, bool hexMode);
 
-    // ★ forceRead: true=必须等待设备回复（捕获模式），
-    //              false=仅在 expectedResponse 非空时等待回复
     void sendStringWithDelay(const QString &text, bool hexMode,
                              const QByteArray &expectedResponse,
                              int delayMs,
@@ -44,7 +42,7 @@ public slots:
     void resetRecvCount();
     void setExpectedResponse(const QByteArray &expected);
     void setHexDisplayMode(bool hexMode);
-    void setSuffixMode(int mode);   // ★ 新增：设置发送后缀模式
+    void setSuffixMode(int mode);
 
 signals:
     void networkConnected();
@@ -67,8 +65,6 @@ private slots:
 private:
     QString formatByteArray(const QByteArray &data) const;
     void emitData(const QByteArray &data);
-
-    // ★ 新增：统一构建发送数据（unescape → 去尾 → 加后缀）
     QByteArray buildSendData(const QString &text, bool hexMode) const;
 
     QTcpSocket  *m_tcpSocket     = nullptr;
@@ -76,20 +72,16 @@ private:
     int        m_totalRecv = 0;
     QByteArray m_expectedResponse;
     bool       m_hexDisplay = false;
-
-    int        m_suffixMode = 0;   // ★ 新增：发送后缀模式 0=None, 1=CR, 2=LF, 3=CRLF
+    int        m_suffixMode = 0;
 
     QAtomicInt m_opened{0};
     QAtomicInt m_disconnecting{0};
 
-    // ═══════════════════════════════════════════════
-    //  精确延时 + 误差补偿
-    // ═══════════════════════════════════════════════
-    QTimer       *m_interCmdTimer        = nullptr;   // 1ms 轮询定时器
-    QElapsedTimer m_preciseDelayTimer;                // 高精度计时
-    int           m_targetDelayMs         = 0;         // 本次补偿后目标（ms）
-    int           m_originalDelayMs       = 0;         // 本次原始请求（ms，日志用）
-    int           m_timingCompensationMs  = 0;         // EMA 累积补偿（ms）
+    QTimer       *m_interCmdTimer        = nullptr;
+    QElapsedTimer m_preciseDelayTimer;
+    int           m_targetDelayMs         = 0;
+    int           m_originalDelayMs       = 0;
+    int           m_timingCompensationMs  = 0;
 };
 
 #endif // UNTITLED_NETWORKWORK_H

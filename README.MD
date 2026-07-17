@@ -1,14 +1,12 @@
 # Ainuo 通用通讯可靠性测试软件
 
-[![Version](https://img.shields.io/badge/version-v3.4.9-blue)](https://github.com)
+[![Version](https://img.shields.io/badge/version-v3.4.11-blue)](https://github.com)
 [![Qt](https://img.shields.io/badge/Qt-5.15-green)](https://www.qt.io/)
 [![License](https://img.shields.io/badge/license-MIT-orange)](LICENSE)
 
 一款基于 Qt 的**多协议仪器通讯自动化测试工具**，支持通过 Excel 表格批量发送 SCPI 指令，自动校验设备返回值，统计通讯可靠性。
 
-<p align="center">
-  <img src="screenshots/main.png" alt="软件截图" width="800">
-</p>
+**V3.4.11 全面启用 AN3.0 协议 HEX 区间判断**，支持 **RGL 系列交流源载一体机**和 **EVH 系列双向直流电源**双产品系列，覆盖 39 条查询命令自动解析。
 
 ---
 
@@ -25,6 +23,10 @@
 | 📈 **错误统计** | 6 列详细错误列表（序号/时间/类型/命令/期望值/实际值），颜色区分超时(橙)与内容错误(红) |
 | ⏱️ **精确延时** | 1ms 精度命令间隔控制，EMA 误差补偿算法，计时起点在 I/O 前（TX→TX 间隔 = max(I/O耗时, 设定延时)） |
 | 🧵 **多线程架构** | I/O 操作独立工作线程，UI 完全无阻塞 |
+| 🎯 **ASCII 区间判断** | 支持 ASCII 返回值区间容差校验，自动解析数字并判定是否在容差范围内 |
+| 🎯 **AN3.0 HEX 区间判断** | ★ V3.4.11：自动识别命令码、同构解析二进制帧、逐字段 ±tolerance 对比，支持 RGL/EVH 双产品系列 |
+| 🎛️ **产品系列切换** | 设置页新增下拉框，一键切换 RGL / EVH 命令表 |
+| 🧩 **模块化架构** | Page / PageUI / PageSignals / ErrorHandler 四层分离，公共工具库（RangeComparer / StickySplitter / An30Layout） |
 | 🎨 **现代 UI** | 基于 ElaWidgetTools 的 Fluent Design 风格，支持明暗主题切换 |
 
 ---
@@ -45,36 +47,46 @@
 
 ```
 ExcelSCPISender/
-├── CMakeLists.txt                   # CMake 构建配置
+├── CMakeLists.txt
 ├── README.md
 ├── development/
 │   ├── Serial_T/                    # 串口通讯模块
-│   │   ├── SerialPage.h/.cpp        #   串口 UI 页面
-│   │   ├── SerialWork.h/.cpp        #   串口工作线程
-│   │   └── SerialExcel.h/.cpp       #   串口 Excel 批量发送
+│   │   ├── SerialPage.h/.cpp        #   页面协调器
+│   │   ├── SerialPageUI.h/.cpp      #   UI 构建（5 个页面）
+│   │   ├── SerialPageSignals.h/.cpp #   线程管理 + 信号/槽连接
+│   │   ├── SerialErrorHandler.h/.cpp#   错误记录与统计
+│   │   ├── SerialWork.h/.cpp        #   串口 I/O 工作线程
+│   │   └── SerialExcel.h/.cpp       #   Excel 批量发送
 │   ├── Network_T/                   # 网口通讯模块
-│   │   ├── NetworkPage.h/.cpp       #   网口 UI 页面
-│   │   ├── NetWorkWork.h/.cpp       #   网口工作线程
-│   │   └── NetworkExcel.h/.cpp      #   网口 Excel 批量发送
+│   │   ├── NetworkPage.h/.cpp
+│   │   ├── NetworkPageUI.h/.cpp
+│   │   ├── NetworkPageSignals.h/.cpp
+│   │   ├── NetworkErrorHandler.h/.cpp
+│   │   ├── NetworkWork.h/.cpp
+│   │   └── NetworkExcel.h/.cpp
 │   ├── GPIB_T/                      # GPIB 通讯模块
-│   │   ├── GPIBPage.h/.cpp          #   GPIB UI 页面
-│   │   ├── GPIBWork.h/.cpp          #   GPIB 工作线程（NI-VISA）
-│   │   └── GPIBExcel.h/.cpp         #   GPIB Excel 批量发送
+│   │   ├── GPIBPage.h/.cpp
+│   │   ├── GPIBPageUI.h/.cpp
+│   │   ├── GPIBPageSignals.h/.cpp
+│   │   ├── GPIBErrorHandler.h/.cpp
+│   │   ├── GPIBWork.h/.cpp
+│   │   └── GPIBExcel.h/.cpp
 │   ├── CAN_T/                       # CAN 通讯模块（预留）
-│   │   ├── CANPage.h/.cpp
-│   ├── USER_T/                      # 用户管理模块
-│   │   ├── USERPage.h/.cpp
+│   ├── USER_T/
 │   ├── Other_T/                     # 核心 / 公共组件
 │   │   ├── MainPage.h/.cpp          #   首页 / 帮助 / 关于页面
 │   │   ├── ElaWidgetToolsDemo.h/.cpp#   主窗口入口
 │   │   ├── LED.h/.cpp               #   状态指示灯组件
 │   │   ├── StatCard.h/.cpp          #   统计卡片组件
-│   │   └── main.cpp                 #   程序入口
-│   ├── Old/                         # 历史遗留代码
-│   ├── ico/                         # 应用图标资源
-│   └── ExcelSCPISender.qrc          # Qt 资源文件
-├── QXlsx/                           # QXlsx 子模块（Excel 读写）
-└── ElaWidgetTools/                  # ElaWidgetTools 子模块（UI 组件库）
+│   │   ├── RangeComparer.h/.cpp     # ★ 公共区间比较（ASCII + HEX）
+│   │   ├── StickySplitter.h/.cpp    # ★ 公共粘包分割
+│   │   ├── An30Layout.h/.cpp        # ★ AN3.0 命令码自动匹配布局（V3.4.11）
+│   │   └── main.cpp
+│   ├── Old/
+│   ├── ico/
+│   └── ExcelSCPISender.qrc
+├── QXlsx/
+└── ElaWidgetTools/
 ```
 
 ---
@@ -198,6 +210,38 @@ Step 3: 加后缀 — 根据下拉框选择追加 None / 0x0D / 0x0A / 0x0D+0x0A
 
 > 此方法同时应用于**单条发送**和 **Excel 批量发送**，确保两条路径的后缀行为完全一致。
 
+### 7. ASCII 区间判断
+
+当设备返回带数字的字符串（如 `3.05\r\n`）时，可启用区间判断功能：
+
+1. 在**设置页面**勾选 **「启用ASCII区间判断」**
+2. 在 **「ASCII区间值」** 输入框中填入容差值（如 `0.5`）
+3. 在 Excel B 列填入**标准期望值**（如 `3.00\r\n`）
+4. 软件会将实际返回值去除 `\r` `\n` 后解析为数字，判定 `|实际值 - 期望值| ≤ 区间值` 即为通过
+
+> **示例：** 期望值 `3.00`，区间值 `0.5` → 实际返回 `2.50` ~ `3.50` 均判定正确，超出范围则记录内容错误。
+
+### 8. AN3.0 HEX 区间判断（V3.4.11 新增）
+
+适用于 **RGL 系列交流源载一体机**和 **EVH 系列双向直流电源**的 AN3.0 二进制协议。
+
+1. 在设置页选择**产品系列**：`RGL系列 (交流源载)` 或 `EVH系列 (直流电源)`
+2. 勾选 **「以HEX格式发送（AN3.0）」**，HEX 区间判断控件自动解禁
+3. 勾选 **「启用HEX区间判断（AN3.0自动解析）」**，输入容差值（如 `0.5`）
+4. 先用**捕获模式**获取参考帧，自动填入 Excel B 列（完整的 HEX 帧，含 `7B...7D`）
+5. 切换到**发送模式**，软件自动根据命令码匹配字段布局，同构解析后逐字段对比
+
+**支持的查询命令：**
+
+| 产品系列 | 命令数 | 典型命令 |
+|---------|--------|---------|
+| RGL系列 | 22 条 | `F0 A4` 查询输出测量值(15字段) / `A5 41` 查询常规参数 / `F0 EB` 查询状态 |
+| EVH系列 | 17 条 | `F0 80` 查询电压电流功率 / `A5 1F` 查询全部设定值(7字段) / `A6 01` 查询电子负载 |
+
+**原理：** 软件内置 `An30Layout` 命令注册表，收到 HEX 帧后根据 `data[4]` 和 `data[5]` 自动查找字段名、字节长度、除数，将参考帧和实时帧同构解析为物理值，逐字段判定 `|实际 - 参考| ≤ 容差`。
+
+> **不勾选 HEX 区间判断时：** HEX 模式仍使用精确逐字节比对，兼容旧行为。
+
 ---
 
 ## 🏗️ 架构设计
@@ -207,7 +251,7 @@ Step 3: 加后缀 — 根据下拉框选择追加 None / 0x0D / 0x0A / 0x0D+0x0A
 │  主线程 (GUI Thread)                                 │
 │  ┌──────────┐  ┌────────────┐  ┌─────────────────┐  │
 │  │ UI 响应   │  │ XxxExcel   │  │ 校验 + 错误记录  │  │
-│  │ 按钮/表格 │  │ 流程控制    │  │ (信号驱动)      │  │
+│  │ PageUI   │  │ 流程控制    │  │ ErrorHandler   │  │
 │  └──────────┘  └────────────┘  └─────────────────┘  │
 │       ↑              ↑↓ QueuedConnection    ↑        │
 │       │              │         │            │        │
@@ -220,10 +264,28 @@ Step 3: 加后缀 — 根据下拉框选择追加 None / 0x0D / 0x0A / 0x0D+0x0A
 └─────────────────────────────────────────────────────┘
 ```
 
-- **XxxPage:** 页面 UI 创建 + 信号连接管理
-- **XxxWork:** 独立工作线程中的 I/O 操作（串口/网口/GPIB），负责 `buildSendData()` 数据构建 + forceRead 判断 + 精确延时
-- **XxxExcel:** 主线程中的批量发送流程控制 + 校验逻辑
-- **线程通讯:** 所有跨线程调用使用 `QMetaObject::invokeMethod(Qt::QueuedConnection)`
+### 模块分层
+
+每个通讯模块（Serial / Network / GPIB）均采用统一的四层分离架构：
+
+| 子模块 | 职责 |
+|--------|------|
+| **XxxPage** | 页面协调器：持有各子模块指针，串联初始化流程 |
+| **XxxPageUI** | 纯 UI 构建：5 个 createXxxPage() 方法 |
+| **XxxPageSignals** | 线程创建 + 全部 connect() 信号/槽连接 + 超时定时器 |
+| **XxxErrorHandler** | 错误计数器维护 + 错误表格写入 + 颜色标记 + 自动滚动 |
+| **XxxWork** | 独立工作线程中的阻塞 I/O 操作 |
+| **XxxExcel** | 主线程批量发送流程控制 + 校验逻辑（含区间判断） |
+
+### 公共工具库
+
+| 工具 | 位置 | 职责 | 共享方 |
+|------|------|------|--------|
+| **RangeComparer** | `Other_T/RangeComparer.h/.cpp` | ASCII 区间比较 + AN3.0 HEX 帧区间比较 | 串口 / 网口 / GPIB |
+| **StickySplitter** | `Other_T/StickySplitter.h/.cpp` | 粘包分割：按分隔符拆分字节流 | 串口 / 网口 |
+| **An30Layout** | `Other_T/An30Layout.h/.cpp` | ★ AN3.0 命令码→字段布局自动匹配，支持 RGL/EVH 双系列 | 串口 / 网口 / GPIB |
+
+- **线程通讯:** 所有跨线程调用使用 `QMetaObject::invokeMethod(Qt::QueuedConnection)`，Work 对象通过 `moveToThread()` 移入独立线程
 
 ---
 
@@ -239,48 +301,68 @@ Step 3: 加后缀 — 根据下拉框选择追加 None / 0x0D / 0x0A / 0x0D+0x0A
 
 ## 📝 更新日志
 
+### V3.4.11 (2026-07)
+
+- ✨ **AN3.0 HEX 区间判断全面启用：** 串口/网口/GPIB「HEX区间判断」从预留变为可用，支持 RGL / EVH 双产品系列
+- ✨ **An30Layout 命令码自动匹配：** 新增公共解析库，注册 RGL 系列 22 条 + EVH 系列 17 条 AN3.0 查询命令，根据应答帧命令码自动查找字段名、字节长度、除数
+- ✨ **产品系列切换：** 设置页新增下拉框「产品系列」（RGL / EVH），一键切换命令表，联动 HEX 区间判断解析逻辑
+- ✨ **同构解析 + 逐字段区间对比：** `compareHexFrame()` 对参考帧和实时帧两侧均用同一布局解析，逐字段判定 `|实际 - 参考| ≤ tolerance`
+- ✨ **零配置使用流程：** Excel B 列直接填入捕获到的 HEX 帧，无需手动填写偏移/字节数/除数
+- 🔧 **HEX 区间判断三级联动：** HEX 发送→解锁区间判断勾选→解锁偏差值输入，取消 HEX 发送自动关闭后两级
+- 🔧 **RangeComparer 公共工具扩展：** 新增 `compareHexFrame()` 方法，三模块共享，支持 RGL/EVH 双产品系列自动识别
+- 🐛 **修复 HEX 区间模式重复记录错误：** 移除 `tryRangeCompare` 内部 `addContentError` 调用，由顶层 `onResponseReceived` 统一处理
+- 🐛 **修复 HEX 区间判断控件灰色无法操作：** 去掉"预留"标记和硬编码 `setEnabled(false)`，改为联动控制
+- 📝 README 升级至 V3.4.11，新增 AN3.0 HEX 区间判断使用指南、双产品系列说明、架构图
+- 📝 帮助文档新增「AN3.0 HEX 区间判断」专题章节（含 RGL 22 条 + EVH 17 条命令速查表）
+- 📝 关于软件页面更新至 V3.4.11
+
+### V3.4.10 (2026-07)
+
+- ✨ **全模块新增 ASCII 区间判断功能：** 串口/网口/GPIB 设置页新增「启用ASCII区间判断」勾选框和「ASCII区间值」输入框
+- ✨ **HEX 区间判断控件预留：** 设置页同步添加 HEX 区间判断勾选框和输入框（暂时禁用）
+- 🔧 区间判断逻辑：自动去除 `\r` `\n` 空格后解析为 `double`
+- 🧩 **代码架构大重构 —— 四层分离：** 每个通讯模块拆分为 Page / PageUI / PageSignals / ErrorHandler
+- 🧩 **公共工具库提取：** RangeComparer（区间比较）/ StickySplitter（粘包分割），三模块共享
+
 ### V3.4.9 (2026-07)
 
-- ✨ **串口/网口新增「发送后缀」功能：** 对齐 GPIB 模块，设置页新增后缀下拉框（无/CR/LF/CRLF），解决部分设备需要换行符才响应命令的问题
-- ✨ **全模块 `buildSendData()` 统一数据构建：** 串口/网口/GPIB 三模块均采用统一的 `buildSendData()` 方法（unescape → 去尾 → 加后缀），单条发送和 Excel 批量发送共享同一后缀逻辑
-- 🔧 **串口/网口 `sendString` 重构：** 改用 `buildSendData()` 构建发送数据，此前直接 `toUtf8()` 不处理后缀
+- ✨ **串口/网口新增「发送后缀」功能：** 对齐 GPIB 模块，设置页新增后缀下拉框
+- ✨ **全模块 `buildSendData()` 统一数据构建：** 三模块均采用统一方法
+- 🔧 **串口/网口 `sendString` 重构：** 改用 `buildSendData()` 构建发送数据
 - 📝 README 新增「发送后缀说明」和「后缀处理流程」章节
 
 ### V3.4.8 (2026-07)
 
-- 🔧 **串口/网口 `sendStringWithDelay` 架构对齐 GPIB：** 新增 `forceRead` 参数，设置命令（B 列为空 + 非捕获模式）的识别逻辑从 Excel 层收归 Work 层处理，三模块架构完全统一
-- ⚡ **串口/网口精确延时计时起点前移：** 高精度计时器在 `write` 之前启动（对齐 GPIB），TX→TX 实际间隔 = max(I/O 耗时, 设定延时)，消除额外累积偏差
-- 🔧 **串口/网口 Excel 批量发送流程统一：** 始终启动超时定时器，设置命令由 Work 层 emit 空响应驱动 `m_gotReply=true`，消除 Excel 层的特殊分支判断（`m_expectData.isEmpty() && !m_isCaptureMode`）
-- 🔇 **网口连接超时/错误弹窗静默化：** `QMessageBox` 弹窗改为 `qDebug()` 静默日志，批量发送时不再被弹窗中断用户操作
-- 📐 **三模块 `sendStringWithDelay` 函数签名统一**：SerialWork / NetworkWork / GPIBWork 均采用 `(text, hexMode, expectedResponse, delayMs, forceRead)` 五参数签名
+- 🔧 **串口/网口 `sendStringWithDelay` 架构对齐 GPIB：** 新增 `forceRead` 参数
+- ⚡ **精确延时计时起点前移：** 计时器在 `write` 之前启动
+- 🔇 **网口连接超时/错误弹窗静默化**
+- 📐 **三模块 `sendStringWithDelay` 函数签名统一**
 
 ### V3.4.7 (2026-07)
 
-- 🐛 **修复串口/网口 Excel 批量发送中设置命令卡死问题：** 当 B 列（预期返回值）为空且非捕获模式时，自动识别为"无回复设置命令"，跳过等待回复，仅按 C 列延时后直接发送下一条命令。对齐 GPIB 模块已有行为
-- ✨ 串口/网口批量发送优化：设置命令不再启动全局超时计时器，避免无意义的超时等待
-- 📝 使用指南补充设置命令（无回复）与查询命令的使用说明
+- 🐛 **修复串口/网口 Excel 批量发送中设置命令卡死问题**
+- ✨ 设置命令不再启动全局超时计时器
+- 📝 补充设置命令与查询命令的使用说明
 
 ### V3.4.6 (2026-07)
 
-- ✨ GPIB 设置页新增「发送后缀」选择（无/CR/LF/CRLF），解决部分仪器必须收到换行符才响应的问题
-- ✨ 发送数据自动 unescape：输入框和 Excel 命令列中的 `\r` `\n` 字面量自动转换为真实控制字符
-- ✨ 智能去重：发送前自动去除命令末尾已有的 `\r` `\n`，再追加所选后缀，避免重复终止符
-- 🐛 修复 GPIB 命令中 `\n` 作为字面量字符发送而非换行符的 Bug（导致部分仪器不响应查询命令）
+- ✨ GPIB 设置页新增「发送后缀」选择
+- ✨ 发送数据自动 unescape：`\r` `\n` 字面量自动转换为真实控制字符
+- ✨ 智能去重：发送前自动去除命令末尾已有 `\r` `\n`
+- 🐛 修复 GPIB 命令中 `\n` 作为字面量字符发送而非换行符的 Bug
 
 ### V3.4.5 (2026-07)
 
-- 🐛 修复 GPIB 精确延时偏差 10ms 的 Bug（计时起点从 viRead 之后移到 viRead 之前）
-- 🐛 修复串口/网口 `waitForBytesWritten(10)` 引入 10ms 额外延迟（改为 1ms）
-- ✨ 全模块日志/表格支持 `\r\n` 显示为可见字符 `\r\n`（不再被解释为换行）
-- ✨ 全模块捕获模式：`\r` `\n` 在 Excel B 列中存储为 `\\r` `\\n`，读取时自动还原为真实字节
-- ✨ 全模块 `bytesToDisplayText()` 控制字符转义（错误日志表格不再异常换行）
-- 🔧 串口延时 0ms 修复（`delayMs <= 0` → `delayMs < 0`）
+- 🐛 修复 GPIB 精确延时偏差 10ms 的 Bug
+- 🐛 修复串口/网口 `waitForBytesWritten(10)` 引入 10ms 额外延迟
+- ✨ 全模块日志/表格支持控制字符转义显示
+- ✨ 捕获模式：`\r` `\n` 在 Excel B 列中存储为 `\\r` `\\n`
 
 ### V3.4.4 (2026-07)
 
-- 🐛 修复 GPIB 单条发送无回传数据显示的 Bug
-- 🐛 修复 GPIB 表格发送中设置命令导致 `doVISARead` 阻塞超时的 Bug
-- 🐛 修复串口表格发送延时 0ms 被强制覆盖为 100ms 的 Bug
+- 🐛 修复 GPIB 单条发送无回传数据显示
+- 🐛 修复 GPIB 表格发送中设置命令导致阻塞超时
+- 🐛 修复串口表格发送延时 0ms 被强制覆盖为 100ms
 - ⚡ GPIB 设置命令间隔从 ~1.5s 降至 ~2ms
 
 ### V3.4.1 (2026-07)
@@ -288,7 +370,6 @@ Step 3: 加后缀 — 根据下拉框选择追加 None / 0x0D / 0x0A / 0x0D+0x0A
 - ✅ GPIB 模块完整实现
 - ✅ 精确延时 EMA 误差补偿算法
 - ✅ 界面优化：GroupBox 分组布局、卡片样式
-
 
 ---
 

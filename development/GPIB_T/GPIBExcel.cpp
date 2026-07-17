@@ -1,11 +1,12 @@
 // GPIBExcel.cpp
 // GPIB Excel 批量发送 / 捕获实现
-// 对齐 SerialExcel / NetworkExcel
+// ★ 重构：使用公共 RangeComparer
 
 #include "GPIBExcel.h"
 #include "GPIBPage.h"
 #include "GPIBWork.h"
 #include "ElaWindow.h"
+#include "../Other_T/RangeComparer.h"
 #include "xlsxdocument.h"
 #include "xlsxformat.h"
 #include <QFileDialog>
@@ -14,6 +15,8 @@
 #include <QDebug>
 #include <QTableWidgetItem>
 #include <QDateTime>
+
+// ═══════════════════════════════════════════════════════════════
 
 GPIBExcel::GPIBExcel(GPIBPage* page, QObject *parent)
     : QObject(parent), m_page(page), m_work(page->m_gpibWork)
@@ -48,6 +51,52 @@ void GPIBExcel::setRunning(bool running)
     m_page->m_excelOpenBtn->setEnabled(!running);
     m_page->m_excelRepeatCount->setEnabled(!running);
     m_page->m_excelTimeoutMs->setEnabled(!running);
+}
+
+// ═══════════════════════════════ 区间判断（使用公共工具）════════
+bool GPIBExcel::tryRangeCompare(const QByteArray &received,
+                                 const QByteArray &expected,
+                                 bool hexMode) const
+{
+    if (expected.isEmpty()) return true;
+
+    // ── ASCII 区间模式 ──
+    if (!hexMode
+        && m_page->m_gpibAsciiRangeCheckBox
+        && m_page->m_gpibAsciiRangeCheckBox->isChecked())
+    {
+        double tolerance = m_page->m_gpibAsciiRangeEdit
+                           ? m_page->m_gpibAsciiRangeEdit->text().toDouble()
+                           : 0.5;
+        return RangeComparer::compareAscii(received, expected, tolerance);
+    }
+
+    // ── AN3.0 HEX 区间模式（自动识别命令码，两侧同构解析后逐字段对比）──
+    if (hexMode
+        && m_page->m_gpibHexRangeCheckBox
+        && m_page->m_gpibHexRangeCheckBox->isChecked())
+    {
+        double tolerance = m_page->m_gpibHexRangeEdit
+                           ? m_page->m_gpibHexRangeEdit->text().toDouble()
+                           : 0.5;
+
+        QString detail;
+        bool pass = RangeComparer::compareHexFrame(
+            expected,      // 列B参考帧（HEX二进制）
+            received,      // 设备实时回复（HEX二进制）
+            tolerance,
+            detail);
+
+        qDebug() << "GPIBExcel:[AN3.0区间]" << detail
+                 << "→" << (pass ? "合格" : "不合格");
+
+        // ★ 不在 tryRangeCompare 里调用 addContentError
+        // 调用方 onResponseReceived 统一处理
+        return pass;
+    }
+
+    // ── 精确逐字节比对 ──
+    return (received == expected);
 }
 
 // ═══════════════════════════════════════════════ 捕获模式 ═══
@@ -150,43 +199,30 @@ void GPIBExcel::onTrySendNext()
 
     int globalTimeout = m_page->m_excelTimeoutMs->text().toInt();
     if (globalTimeout < 0) globalTimeout = 500;
-
-    if (m_isCaptureMode && globalTimeout < 2000) {
-        globalTimeout = 2000;
-    }
+    if (m_isCaptureMode && globalTimeout < 2000) globalTimeout = 2000;
 
     m_currentRow++;
 
-    if (cmdText.isEmpty()) {
-        onTrySendNext();
-        return;
-    }
+    if (cmdText.isEmpty()) { onTrySendNext(); return; }
 
     bool hexMode = m_page->m_gpibHexSendCheckBox->isChecked();
 
-    // ★ 解析期望值
     if (expectedStr.isEmpty()) {
         m_expectData = QByteArray();
     } else {
-        // ★ 将 Excel 中显示的转义字符 \r \n 还原为真实字节
-        //    这样用户手动输入 "ANRGL030A-350\r\n" 或捕获模式自动填入的
-        //    "ANRGL030A-350\r\n" 都能正确还原为仪器的原始返回值
         QString unescaped = expectedStr;
         unescaped.replace(QLatin1String("\\r"), QLatin1String("\r"));
         unescaped.replace(QLatin1String("\\n"), QLatin1String("\n"));
-
         m_expectData = hexMode ? QByteArray::fromHex(unescaped.toLatin1())
                                : unescaped.toUtf8();
     }
     m_lastCmd = cmdText;
 
-    // ★ checkbox 勾选时：去除 \r\n（比对时也同步去除）
     if (!hexMode && m_page->m_gpibStripCRLFCheckBox->isChecked()) {
         m_expectData.replace("\r", "");
         m_expectData.replace("\n", "");
     }
 
-    // ★ 传递 forceRead：捕获模式必须读取，普通模式仅在期望非空时读取
     QMetaObject::invokeMethod(m_work, "sendStringWithDelay",
                               Qt::QueuedConnection,
                               Q_ARG(QString, cmdText),
@@ -201,7 +237,6 @@ void GPIBExcel::onTrySendNext()
     m_waiting    = true;
     m_gotReply   = false;
     m_minDelayOk = false;
-
     m_timeoutTimer->start(globalTimeout);
 }
 
@@ -217,7 +252,6 @@ void GPIBExcel::onResponseReceived(QByteArray data)
         fillCaptureResult(data);
     }
 
-    // ★ 比对逻辑：checkbox 控制是否去除 \r\n
     QByteArray cmpData = data;
     bool hexMode = m_page->m_gpibHexSendCheckBox->isChecked();
     if (!hexMode && m_page->m_gpibStripCRLFCheckBox->isChecked()) {
@@ -225,9 +259,9 @@ void GPIBExcel::onResponseReceived(QByteArray data)
         cmpData.replace("\n", "");
     }
 
-    if (!m_expectData.isEmpty() && cmpData != m_expectData) {
+    // ★ 区间判断（使用公共工具）
+    if (!tryRangeCompare(cmpData, m_expectData, hexMode))
         m_page->addContentError(m_lastCmd, m_expectData, cmpData);
-    }
 
     if (m_minDelayOk) finalizeAndNext();
 }
@@ -236,7 +270,6 @@ void GPIBExcel::onResponseReceived(QByteArray data)
 void GPIBExcel::onInterCmdDelayFinished()
 {
     if (!m_waiting) return;
-
     m_minDelayOk = true;
     if (m_gotReply) finalizeAndNext();
 }
@@ -245,14 +278,9 @@ void GPIBExcel::onInterCmdDelayFinished()
 void GPIBExcel::onGlobalTimeout()
 {
     if (!m_waiting) return;
-
-    if (m_isCaptureMode) {
-        fillCaptureTimeout();
-    }
-
-    if (!m_gotReply && !m_expectData.isEmpty()) {
+    if (m_isCaptureMode) fillCaptureTimeout();
+    if (!m_gotReply && !m_expectData.isEmpty())
         m_page->addTimeoutError(m_lastCmd, m_expectData);
-    }
     finalizeAndNext();
 }
 
@@ -286,15 +314,11 @@ void GPIBExcel::fillCaptureResult(const QByteArray &data)
             displayText = data.toHex(' ').toUpper();
     }
 
-    // ★ 将控制字符转义为可见字符串，避免在表格中被解释为换行
     displayText.replace(QLatin1Char('\r'), QLatin1String("\\r"));
     displayText.replace(QLatin1Char('\n'), QLatin1String("\\n"));
 
     QTableWidgetItem* item = table->item(row, 1);
-    if (!item) {
-        item = new QTableWidgetItem();
-        table->setItem(row, 1, item);
-    }
+    if (!item) { item = new QTableWidgetItem(); table->setItem(row, 1, item); }
     item->setText(displayText);
 
     qDebug() << "GPIBExcel: 捕获模式 — 第" << (row + 1) << "行返回值已填入:" << displayText;
@@ -308,13 +332,8 @@ void GPIBExcel::fillCaptureTimeout()
     if (row < 0 || row >= table->rowCount()) return;
 
     QTableWidgetItem* item = table->item(row, 1);
-    if (!item) {
-        item = new QTableWidgetItem();
-        table->setItem(row, 1, item);
-    }
-    if (item->text().isEmpty()) {
-        item->setText(QString::fromUtf8("(超时)"));
-    }
+    if (!item) { item = new QTableWidgetItem(); table->setItem(row, 1, item); }
+    if (item->text().isEmpty()) item->setText(QString::fromUtf8("(超时)"));
 
     qDebug() << "GPIBExcel: 捕获模式 — 第" << (row + 1) << "行超时";
 }
@@ -326,33 +345,22 @@ void GPIBExcel::onOpenExcel()
         m_page->m_mainWindow,
         "选择 Excel 文件",
         QStandardPaths::writableLocation(QStandardPaths::DesktopLocation),
-        "Excel 文件 (*.xlsx *.xls)"
-    );
-
-    if (filePath.isEmpty())
-        return;
-
-    if (!loadExcelToTable(filePath)) {
-        QMessageBox::critical(m_page->m_mainWindow, "错误",
-                              "无法读取 Excel 文件:\n" + filePath);
-    }
+        "Excel 文件 (*.xlsx *.xls)");
+    if (filePath.isEmpty()) return;
+    if (!loadExcelToTable(filePath))
+        QMessageBox::critical(m_page->m_mainWindow, "错误", "无法读取 Excel 文件:\n" + filePath);
 }
 
 bool GPIBExcel::loadExcelToTable(const QString &filePath)
 {
     QXlsx::Document xlsx(filePath);
-    if (!xlsx.load())
-        return false;
-
+    if (!xlsx.load()) return false;
     QStringList sheetNames = xlsx.sheetNames();
-    if (sheetNames.isEmpty())
-        return false;
-
+    if (sheetNames.isEmpty()) return false;
     xlsx.selectSheet(sheetNames.at(0));
 
     int maxRow = xlsx.dimension().rowCount();
     int maxCol = qMin(xlsx.dimension().columnCount(), 3);
-
     if (maxRow < 2) {
         QMessageBox::information(m_page->m_mainWindow, "提示",
                                  "Excel 文件为空（至少需要表头 + 一行数据）。");
@@ -363,28 +371,21 @@ bool GPIBExcel::loadExcelToTable(const QString &filePath)
     table->clearContents();
     table->setRowCount(0);
     table->setColumnCount(3);
-    table->setHorizontalHeaderLabels({
-        "发送的命令", "正确的返回值", "到下一条命令的时间ms"
-    });
+    table->setHorizontalHeaderLabels({"发送的命令", "正确的返回值", "到下一条命令的时间ms"});
 
     int dataRowCount = maxRow - 1;
     table->setRowCount(dataRowCount);
-
     for (int row = 2; row <= maxRow; ++row) {
         int tableRow = row - 2;
         for (int col = 1; col <= maxCol; ++col) {
             QVariant cell = xlsx.read(row, col);
             QString text;
-            if (cell.isNull()) {
-                text = "";
-            } else if (cell.type() == QVariant::Double) {
+            if (cell.isNull()) text = "";
+            else if (cell.type() == QVariant::Double) {
                 if (cell.toDouble() == qint64(cell.toDouble()))
                     text = QString::number(qint64(cell.toDouble()));
-                else
-                    text = cell.toString();
-            } else {
-                text = cell.toString().trimmed();
-            }
+                else text = cell.toString();
+            } else text = cell.toString().trimmed();
             table->setItem(tableRow, col - 1, new QTableWidgetItem(text));
         }
     }
@@ -402,25 +403,18 @@ void GPIBExcel::onDownloadTemplate()
 {
     QString defaultPath = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation)
                           + "/GPIB通讯示例模板.xlsx";
-
     QString filePath = QFileDialog::getSaveFileName(
         m_page->m_mainWindow, "保存示例模板", defaultPath, "Excel 文件 (*.xlsx)");
-
-    if (filePath.isEmpty())
-        return;
-
-    if (!generateExcelTemplate(filePath)) {
+    if (filePath.isEmpty()) return;
+    if (!generateExcelTemplate(filePath))
         QMessageBox::critical(m_page->m_mainWindow, "错误", "生成模板文件失败！");
-    } else {
-        QMessageBox::information(m_page->m_mainWindow, "成功",
-                                 "示例模板已保存到:\n" + filePath);
-    }
+    else
+        QMessageBox::information(m_page->m_mainWindow, "成功", "示例模板已保存到:\n" + filePath);
 }
 
 bool GPIBExcel::generateExcelTemplate(const QString &filePath)
 {
     QXlsx::Document xlsx;
-
     QXlsx::Format headerFormat;
     headerFormat.setFontBold(true);
     headerFormat.setFontSize(11);
@@ -455,25 +449,17 @@ bool GPIBExcel::generateExcelTemplate(const QString &filePath)
 
     struct Sample { QString command; int delayMs; };
     QList<Sample> samples = {
-        {"*IDN?",            50},
-        {"SYST:ERR?",       100},
-        {"MEAS:VOLT:DC?",   200},
-        {"CONF:VOLT:DC 10", 100},
-        {"READ?",           300},
-        {"SYST:LOC",         50},
-        {"*RST",            500},
+        {"*IDN?", 50}, {"SYST:ERR?", 100}, {"MEAS:VOLT:DC?", 200},
+        {"CONF:VOLT:DC 10", 100}, {"READ?", 300}, {"SYST:LOC", 50}, {"*RST", 500},
     };
-
     for (int i = 0; i < samples.size(); ++i) {
         int row = i + 2;
         xlsx.write(row, 1, samples[i].command, cmdFormat);
-        xlsx.write(row, 2, "",                 returnFormat);
+        xlsx.write(row, 2, "", returnFormat);
         xlsx.write(row, 3, samples[i].delayMs, delayFormat);
     }
-
     xlsx.setColumnWidth(1, 35);
     xlsx.setColumnWidth(2, 35);
     xlsx.setColumnWidth(3, 25);
-
     return xlsx.saveAs(filePath);
 }
