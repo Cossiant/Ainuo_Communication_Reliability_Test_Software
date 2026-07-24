@@ -18,7 +18,6 @@ ElaWidgetToolsDemo::ElaWidgetToolsDemo(QWidget *parent)
     qRegisterMetaType<QSerialPort::Parity>("QSerialPort::Parity");
     qRegisterMetaType<QSerialPort::StopBits>("QSerialPort::StopBits");
     qRegisterMetaType<QSerialPort::FlowControl>("QSerialPort::FlowControl");
-
     // ═══════════════════════════════════════════════════
     //  创建各通讯模块页面（各自独立管理线程与UI）
     // ═══════════════════════════════════════════════════

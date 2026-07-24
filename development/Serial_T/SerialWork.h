@@ -1,6 +1,7 @@
 // SerialWork.h
 // ★ 对齐 GPIBWork：sendStringWithDelay 添加 forceRead 参数
 // ★ 新增：发送后缀功能
+// ★ 新增：可配置缓冲区超时时间
 
 #ifndef UNTITLED_SERIALWORK_H
 #define UNTITLED_SERIALWORK_H
@@ -48,6 +49,7 @@ public slots:
     void setExpectedResponse(const QByteArray &expected);
     void setHexDisplayMode(bool hexMode);
     void setSuffixMode(int mode);   // ★ 新增：设置发送后缀模式
+    void setBufferTimeout(int ms);  // ★ 新增：设置缓冲区合并超时时间
 
 signals:
     void serialOpened();
@@ -87,6 +89,8 @@ private:
     bool       m_hexDisplay = false;
 
     int        m_suffixMode = 0;   // ★ 新增：发送后缀模式 0=None, 1=CR, 2=LF, 3=CRLF
+
+    int        m_bufferTimeoutMs = 20;  // ★ 新增：缓冲区合并超时（默认20ms）
 
     QAtomicInt m_opened{0};
 
