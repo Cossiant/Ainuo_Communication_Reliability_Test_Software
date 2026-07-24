@@ -6,11 +6,20 @@
 #include "ElaWindow.h"
 #include "ElaText.h"
 #include "ElaIcon.h"
+#include "ElaPushButton.h"
+#include "ElaCheckBox.h"
+#include "ElaComboBox.h"
+
+#include "../Other_T/An30Layout.h"
 
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QFrame>
 #include <QFont>
+#include <QTextEdit>
+#include <QTextCursor>
+#include <QClipboard>
+#include <QApplication>
 
 MainPage::MainPage(ElaWindow *mainWindow, QObject *parent)
     : QObject(parent), m_mainWindow(mainWindow) {
@@ -48,7 +57,7 @@ void MainPage::initNavigation() {
 // ═══════════════════════════════════════════════════════════════
 void MainPage::initWindowConfig() {
     m_mainWindow->resize(1200, 750);
-    m_mainWindow->setWindowTitle("Ainuo 通用通讯可靠性测试软件V3.4.11");
+    m_mainWindow->setWindowTitle("Ainuo 通用通讯可靠性测试软件V3.4.12");
 
     // 用户信息卡片
     m_mainWindow->setUserInfoCardTitle("Ainuo 通讯可靠性");
@@ -128,19 +137,432 @@ void MainPage::createHomePage() {
 
     lay->addStretch();
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  命令转换页面：ASCII ↔ HEX 双向互转
+// ═══════════════════════════════════════════════════════════════
 void MainPage::createCommandCalculationPage() {
     _MainCommandCalculationPage = new QWidget();
-    QVBoxLayout *lay = new QVBoxLayout(_MainCommandCalculationPage);
-    lay->setContentsMargins(40, 40, 40, 40);
-    lay->setSpacing(20);
+    QVBoxLayout *root = new QVBoxLayout(_MainCommandCalculationPage);
+    root->setContentsMargins(30, 30, 30, 30);
+    root->setSpacing(16);
 
     // ──── 标题 ────
-    ElaText *title = new ElaText("命令转换页面");
-    title->setTextPixelSize(28);
+    ElaText *title = new ElaText("命令转换工具");
+    title->setTextPixelSize(24);
     title->setTextStyle(ElaTextType::Title);
-    lay->addWidget(title);
+    root->addWidget(title);
 
-    lay->addStretch();
+    ElaText *desc = new ElaText(
+        "在 ASCII 字符串与 HEX 十六进制之间互相转换。\n"
+        "常用于将 SCPI 命令（如 *IDN?）转换为 HEX 格式下发给设备，或反向解析。");
+    desc->setTextPixelSize(15);
+    desc->setWordWrap(true);
+    root->addWidget(desc);
+
+    // ═══════════════════════════════════════════════════════
+    //  输入输出区：左右两栏（均可编辑）
+    // ═══════════════════════════════════════════════════════
+    QHBoxLayout* mainRow = new QHBoxLayout();
+    mainRow->setSpacing(20);
+
+    // ── 左栏：ASCII ──
+    QVBoxLayout* leftCol = new QVBoxLayout();
+    leftCol->setSpacing(8);
+
+    ElaText* asciiLabel = new ElaText("ASCII 字符串");
+    asciiLabel->setTextPixelSize(16);
+    asciiLabel->setTextStyle(ElaTextType::Subtitle);
+
+    m_asciiEdit = new QTextEdit();
+    m_asciiEdit->setPlaceholderText("在此输入 ASCII 字符串...\n例如：*IDN?");
+    m_asciiEdit->setMinimumHeight(100);
+    m_asciiEdit->setAcceptRichText(false);
+    m_asciiEdit->setStyleSheet(
+        "QTextEdit {"
+        "  font-family: 'Consolas', 'Courier New', monospace;"
+        "  font-size: 14px;"
+        "  border: 1px solid #c0c0c0;"
+        "  border-radius: 6px;"
+        "  padding: 10px;"
+        "}"
+    );
+
+    leftCol->addWidget(asciiLabel);
+    leftCol->addWidget(m_asciiEdit, 1);
+
+    // ── 中间箭头按钮区 ──
+    QVBoxLayout* midCol = new QVBoxLayout();
+    midCol->setSpacing(12);
+    midCol->setAlignment(Qt::AlignCenter);
+
+    midCol->addStretch();
+
+    m_asciiToHexBtn = new ElaPushButton("→ 转为HEX");
+    m_asciiToHexBtn->setFixedSize(120, 40);
+    m_asciiToHexBtn->setToolTip("将左侧 ASCII 转为 HEX 并填入右侧");
+
+    m_hexToAsciiBtn = new ElaPushButton("← 转为ASCII");
+    m_hexToAsciiBtn->setFixedSize(120, 40);
+    m_hexToAsciiBtn->setToolTip("将右侧 HEX 转为 ASCII 并填入左侧");
+
+    midCol->addWidget(m_asciiToHexBtn);
+    midCol->addWidget(m_hexToAsciiBtn);
+    midCol->addStretch();
+
+    // ── 右栏：HEX ──
+    QVBoxLayout* rightCol = new QVBoxLayout();
+    rightCol->setSpacing(8);
+
+    ElaText* hexLabel = new ElaText("HEX 十六进制");
+    hexLabel->setTextPixelSize(16);
+    hexLabel->setTextStyle(ElaTextType::Subtitle);
+
+    m_hexEdit = new QTextEdit();
+    m_hexEdit->setPlaceholderText("在此输入 HEX 十六进制...\n例如：2A 49 44 4E 3F 0A");
+    m_hexEdit->setMinimumHeight(100);
+    m_hexEdit->setAcceptRichText(false);
+    m_hexEdit->setStyleSheet(
+        "QTextEdit {"
+        "  font-family: 'Consolas', 'Courier New', monospace;"
+        "  font-size: 14px;"
+        "  border: 1px solid #c0c0c0;"
+        "  border-radius: 6px;"
+        "  padding: 10px;"
+        "}"
+    );
+
+    rightCol->addWidget(hexLabel);
+    rightCol->addWidget(m_hexEdit, 1);
+
+    mainRow->addLayout(leftCol, 2);
+    mainRow->addLayout(midCol, 0);
+    mainRow->addLayout(rightCol, 2);
+    root->addLayout(mainRow, 1);
+
+    // ═══════════════════════════════════════════════════════
+    //  底部按钮 + 选项行
+    // ═══════════════════════════════════════════════════════
+    QHBoxLayout* bottomRow = new QHBoxLayout();
+    bottomRow->setSpacing(12);
+
+    // 选项
+    m_upperCaseCheck = new ElaCheckBox("大写 HEX 字母");
+    m_upperCaseCheck->setChecked(true);
+
+    m_spaceSepCheck = new ElaCheckBox("字节之间用空格分隔");
+    m_spaceSepCheck->setChecked(true);
+
+    bottomRow->addWidget(m_upperCaseCheck);
+    bottomRow->addWidget(m_spaceSepCheck);
+    bottomRow->addStretch();
+
+    // 操作按钮
+    m_copyHexBtn = new ElaPushButton("复制右侧 HEX");
+    m_copyHexBtn->setFixedHeight(36);
+
+    m_clearBtn = new ElaPushButton("清空全部");
+    m_clearBtn->setFixedHeight(36);
+
+    bottomRow->addWidget(m_copyHexBtn);
+    bottomRow->addWidget(m_clearBtn);
+
+    root->addLayout(bottomRow);
+
+    // ═══════════════════════════════════════════════════════
+    //  信号连接
+    // ═══════════════════════════════════════════════════════
+    connect(m_asciiToHexBtn, &ElaPushButton::clicked,
+            this, &MainPage::convertAsciiToHex);
+    connect(m_hexToAsciiBtn, &ElaPushButton::clicked,
+            this, &MainPage::convertHexToAscii);
+
+    connect(m_clearBtn, &ElaPushButton::clicked, this, [this]() {
+        m_asciiEdit->clear();
+        m_hexEdit->clear();
+    });
+
+    connect(m_copyHexBtn, &ElaPushButton::clicked, this, [this]() {
+        QString hex = m_hexEdit->toPlainText();
+        if (!hex.isEmpty()) {
+            QApplication::clipboard()->setText(hex);
+        }
+    });
+
+    // ═══════════════════════════════════════════════════════
+    //  AN3.0 字段解析区
+    // ═══════════════════════════════════════════════════════
+    {
+        QFrame *sep = new QFrame();
+        sep->setFrameShape(QFrame::HLine);
+        sep->setStyleSheet("QFrame { color: rgba(128,128,128,60); }");
+        root->addWidget(sep);
+
+        ElaText *an30Title = new ElaText("AN3.0 字段解析（HEX → 十进制）");
+        an30Title->setTextPixelSize(18);
+        an30Title->setTextStyle(ElaTextType::Subtitle);
+        root->addWidget(an30Title);
+
+        // ── 产品系列 + 命令码选择 ──
+        QHBoxLayout *selectRow = new QHBoxLayout();
+        selectRow->setSpacing(12);
+
+        ElaText *prodLabel = new ElaText("产品系列:");
+        prodLabel->setTextPixelSize(14);
+        m_an30ProductCombo = new ElaComboBox();
+        m_an30ProductCombo->addItems({"RGL系列 (交流源载)", "EVH系列 (直流电源)"});
+        m_an30ProductCombo->setCurrentIndex(0);
+        m_an30ProductCombo->setStyleSheet("ElaComboBox { font-size: 13px; }");
+
+        ElaText *cmdLabel = new ElaText("命令码:");
+        cmdLabel->setTextPixelSize(14);
+        m_an30CmdCombo = new ElaComboBox();
+        m_an30CmdCombo->setMinimumWidth(100);
+        m_an30CmdCombo->setStyleSheet("ElaComboBox { font-size: 13px; }");
+
+        m_an30ParseBtn = new ElaPushButton("解析 →");
+        m_an30ParseBtn->setFixedSize(90, 36);
+
+        selectRow->addWidget(prodLabel);
+        selectRow->addWidget(m_an30ProductCombo, 1);
+        selectRow->addWidget(cmdLabel);
+        selectRow->addWidget(m_an30CmdCombo, 2);
+        selectRow->addWidget(m_an30ParseBtn);
+        root->addLayout(selectRow);
+
+        // ── 输入输出区 ──
+        QHBoxLayout *an30Row = new QHBoxLayout();
+        an30Row->setSpacing(16);
+
+        QVBoxLayout *inCol = new QVBoxLayout();
+        ElaText *inLabel = new ElaText("HEX 字段字节");
+        inLabel->setTextPixelSize(14);
+        m_an30Input = new QTextEdit();
+        m_an30Input->setPlaceholderText("粘贴 AN3.0 帧中字段部分的 HEX 字节...\n例如: 00 00 27 28 00 00 27 12 00 00 03 EA");
+        m_an30Input->setMinimumHeight(100);
+        m_an30Input->setAcceptRichText(false);
+        m_an30Input->setStyleSheet(m_hexEdit->styleSheet());
+        inCol->addWidget(inLabel);
+        inCol->addWidget(m_an30Input, 1);
+
+        QVBoxLayout *outCol = new QVBoxLayout();
+        QHBoxLayout *outTitleRow = new QHBoxLayout();
+        ElaText *outLabel = new ElaText("解析结果（十进制物理值）");
+        outLabel->setTextPixelSize(14);
+        outTitleRow->addWidget(outLabel);
+        outTitleRow->addStretch();
+        m_an30CopyBtn = new ElaPushButton("复制");
+        m_an30CopyBtn->setFixedSize(60, 28);
+        outTitleRow->addWidget(m_an30CopyBtn);
+
+        m_an30Output = new QTextEdit();
+        m_an30Output->setReadOnly(true);
+        m_an30Output->setMinimumHeight(100);
+        m_an30Output->setAcceptRichText(false);
+        m_an30Output->setStyleSheet(m_hexEdit->styleSheet());
+        outCol->addLayout(outTitleRow);
+        outCol->addWidget(m_an30Output, 1);
+
+        an30Row->addLayout(inCol, 1);
+        an30Row->addLayout(outCol, 1);
+        root->addLayout(an30Row, 1);
+
+        // ── 信号 ──
+        connect(m_an30ProductCombo, QOverload<int>::of(&ElaComboBox::currentIndexChanged),
+                this, &MainPage::onAn30ProductChanged);
+        connect(m_an30ParseBtn, &ElaPushButton::clicked,
+                this, &MainPage::parseAn30Fields);
+        connect(m_an30CopyBtn, &ElaPushButton::clicked, this, [this]() {
+            QString text = m_an30Output->toPlainText();
+            if (!text.isEmpty())
+                QApplication::clipboard()->setText(text);
+        });
+
+        // 初始化命令码下拉框
+        populateAn30CmdCombo();
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  AN3.0: 产品系列切换 → 刷新命令码下拉框
+// ═══════════════════════════════════════════════════════════════
+void MainPage::onAn30ProductChanged(int index) {
+    Q_UNUSED(index);
+    An30Layout::instance().setProduct(
+        index == 0 ? An30Product::RGL : An30Product::EVH);
+    populateAn30CmdCombo();
+    m_an30Output->clear();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  AN3.0: 填充命令码下拉框
+// ═══════════════════════════════════════════════════════════════
+void MainPage::populateAn30CmdCombo() {
+    m_an30CmdCombo->clear();
+
+    // 遍历当前产品的命令表
+    An30Product prod = An30Layout::instance().product();
+    // 用临时变量暂存 An30Layout，通过 find 探索所有命令太麻烦，
+    // 这里直接硬编码 RGL / EVH 的命令列表
+    if (prod == An30Product::RGL) {
+        m_an30CmdCombo->addItem("F0 A4 — 查询输出测量值 (15字段)",        "F0A4");
+        m_an30CmdCombo->addItem("F0 EB — 查询状态/报警码 (2字段)",         "F0EB");
+        m_an30CmdCombo->addItem("A5 41 — 查询常规参数 (3字段)",            "A541");
+        m_an30CmdCombo->addItem("A5 40 — 查询更多设置 (10字段)",           "A540");
+        m_an30CmdCombo->addItem("A5 AE — 查询序列参数 (13字段)",           "A5AE");
+        m_an30CmdCombo->addItem("A5 80 — 查询输出限值 (4字段)",            "A580");
+        m_an30CmdCombo->addItem("A5 82 — 查询输出波形 (8字段)",            "A582");
+        m_an30CmdCombo->addItem("A5 90 — 查询系统状态 (6字段)",            "A590");
+        m_an30CmdCombo->addItem("A5 A3 — 查询恒流参数 (4字段)",            "A5A3");
+        m_an30CmdCombo->addItem("A5 A6 — 查询恒有功参数 (4字段)",          "A5A6");
+        m_an30CmdCombo->addItem("A5 A4 — 查询恒阻参数 (1字段)",            "A5A4");
+        m_an30CmdCombo->addItem("A5 32 — 查询间谐波参数 (4字段)",          "A532");
+    } else {
+        m_an30CmdCombo->addItem("F0 00 — 查询输出状态 (1字段)",            "F000");
+        m_an30CmdCombo->addItem("F0 80 — 查询电压电流功率 (3字段)",        "F080");
+        m_an30CmdCombo->addItem("F0 81 — 查询电压电流功率电阻 (4字段)",    "F081");
+        m_an30CmdCombo->addItem("F0 EB — 查询当前状态 (1字段)",            "F0EB");
+        m_an30CmdCombo->addItem("F0 24 — 查询报警代码 (1字段)",            "F024");
+        m_an30CmdCombo->addItem("A5 00 — 查询设定电压 (1字段)",            "A500");
+        m_an30CmdCombo->addItem("A5 01 — 查询设定正向电流 (1字段)",        "A501");
+        m_an30CmdCombo->addItem("A5 02 — 查询设定正向功率 (1字段)",        "A502");
+        m_an30CmdCombo->addItem("A5 03 — 查询OVP (1字段)",                 "A503");
+        m_an30CmdCombo->addItem("A5 04 — 查询设定反向电流 (1字段)",        "A504");
+        m_an30CmdCombo->addItem("A5 05 — 查询设定反向功率 (1字段)",        "A505");
+        m_an30CmdCombo->addItem("A5 06 — 查询设定电阻 (1字段)",            "A506");
+        m_an30CmdCombo->addItem("A5 1F — 查询全部设定值 (7字段)",          "A51F");
+        m_an30CmdCombo->addItem("A5 60 — 查询电压上下限报警 (6字段)",      "A560");
+        m_an30CmdCombo->addItem("A5 63 — 查询限值 (5字段)",                "A563");
+        m_an30CmdCombo->addItem("A5 68 — 查询全部限值 (8字段)",            "A568");
+        m_an30CmdCombo->addItem("A6 01 — 查询电子负载参数 (5字段)",        "A601");
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  AN3.0: 解析 HEX 字段 → 十进制物理值
+// ═══════════════════════════════════════════════════════════════
+void MainPage::parseAn30Fields() {
+    m_an30Output->clear();
+
+    QString cmdKey = m_an30CmdCombo->currentData().toString();
+    if (cmdKey.isEmpty() || cmdKey.length() != 4) {
+        m_an30Output->setPlainText("请选择命令码");
+        return;
+    }
+
+    uint8_t cmdType = static_cast<uint8_t>(cmdKey.left(2).toInt(nullptr, 16));
+    uint8_t cmdWord = static_cast<uint8_t>(cmdKey.mid(2, 2).toInt(nullptr, 16));
+
+    const CmdLayout* layout = An30Layout::instance().find(cmdType, cmdWord);
+    if (!layout) {
+        m_an30Output->setPlainText("未找到该命令码的字段布局");
+        return;
+    }
+
+    // 解析输入 HEX
+    QString hexText = m_an30Input->toPlainText();
+    hexText.remove(' ').remove('\n').remove('\r');
+    QByteArray payload = QByteArray::fromHex(hexText.toLatin1());
+    if (payload.isEmpty()) {
+        m_an30Output->setPlainText("请输入有效的 HEX 字段字节");
+        return;
+    }
+
+    const uint8_t* data = reinterpret_cast<const uint8_t*>(payload.constData());
+    QVector<double> values = An30Layout::instance().extractAll(*layout, data, payload.size());
+
+    QStringList result;
+    for (int i = 0; i < values.size() && i < layout->fields.size(); ++i) {
+        const FieldDef& f = layout->fields[i];
+        // 判断是否为整数字段（除数=1）
+        if (f.divisor == 1.0 && f.byteLen <= 2) {
+            result.append(QString("%1 = %2").arg(f.name).arg((int)values[i]));
+        } else {
+            result.append(QString("%1 = %2").arg(f.name)
+                              .arg(values[i], 0, 'f', 3));
+        }
+    }
+
+    m_an30Output->setPlainText(result.join('\n'));
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  转换：ASCII → HEX  （读左侧 → 写右侧）
+// ═══════════════════════════════════════════════════════════════
+void MainPage::convertAsciiToHex() {
+    QString input = m_asciiEdit->toPlainText();
+    if (input.isEmpty()) {
+        m_hexEdit->clear();
+        return;
+    }
+
+    bool upper = m_upperCaseCheck->isChecked();
+    bool space = m_spaceSepCheck->isChecked();
+
+    QStringList lines = input.split('\n');
+    QStringList result;
+
+    for (const QString& line : lines) {
+        QByteArray utf8 = line.toUtf8();
+        if (utf8.isEmpty()) {
+            result.append("");
+            continue;
+        }
+
+        QString hexLine;
+        for (int i = 0; i < utf8.size(); ++i) {
+            if (i > 0 && space)
+                hexLine += ' ';
+            hexLine += QString("%1").arg(
+                (unsigned char)utf8.at(i), 2, 16, QChar('0'));
+        }
+
+        result.append(upper ? hexLine.toUpper() : hexLine.toLower());
+    }
+
+    m_hexEdit->setPlainText(result.join('\n'));
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  转换：HEX → ASCII  （读右侧 → 写左侧）
+// ═══════════════════════════════════════════════════════════════
+void MainPage::convertHexToAscii() {
+    QString input = m_hexEdit->toPlainText();
+    if (input.isEmpty()) {
+        m_asciiEdit->clear();
+        return;
+    }
+
+    QStringList lines = input.split('\n');
+    QStringList result;
+
+    for (const QString& line : lines) {
+        if (line.trimmed().isEmpty()) {
+            result.append("");
+            continue;
+        }
+
+        // 去掉所有空白字符
+        QString hex = line;
+        hex.remove(' ');
+        hex.remove('\t');
+
+        // 必须是偶数长度
+        if (hex.length() % 2 != 0) {
+            result.append(QString("[错误] 无效HEX长度: %1").arg(line.trimmed()));
+            continue;
+        }
+
+        QByteArray bytes = QByteArray::fromHex(hex.toLatin1());
+        if (bytes.isEmpty() && !hex.isEmpty()) {
+            result.append(QString("[错误] 无法解析: %1").arg(line.trimmed()));
+            continue;
+        }
+
+        result.append(QString::fromUtf8(bytes));
+    }
+
+    m_asciiEdit->setPlainText(result.join('\n'));
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -452,7 +874,7 @@ void MainPage::createAboutPage() {
     lay->addWidget(title);
 
     // ──── 版本 ────
-    ElaText *version = new ElaText(QString::fromUtf8("版本: v3.4.11"));
+    ElaText *version = new ElaText(QString::fromUtf8("版本: v3.4.12"));
     version->setTextPixelSize(18);
     version->setTextStyle(ElaTextType::Subtitle);
     lay->addWidget(version);
@@ -489,7 +911,7 @@ void MainPage::createAboutPage() {
         infoLayout->addLayout(row);
     };
 
-    addInfo(QString::fromUtf8("软件版本："), "v3.4.11");
+    addInfo(QString::fromUtf8("软件版本："), "v3.4.12");
     addInfo(QString::fromUtf8("发布日期："), QString::fromUtf8("2026 年 7 月"));
     addInfo(QString::fromUtf8("开发者："),   "Cossiant");
     addInfo(QString::fromUtf8("开发环境："), "Qt 5.15 + MinGW");

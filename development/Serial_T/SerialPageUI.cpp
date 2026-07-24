@@ -1,5 +1,6 @@
 // SerialPageUI.cpp
 // 5 个 createXxxPage() 方法的完整实现
+// ★ 新增：缓冲区超时输入框
 
 #include "SerialPageUI.h"
 #include "SerialPage.h"
@@ -105,13 +106,35 @@ void SerialPageUI::createSettingsPage() {
     grid->addWidget(statusLabel,         2, 2);
     grid->addWidget(m_page->m_serialLED,         2, 3);
 
-    // ──── 第 3 行：勾选框 ────
-    m_page->m_serialBufferCheckBox = new ElaCheckBox("合并串口接收数据（20ms 超时）");
+    // ──── 第 3 行：合并缓冲区勾选框 + 超时输入框 | HEX发送勾选框 ────
+    m_page->m_serialBufferCheckBox = new ElaCheckBox("单条命令缓冲区读取延时(防止粘包)");
     m_page->m_serialBufferCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
+
+    // ★ 新增：超时时间输入框（放在水平布局中：输入框 + "ms" 标签）
+    QWidget* timeoutContainer = new QWidget();
+    QHBoxLayout* timeoutLayout = new QHBoxLayout(timeoutContainer);
+    timeoutLayout->setContentsMargins(0, 0, 0, 0);
+    timeoutLayout->setSpacing(4);
+
+    ElaText* timeoutLabel = new ElaText("缓冲区读取延时(ms):");
+    timeoutLabel->setTextPixelSize(14);
+
+    m_page->m_bufferTimeoutEdit = new ElaLineEdit();
+
+    m_page->m_bufferTimeoutEdit->setText("20");
+    m_page->m_bufferTimeoutEdit->setPlaceholderText("ms");
+    m_page->m_bufferTimeoutEdit->setAlignment(Qt::AlignCenter);
+
+    timeoutLayout->addWidget(timeoutLabel);
+    timeoutLayout->addWidget(m_page->m_bufferTimeoutEdit, 1);
+    timeoutLayout->addStretch();
+
     m_page->m_serialHexSendCheckBox = new ElaCheckBox("以HEX格式发送（AN3.0）");
     m_page->m_serialHexSendCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
-    grid->addWidget(m_page->m_serialBufferCheckBox,   3, 0, 1, 2);
-    grid->addWidget(m_page->m_serialHexSendCheckBox,  3, 2, 1, 2);
+
+    grid->addWidget(m_page->m_serialBufferCheckBox,   3, 0);
+    grid->addWidget(timeoutContainer,                 3, 2,1,2);
+    grid->addWidget(m_page->m_serialHexSendCheckBox,  4, 2, 1, 2);
 
     // ──── 第 4 行：去除 \r\n 勾选框 ────
     m_page->m_serialStripCRLFCheckBox = new ElaCheckBox("比对时去除返回值中的 \\r\\n");

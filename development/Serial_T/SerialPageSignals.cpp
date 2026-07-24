@@ -1,4 +1,5 @@
 // SerialPageSignals.cpp
+// ★ 新增：缓冲区超时输入框信号连接
 
 #include "SerialPageSignals.h"
 #include "SerialPage.h"
@@ -147,6 +148,23 @@ void SerialPageSignals::connectAllSignals()
                                   Qt::QueuedConnection,
                                   Q_ARG(int, index));
     });
+
+    // ★ 新增：缓冲区超时输入框 → 同步到工作线程 ──
+    connect(m_page->m_bufferTimeoutEdit, &ElaLineEdit::textChanged,
+            m_page, [this](const QString &text) {
+        bool ok = false;
+        int ms = text.toInt(&ok);
+        if (ok && ms >= 1) {
+            QMetaObject::invokeMethod(m_page->m_serialWork, "setBufferTimeout",
+                                      Qt::QueuedConnection,
+                                      Q_ARG(int, ms));
+        }
+    });
+
+    // 初始化：将默认值 20ms 同步到工作线程
+    QMetaObject::invokeMethod(m_page->m_serialWork, "setBufferTimeout",
+                              Qt::QueuedConnection,
+                              Q_ARG(int, 20));
 
     // ── ⑥ 串口打开成功 ──
     connect(m_page->m_serialWork, &SerialWork::serialOpened, m_page, [this]() {

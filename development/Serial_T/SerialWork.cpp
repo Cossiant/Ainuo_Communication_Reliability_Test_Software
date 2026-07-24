@@ -1,6 +1,7 @@
 // SerialWork.cpp
 // ★ 升级：1ms QTimer轮询 + QElapsedTimer + 微秒忙等 + EMA补偿
 // ★ 新增：发送后缀功能
+// ★ 新增：可配置缓冲区超时时间
 
 #include "SerialWork.h"
 #include <QDebug>
@@ -35,7 +36,8 @@ SerialWork::SerialWork(QObject *parent)
 
     qDebug() << "SerialWork: 初始化完成"
              << "(线程:" << QThread::currentThreadId() << ")"
-             << "| 精确延时: 1ms轮询+忙等自旋+EMA补偿";
+             << "| 精确延时: 1ms轮询+忙等自旋+EMA补偿"
+             << "| 缓冲区超时:" << m_bufferTimeoutMs << "ms";
 }
 
 SerialWork::~SerialWork()
@@ -78,12 +80,23 @@ void SerialWork::setHexDisplayMode(bool hexMode)
 {
     m_hexDisplay = hexMode;
 }
+
 // 设置发送后缀模式
 void SerialWork::setSuffixMode(int mode)
 {
     m_suffixMode = mode;
     qDebug() << "SerialWork: 后缀模式 =" << mode
              << (mode == 0 ? "None" : mode == 1 ? "CR" : mode == 2 ? "LF" : "CRLF");
+}
+
+// ★ 新增：设置缓冲区合并超时时间
+void SerialWork::setBufferTimeout(int ms)
+{
+    // 合法性检查：范围 1~500ms
+    if (ms < 1)  ms = 1;
+    if (ms > 500) ms = 500;
+    m_bufferTimeoutMs = ms;
+    qDebug() << "SerialWork: 缓冲区超时 =" << ms << "ms";
 }
 
 // 统一构建发送数据（对齐 GPIBWork::buildSendData）
@@ -170,7 +183,8 @@ void SerialWork::openSerialPort(const QString &portName,
     emit serialOpened();
 
     qDebug() << "SerialWork: 串口已打开" << portName << baudRate
-             << "(线程:" << QThread::currentThreadId() << ")";
+             << "(线程:" << QThread::currentThreadId() << ")"
+             << "| 缓冲区超时:" << m_bufferTimeoutMs << "ms";
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -232,6 +246,7 @@ void SerialWork::sendString(const QString &text, bool hexMode)
 
     sendData(data);
 }
+
 // ═══════════════════════════════════════════════════════════════
 //  ★★★ 核心：发送 + 1ms轮询精确延时 + 微秒忙等 + EMA补偿 ★★★
 //  ★ 对齐 GPIBWork：计时起点在 write 之前 + forceRead 控制读取
@@ -320,6 +335,7 @@ void SerialWork::sendStringWithDelay(const QString &text, bool hexMode,
         emit interCmdDelayFinished();
     }
 }
+
 // ═══════════════════════════════════════════════════════════════
 //  1ms 轮询回调：检测是否到期 → 微秒忙等 → 误差补偿 → 发射信号
 // ═══════════════════════════════════════════════════════════════
@@ -377,7 +393,8 @@ void SerialWork::onReadyRead()
 
     if (m_buffered) {
         m_recvBuffer.append(chunk);
-        m_bufferTimer->start(20);
+        // ★ 使用可配置的超时时间（默认20ms）
+        m_bufferTimer->start(m_bufferTimeoutMs);
     } else {
         emitData(chunk);
     }
@@ -461,4 +478,3 @@ QString SerialWork::formatByteArray(const QByteArray &data) const
         }
     }
 }
-

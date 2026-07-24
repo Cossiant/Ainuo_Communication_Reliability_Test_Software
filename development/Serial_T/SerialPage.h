@@ -89,6 +89,7 @@ private:
     ElaComboBox*  m_stopBitsComboBox   = nullptr;
     ElaComboBox*  m_parityComboBox     = nullptr;
     ElaCheckBox*  m_serialBufferCheckBox = nullptr;
+    ElaLineEdit*  m_bufferTimeoutEdit    = nullptr;  // ★ 新增：缓冲区超时输入框
     ElaCheckBox*  m_serialHexSendCheckBox  = nullptr;
     ElaCheckBox*  m_serialStripCRLFCheckBox = nullptr;
     ElaPushButton* m_openSerialButton  = nullptr;
