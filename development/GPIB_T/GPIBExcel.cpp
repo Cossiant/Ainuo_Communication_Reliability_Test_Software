@@ -1,6 +1,7 @@
 // GPIBExcel.cpp
 // GPIB Excel 批量发送 / 捕获实现
 // ★ 重构：使用公共 RangeComparer
+// ★ 新增：代际标记防止信号串扰
 
 #include "GPIBExcel.h"
 #include "GPIBPage.h"
@@ -116,8 +117,15 @@ void GPIBExcel::onCapture()
     m_totalSent     = 0;
     m_pendingStop   = false;
 
+    // ★ 重置代际计数器
+    m_cmdGeneration = 0;
+
     m_page->clearExcelSendLog();
     m_page->m_logStartTimeCard->setValue(QDateTime::currentDateTime().toString("HH:mm:ss"));
+
+    // ★ 重置工作线程的误差补偿
+    QMetaObject::invokeMethod(m_work, "resetTimingCompensation",
+                              Qt::QueuedConnection);
 
     onTrySendNext();
 }
@@ -139,8 +147,15 @@ void GPIBExcel::onStartSend()
     m_totalSent     = 0;
     m_pendingStop   = false;
 
+    // ★ 重置代际计数器
+    m_cmdGeneration = 0;
+
     m_page->clearExcelSendLog();
     m_page->m_logStartTimeCard->setValue(QDateTime::currentDateTime().toString("HH:mm:ss"));
+
+    // ★ 重置工作线程的误差补偿
+    QMetaObject::invokeMethod(m_work, "resetTimingCompensation",
+                              Qt::QueuedConnection);
 
     onTrySendNext();
 }
@@ -205,6 +220,9 @@ void GPIBExcel::onTrySendNext()
 
     if (cmdText.isEmpty()) { onTrySendNext(); return; }
 
+    // ★ 递增代际标记（在每次实际发送前）
+    int myGen = ++m_cmdGeneration;
+
     bool hexMode = m_page->m_gpibHexSendCheckBox->isChecked();
 
     if (expectedStr.isEmpty()) {
@@ -223,13 +241,15 @@ void GPIBExcel::onTrySendNext()
         m_expectData.replace("\n", "");
     }
 
+    // ★ 传入代际标记 myGen
     QMetaObject::invokeMethod(m_work, "sendStringWithDelay",
                               Qt::QueuedConnection,
                               Q_ARG(QString, cmdText),
                               Q_ARG(bool, hexMode),
                               Q_ARG(QByteArray, m_expectData),
                               Q_ARG(int, delayMs),
-                              Q_ARG(bool, m_isCaptureMode));
+                              Q_ARG(bool, m_isCaptureMode),
+                              Q_ARG(int, myGen));                // ★ 新增
 
     m_totalSent++;
     m_page->m_logSentCountCard->setValue(QString::number(m_totalSent));
@@ -267,9 +287,18 @@ void GPIBExcel::onResponseReceived(QByteArray data)
 }
 
 // ═══════════════════════════════════════════════ 延时到期 ═══
-void GPIBExcel::onInterCmdDelayFinished()
+// ★ 修改：校验代际标记，拒绝旧命令的残留信号
+void GPIBExcel::onInterCmdDelayFinished(int generation)
 {
     if (!m_waiting) return;
+
+    // ★★★ 核心校验：代际不匹配说明这是上一条命令的残留信号，直接丢弃 ★★★
+    if (generation != m_cmdGeneration) {
+        qDebug() << "GPIBExcel: [丢弃过期延迟信号] gen=" << generation
+                 << "当前gen=" << m_cmdGeneration;
+        return;
+    }
+
     m_minDelayOk = true;
     if (m_gotReply) finalizeAndNext();
 }

@@ -1,6 +1,7 @@
 // GPIBWork.cpp
 // GPIB Worker：NI-VISA 操作实现
 // 精确延时：1ms QTimer轮询 + QElapsedTimer + 微秒忙等 + EMA补偿
+// ★ 新增：代际标记防止信号串扰
 
 #include "GPIBWork.h"
 #include <QDebug>
@@ -78,6 +79,13 @@ void GPIBWork::setSuffixMode(int mode)
     m_suffixMode = static_cast<GPIBSuffix>(mode);
     qDebug() << "GPIBWork: 后缀模式 =" << mode
              << (mode == 0 ? "None" : mode == 1 ? "CR" : mode == 2 ? "LF" : "CRLF");
+}
+
+// ★ 新增：重置误差补偿（每次批量发送开始时调用）
+void GPIBWork::resetTimingCompensation()
+{
+    m_timingCompensationMs = 0;
+    qDebug() << "GPIBWork: 误差补偿已重置";
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -240,21 +248,25 @@ void GPIBWork::sendString(const QString &text, bool hexMode)
 // ═══════════════════════════════════════════════════════════════
 //  ★★★ 核心：发送 + 条件读取 + 1ms轮询精确延时 ★★★
 //  forceRead: 捕获模式强制读取；否则仅在期望非空时读取
+//  generation：代际标记，到期时原样传回供 GPIBExcel 校验
 // ═══════════════════════════════════════════════════════════════
 void GPIBWork::sendStringWithDelay(const QString &text, bool hexMode,
                                     const QByteArray &expectedResponse,
                                     int delayMs,
-                                    bool forceRead)
+                                    bool forceRead,
+                                    int generation)
 {
     if (!isOpen() || text.isEmpty() || !m_instrument)
         return;
 
     m_expectedResponse = expectedResponse;
 
+    // ★ 保存代际标记，到期后原样传回
+    m_currentGeneration = generation;
+
     // ── 构建数据 ──
     QByteArray data = buildSendData(text, hexMode);
 
-    // ── 步骤1: viWrite 发送命令 ──
     // ★ 在 viRead 之前启动计时，让延时包含 viRead 的阻塞时间
     //   这样 TX→TX 间隔 = max(viRead, delayMs)，而不是 viRead + delayMs
     if (delayMs > 0) {
@@ -277,7 +289,7 @@ void GPIBWork::sendStringWithDelay(const QString &text, bool hexMode,
             m_targetDelayMs   = compensatedMs;
             m_interCmdTimer->start();
         } else {
-            emit interCmdDelayFinished();
+            emit interCmdDelayFinished(m_currentGeneration);  // ★ 携带代际
         }
         return;
     }
@@ -307,7 +319,7 @@ void GPIBWork::sendStringWithDelay(const QString &text, bool hexMode,
 
         if (alreadyElapsed >= delayMs) {
             // viRead 已经消耗了所有延时，立即通知主线程
-            emit interCmdDelayFinished();
+            emit interCmdDelayFinished(m_currentGeneration);    // ★ 携带代际
         } else {
             // 计算剩余需要等待的时间
             int remainingMs = static_cast<int>(delayMs - alreadyElapsed);
@@ -326,7 +338,7 @@ void GPIBWork::sendStringWithDelay(const QString &text, bool hexMode,
             m_interCmdTimer->start();  // 每1ms触发 onInterCmdDelay()
         }
     } else {
-        emit interCmdDelayFinished();
+        emit interCmdDelayFinished(m_currentGeneration);        // ★ 携带代际
     }
 }
 
@@ -365,6 +377,7 @@ void GPIBWork::onInterCmdDelay()
     // ★ 诊断日志
     if (qAbs(errorMs) >= 1) {
         qDebug() << "GPIBWork:[精确延时]"
+                 << "gen" << m_currentGeneration
                  << "请求" << m_originalDelayMs << "ms"
                  << "→补偿后" << m_targetDelayMs << "ms"
                  << "→实际" << actualMs << "ms"
@@ -372,8 +385,8 @@ void GPIBWork::onInterCmdDelay()
                  << "|累积补偿" << m_timingCompensationMs << "ms";
     }
 
-    // ★ 通知主线程
-    emit interCmdDelayFinished();
+    // ★ 通知主线程，携带代际标记
+    emit interCmdDelayFinished(m_currentGeneration);
 }
 
 // ═══════════════════════════════════════════════════════════════

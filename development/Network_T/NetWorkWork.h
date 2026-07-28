@@ -2,6 +2,7 @@
 // 精确延时：1ms QTimer轮询 + QElapsedTimer + 微秒忙等 + EMA补偿
 // ★ 对齐 GPIBWork：sendStringWithDelay 添加 forceRead 参数
 // ★ 新增：发送后缀功能
+// ★ 新增：代际标记防止信号串扰
 
 #ifndef UNTITLED_NETWORKWORK_H
 #define UNTITLED_NETWORKWORK_H
@@ -34,15 +35,20 @@ public slots:
     void sendData(const QByteArray &data);
     void sendString(const QString &text, bool hexMode);
 
+    // ★ forceRead: true=必须等待设备回复（捕获模式），
+    //              false=仅在 expectedResponse 非空时等待回复
+    // ★ generation: 代际标记，用于防止旧延迟信号污染新命令
     void sendStringWithDelay(const QString &text, bool hexMode,
                              const QByteArray &expectedResponse,
                              int delayMs,
-                             bool forceRead = false);
+                             bool forceRead = false,
+                             int generation = 0);      // ★ 新增参数
 
     void resetRecvCount();
     void setExpectedResponse(const QByteArray &expected);
     void setHexDisplayMode(bool hexMode);
     void setSuffixMode(int mode);
+    void resetTimingCompensation(); // ★ 新增：重置误差补偿
 
 signals:
     void networkConnected();
@@ -53,7 +59,7 @@ signals:
     void sendLogLine(const QString &line);
     void recvLogLine(const QString &line);
     void recvCountChanged(int totalCount);
-    void interCmdDelayFinished();
+    void interCmdDelayFinished(int generation);       // ★ 修改：携带代际
 
 private slots:
     void onReadyRead();
@@ -82,6 +88,9 @@ private:
     int           m_targetDelayMs         = 0;
     int           m_originalDelayMs       = 0;
     int           m_timingCompensationMs  = 0;
+
+    // ★ 代际标记：防止旧延迟信号污染新命令
+    int           m_currentGeneration    = 0;
 };
 
 #endif // UNTITLED_NETWORKWORK_H

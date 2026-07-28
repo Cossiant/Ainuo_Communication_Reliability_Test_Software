@@ -2,6 +2,7 @@
 // ★ 对齐 GPIBWork：sendStringWithDelay 添加 forceRead 参数
 // ★ 新增：发送后缀功能
 // ★ 新增：可配置缓冲区超时时间
+// ★ 新增：代际标记防止信号串扰
 
 #ifndef UNTITLED_SERIALWORK_H
 #define UNTITLED_SERIALWORK_H
@@ -40,16 +41,19 @@ public slots:
 
     // ★ forceRead: true=必须等待设备回复（捕获模式），
     //              false=仅在 expectedResponse 非空时等待回复
+    // ★ generation: 代际标记，用于防止旧延迟信号污染新命令
     void sendStringWithDelay(const QString &text, bool hexMode,
                              const QByteArray &expectedResponse,
                              int delayMs,
-                             bool forceRead = false);
+                             bool forceRead = false,
+                             int generation = 0);      // ★ 新增参数
 
     void resetRecvCount();
     void setExpectedResponse(const QByteArray &expected);
     void setHexDisplayMode(bool hexMode);
     void setSuffixMode(int mode);   // ★ 新增：设置发送后缀模式
     void setBufferTimeout(int ms);  // ★ 新增：设置缓冲区合并超时时间
+    void resetTimingCompensation(); // ★ 新增：重置误差补偿
 
 signals:
     void serialOpened();
@@ -61,8 +65,8 @@ signals:
     void recvLogLine(const QString &line);
     void recvCountChanged(int totalCount);
 
-    // ★ 工作线程内精确延时到期
-    void interCmdDelayFinished();
+    // ★ 工作线程内精确延时到期，携带代际标记
+    void interCmdDelayFinished(int generation);    // ★ 修改：携带代际
 
 private slots:
     void onReadyRead();
@@ -101,6 +105,9 @@ private:
     int           m_targetDelayMs        = 0;         // 本次补偿后目标（ms）
     int           m_originalDelayMs      = 0;         // 本次原始请求（ms，日志用）
     int           m_timingCompensationMs = 0;         // EMA 累积补偿（ms）
+
+    // ★ 代际标记：防止旧延迟信号污染新命令
+    int           m_currentGeneration    = 0;         // 当前正在处理的命令代际
 };
 
 #endif // UNTITLED_SERIALWORK_H

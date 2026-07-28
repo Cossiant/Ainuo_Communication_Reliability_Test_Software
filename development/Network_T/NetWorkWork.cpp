@@ -2,6 +2,7 @@
 // 精确延时：1ms QTimer轮询 + QElapsedTimer + 微秒忙等 + EMA补偿
 // ★ 对齐 GPIBWork：计时起点移到 write 之前 + forceRead 判断
 // ★ 新增：发送后缀功能
+// ★ 新增：代际标记防止信号串扰
 
 #include "NetworkWork.h"
 #include <QDebug>
@@ -80,6 +81,13 @@ void NetworkWork::setSuffixMode(int mode)
     m_suffixMode = mode;
     qDebug() << "NetworkWork: 后缀模式 =" << mode
              << (mode == 0 ? "None" : mode == 1 ? "CR" : mode == 2 ? "LF" : "CRLF");
+}
+
+// ★ 新增：重置误差补偿（每次批量发送开始时调用）
+void NetworkWork::resetTimingCompensation()
+{
+    m_timingCompensationMs = 0;
+    qDebug() << "NetworkWork: 误差补偿已重置";
 }
 
 // ★ 新增：统一构建发送数据（对齐 GPIBWork::buildSendData）
@@ -258,16 +266,21 @@ void NetworkWork::sendString(const QString &text, bool hexMode)
 // ═══════════════════════════════════════════════════════════════
 //  ★★★ 核心：发送 + 1ms轮询精确延时 + 微秒忙等 + EMA补偿 ★★★
 //  ★ 对齐 GPIBWork：计时起点在 write 之前 + forceRead 控制读取
+//  ★ generation：代际标记，到期时原样传回供 NetworkExcel 校验
 // ═══════════════════════════════════════════════════════════════
 void NetworkWork::sendStringWithDelay(const QString &text, bool hexMode,
                                       const QByteArray &expectedResponse,
                                       int delayMs,
-                                      bool forceRead)
+                                      bool forceRead,
+                                      int generation)
 {
     if (!isOpen() || text.isEmpty() || !m_tcpSocket)
         return;
 
     m_expectedResponse = expectedResponse;
+
+    // ★ 保存代际标记，到期后原样传回
+    m_currentGeneration = generation;
 
     // ── 构建数据（★ 使用统一构建方法）──
     QByteArray data = buildSendData(text, hexMode);
@@ -297,7 +310,7 @@ void NetworkWork::sendStringWithDelay(const QString &text, bool hexMode,
             m_targetDelayMs   = compensatedMs;
             m_interCmdTimer->start();
         } else {
-            emit interCmdDelayFinished();
+            emit interCmdDelayFinished(m_currentGeneration);  // ★ 携带代际
         }
         return;
     }
@@ -325,7 +338,7 @@ void NetworkWork::sendStringWithDelay(const QString &text, bool hexMode,
         qint64 alreadyElapsed = m_preciseDelayTimer.elapsed();
 
         if (alreadyElapsed >= delayMs) {
-            emit interCmdDelayFinished();
+            emit interCmdDelayFinished(m_currentGeneration);    // ★ 携带代际
         } else {
             int remainingMs = static_cast<int>(delayMs - alreadyElapsed);
             int compensatedMs = remainingMs + m_timingCompensationMs;
@@ -340,7 +353,7 @@ void NetworkWork::sendStringWithDelay(const QString &text, bool hexMode,
             m_interCmdTimer->start();
         }
     } else {
-        emit interCmdDelayFinished();
+        emit interCmdDelayFinished(m_currentGeneration);        // ★ 携带代际
     }
 }
 
@@ -378,6 +391,7 @@ void NetworkWork::onInterCmdDelay()
     // ★ 诊断日志
     if (qAbs(errorMs) >= 1) {
         qDebug() << "NetworkWork:[精确延时]"
+                 << "gen" << m_currentGeneration
                  << "请求" << m_originalDelayMs << "ms"
                  << "→补偿后" << m_targetDelayMs << "ms"
                  << "→实际" << actualMs << "ms"
@@ -385,8 +399,8 @@ void NetworkWork::onInterCmdDelay()
                  << "|累积补偿" << m_timingCompensationMs << "ms";
     }
 
-    // ★ 通知主线程
-    emit interCmdDelayFinished();
+    // ★ 通知主线程，携带代际标记
+    emit interCmdDelayFinished(m_currentGeneration);
 }
 
 // ═══════════════════════════════════════════════════════════════

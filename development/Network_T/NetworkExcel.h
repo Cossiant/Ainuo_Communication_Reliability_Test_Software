@@ -1,11 +1,11 @@
 // NetworkExcel.h
 // ★ 重构：使用公共 RangeComparer / StickySplitter
+// ★ 新增：代际标记防止信号串扰
 
 #pragma once
 
 #include <QObject>
 #include <QTimer>
-#include <QElapsedTimer>
 #include <QByteArray>
 #include <QQueue>
 
@@ -26,7 +26,7 @@ private slots:
     void onStopSend();
     void onTrySendNext();
     void onResponseReceived(QByteArray data);
-    void onInterCmdDelayFinished();
+    void onInterCmdDelayFinished(int generation);       // ★ 修改：接收代际
     void onGlobalTimeout();
 
 private:
@@ -64,4 +64,7 @@ private:
     QByteArray stickyDelimiter() const;
 
     QTimer* m_timeoutTimer = nullptr;
+
+    // ★ 代际标记：每发送一条命令自增，用于校验延迟信号是否属于当前命令
+    int        m_cmdGeneration = 0;
 };

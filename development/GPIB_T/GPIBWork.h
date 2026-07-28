@@ -2,6 +2,7 @@
 // GPIB Worker：在独立线程中执行阻塞 VISA 操作
 // 对齐 SerialWork / NetworkWork 架构
 // 精确延时：1ms QTimer轮询 + QElapsedTimer + 微秒忙等 + EMA补偿
+// ★ 新增：代际标记防止信号串扰
 
 #ifndef UNTITLED_GPIBWORK_H
 #define UNTITLED_GPIBWORK_H
@@ -54,16 +55,19 @@ public slots:
 
     // ★ 发送命令 + 在工作线程启动精确延时（1ms轮询+忙等+EMA补偿）
     // forceRead: true=必须viRead（捕获模式），false=仅在expectedResponse非空时读取
+    // generation: 代际标记，用于防止旧延迟信号污染新命令
     void sendStringWithDelay(const QString &text, bool hexMode,
                              const QByteArray &expectedResponse,
                              int delayMs,
-                             bool forceRead);
+                             bool forceRead,
+                             int generation = 0);      // ★ 新增参数
 
     void resetRecvCount();
     void setExpectedResponse(const QByteArray &expected);
     void setHexDisplayMode(bool hexMode);
 
     void setSuffixMode(int mode);   // 设置发送后缀模式
+    void resetTimingCompensation(); // ★ 新增：重置误差补偿
 
 signals:
     void gpibOpened();
@@ -75,8 +79,8 @@ signals:
     void recvLogLine(const QString &line);
     void recvCountChanged(int totalCount);
 
-    // ★ 工作线程内精确延时到期
-    void interCmdDelayFinished();
+    // ★ 工作线程内精确延时到期，携带代际标记
+    void interCmdDelayFinished(int generation);       // ★ 修改：携带代际
 
 private slots:
     void onInterCmdDelay();              // ★ 精确延时到期（工作线程内）
@@ -121,6 +125,9 @@ private:
     int           m_targetDelayMs         = 0;         // 本次补偿后目标（ms）
     int           m_originalDelayMs       = 0;         // 本次原始请求（ms，日志用）
     int           m_timingCompensationMs  = 0;         // EMA 累积补偿（ms）
+
+    // ★ 代际标记：防止旧延迟信号污染新命令
+    int           m_currentGeneration    = 0;
 
 };
 

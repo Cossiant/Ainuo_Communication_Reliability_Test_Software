@@ -2,6 +2,7 @@
 // ★ 升级：1ms QTimer轮询 + QElapsedTimer + 微秒忙等 + EMA补偿
 // ★ 新增：发送后缀功能
 // ★ 新增：可配置缓冲区超时时间
+// ★ 新增：代际标记防止信号串扰
 
 #include "SerialWork.h"
 #include <QDebug>
@@ -97,6 +98,13 @@ void SerialWork::setBufferTimeout(int ms)
     if (ms > 500) ms = 500;
     m_bufferTimeoutMs = ms;
     qDebug() << "SerialWork: 缓冲区超时 =" << ms << "ms";
+}
+
+// ★ 新增：重置误差补偿（每次批量发送开始时调用）
+void SerialWork::resetTimingCompensation()
+{
+    m_timingCompensationMs = 0;
+    qDebug() << "SerialWork: 误差补偿已重置";
 }
 
 // 统一构建发送数据（对齐 GPIBWork::buildSendData）
@@ -250,16 +258,21 @@ void SerialWork::sendString(const QString &text, bool hexMode)
 // ═══════════════════════════════════════════════════════════════
 //  ★★★ 核心：发送 + 1ms轮询精确延时 + 微秒忙等 + EMA补偿 ★★★
 //  ★ 对齐 GPIBWork：计时起点在 write 之前 + forceRead 控制读取
+//  ★ generation：代际标记，到期时原样传回供 SerialExcel 校验
 // ═══════════════════════════════════════════════════════════════
 void SerialWork::sendStringWithDelay(const QString &text, bool hexMode,
                                      const QByteArray &expectedResponse,
                                      int delayMs,
-                                     bool forceRead)
+                                     bool forceRead,
+                                     int generation)
 {
     if (!isOpen() || text.isEmpty() || !m_serialPort)
         return;
 
     m_expectedResponse = expectedResponse;
+
+    // ★ 保存代际标记，到期后原样传回
+    m_currentGeneration = generation;
 
     // ── 构建数据（★ 使用统一构建方法）──
     QByteArray data = buildSendData(text, hexMode);
@@ -289,7 +302,7 @@ void SerialWork::sendStringWithDelay(const QString &text, bool hexMode,
             m_targetDelayMs   = compensatedMs;
             m_interCmdTimer->start();
         } else {
-            emit interCmdDelayFinished();
+            emit interCmdDelayFinished(m_currentGeneration);  // ★ 携带代际
         }
         return;
     }
@@ -317,7 +330,7 @@ void SerialWork::sendStringWithDelay(const QString &text, bool hexMode,
         qint64 alreadyElapsed = m_preciseDelayTimer.elapsed();
 
         if (alreadyElapsed >= delayMs) {
-            emit interCmdDelayFinished();
+            emit interCmdDelayFinished(m_currentGeneration);    // ★ 携带代际
         } else {
             int remainingMs = static_cast<int>(delayMs - alreadyElapsed);
             int compensatedMs = remainingMs + m_timingCompensationMs;
@@ -332,7 +345,7 @@ void SerialWork::sendStringWithDelay(const QString &text, bool hexMode,
             m_interCmdTimer->start();
         }
     } else {
-        emit interCmdDelayFinished();
+        emit interCmdDelayFinished(m_currentGeneration);        // ★ 携带代际
     }
 }
 
@@ -370,6 +383,7 @@ void SerialWork::onInterCmdDelay()
     // ★ 诊断日志
     if (qAbs(errorMs) >= 1) {
         qDebug() << "SerialWork:[精确延时]"
+                 << "gen" << m_currentGeneration
                  << "请求" << m_originalDelayMs << "ms"
                  << "→补偿后" << m_targetDelayMs << "ms"
                  << "→实际" << actualMs << "ms"
@@ -377,8 +391,8 @@ void SerialWork::onInterCmdDelay()
                  << "|累积补偿" << m_timingCompensationMs << "ms";
     }
 
-    // ★ 通知主线程
-    emit interCmdDelayFinished();
+    // ★ 通知主线程，携带代际标记
+    emit interCmdDelayFinished(m_currentGeneration);
 }
 
 // ═══════════════════════════════════════════════════════════════
