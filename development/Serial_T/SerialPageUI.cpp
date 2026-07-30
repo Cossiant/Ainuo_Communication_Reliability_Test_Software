@@ -134,12 +134,12 @@ void SerialPageUI::createSettingsPage() {
 
     grid->addWidget(m_page->m_serialBufferCheckBox,   3, 0);
     grid->addWidget(timeoutContainer,                 3, 2,1,2);
-    grid->addWidget(m_page->m_serialHexSendCheckBox,  4, 2, 1, 2);
+    grid->addWidget(m_page->m_serialHexSendCheckBox,  4, 0, 1, 2);
 
     // ──── 第 4 行：去除 \r\n 勾选框 ────
     m_page->m_serialStripCRLFCheckBox = new ElaCheckBox("比对时去除返回值中的 \\r\\n");
     m_page->m_serialStripCRLFCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
-    grid->addWidget(m_page->m_serialStripCRLFCheckBox, 4, 0, 1, 4);
+    grid->addWidget(m_page->m_serialStripCRLFCheckBox, 4, 2, 1, 4);
 
     // ──── 第 5 行：粘包分割 ────
     m_page->m_serialSplitStickyCheckBox = new ElaCheckBox("启用粘包分割（按分隔符拆分返回值）");
