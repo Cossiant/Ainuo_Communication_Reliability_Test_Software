@@ -162,7 +162,7 @@ void GPIBPageUI::createSettingsPage() {
     ElaText* productLabel = new ElaText("产品系列:");
     productLabel->setTextPixelSize(15);
     m_page->m_gpibProductComboBox = new ElaComboBox();
-    m_page->m_gpibProductComboBox->addItems({"RGL系列 (交流源载)", "EVH系列 (直流电源)"});
+    m_page->m_gpibProductComboBox->addItems({"RGL系列 (交流源载)", "EVT系列 (直流电源)", "EVH系列 (双向直流电源 v1.5)"});
     m_page->m_gpibProductComboBox->setCurrentIndex(0);
     m_page->m_gpibProductComboBox->setStyleSheet("ElaComboBox { font-size: 14px; }");
     grid->addWidget(productLabel,                    8, 0);

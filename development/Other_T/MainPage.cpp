@@ -57,7 +57,7 @@ void MainPage::initNavigation() {
 // ═══════════════════════════════════════════════════════════════
 void MainPage::initWindowConfig() {
     m_mainWindow->resize(1200, 750);
-    m_mainWindow->setWindowTitle("Ainuo 通用通讯可靠性测试软件V3.4.13");
+    m_mainWindow->setWindowTitle("Ainuo 通用通讯可靠性测试软件V3.4.14");
 
     // 用户信息卡片
     m_mainWindow->setUserInfoCardTitle("Ainuo 通讯可靠性");
@@ -310,7 +310,7 @@ void MainPage::createCommandCalculationPage() {
         ElaText *prodLabel = new ElaText("产品系列:");
         prodLabel->setTextPixelSize(14);
         m_an30ProductCombo = new ElaComboBox();
-        m_an30ProductCombo->addItems({"RGL系列 (交流源载)", "EVH系列 (直流电源)"});
+        m_an30ProductCombo->addItems({"RGL系列 (交流源载)", "EVT系列 (直流电源)", "EVH系列 (双向直流电源 v1.5)"});
         m_an30ProductCombo->setCurrentIndex(0);
         m_an30ProductCombo->setStyleSheet("ElaComboBox { font-size: 13px; }");
 
@@ -387,23 +387,28 @@ void MainPage::createCommandCalculationPage() {
 //  AN3.0: 产品系列切换 → 刷新命令码下拉框
 // ═══════════════════════════════════════════════════════════════
 void MainPage::onAn30ProductChanged(int index) {
-    Q_UNUSED(index);
-    An30Layout::instance().setProduct(
-        index == 0 ? An30Product::RGL : An30Product::EVH);
+    An30Product prod;
+    switch (index) {
+        case 0: prod = An30Product::RGL; break;
+        case 1: prod = An30Product::EVT; break;
+        case 2: prod = An30Product::EVH; break;
+        default: prod = An30Product::RGL; break;
+    }
+    An30Layout::instance().setProduct(prod);
     populateAn30CmdCombo();
     m_an30Output->clear();
 }
-
 // ═══════════════════════════════════════════════════════════════
 //  AN3.0: 填充命令码下拉框
 // ═══════════════════════════════════════════════════════════════
 void MainPage::populateAn30CmdCombo() {
     m_an30CmdCombo->clear();
 
-    // 遍历当前产品的命令表
     An30Product prod = An30Layout::instance().product();
-    // 用临时变量暂存 An30Layout，通过 find 探索所有命令太麻烦，
-    // 这里直接硬编码 RGL / EVH 的命令列表
+
+    // ═══════════════════════════════════════════════════════
+    //  RGL 系列 — 可回馈交流源载一体机（原有，不变）
+    // ═══════════════════════════════════════════════════════
     if (prod == An30Product::RGL) {
         m_an30CmdCombo->addItem("F0 A4 — 查询输出测量值 (15字段)",        "F0A4");
         m_an30CmdCombo->addItem("F0 EB — 查询状态/报警码 (2字段)",         "F0EB");
@@ -417,7 +422,11 @@ void MainPage::populateAn30CmdCombo() {
         m_an30CmdCombo->addItem("A5 A6 — 查询恒有功参数 (4字段)",          "A5A6");
         m_an30CmdCombo->addItem("A5 A4 — 查询恒阻参数 (1字段)",            "A5A4");
         m_an30CmdCombo->addItem("A5 32 — 查询间谐波参数 (4字段)",          "A532");
-    } else {
+    }
+    // ═══════════════════════════════════════════════════════
+    //  EVT 系列 — 直流电源（原 EVH 协议）
+    // ═══════════════════════════════════════════════════════
+    else if (prod == An30Product::EVT) {
         m_an30CmdCombo->addItem("F0 00 — 查询输出状态 (1字段)",            "F000");
         m_an30CmdCombo->addItem("F0 80 — 查询电压电流功率 (3字段)",        "F080");
         m_an30CmdCombo->addItem("F0 81 — 查询电压电流功率电阻 (4字段)",    "F081");
@@ -434,6 +443,38 @@ void MainPage::populateAn30CmdCombo() {
         m_an30CmdCombo->addItem("A5 60 — 查询电压上下限报警 (6字段)",      "A560");
         m_an30CmdCombo->addItem("A5 63 — 查询限值 (5字段)",                "A563");
         m_an30CmdCombo->addItem("A5 68 — 查询全部限值 (8字段)",            "A568");
+        m_an30CmdCombo->addItem("A6 01 — 查询电子负载参数 (5字段)",        "A601");
+    }
+    // ═══════════════════════════════════════════════════════
+    //  EVH 系列 — 双向可编程直流电源（根据用户手册 v1.5）
+    // ═══════════════════════════════════════════════════════
+    else {
+        m_an30CmdCombo->addItem("F0 00 — 查询输出状态 (1字段)",            "F000");
+        m_an30CmdCombo->addItem("F0 10 — 查询电压输出值 (1字段)",          "F010");
+        m_an30CmdCombo->addItem("F0 11 — 查询电流输出值 (1字段)",          "F011");
+        m_an30CmdCombo->addItem("F0 12 — 查询功率输出值 (1字段)",          "F012");
+        m_an30CmdCombo->addItem("F0 20 — 查询电压电流斜率 (2字段)",        "F020");
+        m_an30CmdCombo->addItem("F0 80 — 查询电压电流功率 (3字段)",        "F080");
+        m_an30CmdCombo->addItem("F0 81 — 查询电压电流功率电阻 (4字段)",    "F081");
+        m_an30CmdCombo->addItem("F0 EB — 查询当前状态 (1字段)",            "F0EB");
+        m_an30CmdCombo->addItem("F0 24 — 查询报警代码 (1字段)",            "F024");
+        m_an30CmdCombo->addItem("F0 ED — 查询机器型号 (3字段)",            "F0ED");
+        m_an30CmdCombo->addItem("A5 00 — 查询设定电压 (1字段)",            "A500");
+        m_an30CmdCombo->addItem("A5 01 — 查询设定正向电流 (1字段)",        "A501");
+        m_an30CmdCombo->addItem("A5 02 — 查询设定正向功率 (1字段)",        "A502");
+        m_an30CmdCombo->addItem("A5 03 — 查询OVP (1字段)",                 "A503");
+        m_an30CmdCombo->addItem("A5 04 — 查询设定反向电流 (1字段)",        "A504");
+        m_an30CmdCombo->addItem("A5 05 — 查询设定反向功率 (1字段)",        "A505");
+        m_an30CmdCombo->addItem("A5 06 — 查询设定电阻 (1字段)",            "A506");
+        m_an30CmdCombo->addItem("A5 1F — 查询全部设定值 (7字段)",          "A51F");
+        m_an30CmdCombo->addItem("A5 58 — 查询正向功率上限报警 (2字段)",    "A558");
+        m_an30CmdCombo->addItem("A5 59 — 查询反向功率上限报警 (2字段)",    "A559");
+        m_an30CmdCombo->addItem("A5 60 — 查询电压上下限报警 (6字段)",      "A560");
+        m_an30CmdCombo->addItem("A5 61 — 查询正向电流上下限报警 (6字段)",  "A561");
+        m_an30CmdCombo->addItem("A5 62 — 查询反向电流上下限报警 (3字段)",  "A562");
+        m_an30CmdCombo->addItem("A5 63 — 查询限值 (5字段)",                "A563");
+        m_an30CmdCombo->addItem("A5 68 — 查询全部限值 (8字段)",            "A568");
+        m_an30CmdCombo->addItem("A5 67 — 查询从机系统配置 (3字段)",        "A567");
         m_an30CmdCombo->addItem("A6 01 — 查询电子负载参数 (5字段)",        "A601");
     }
 }
@@ -874,7 +915,7 @@ void MainPage::createAboutPage() {
     lay->addWidget(title);
 
     // ──── 版本 ────
-    ElaText *version = new ElaText(QString::fromUtf8("版本: v3.4.13"));
+    ElaText *version = new ElaText(QString::fromUtf8("版本: v3.4.14"));
     version->setTextPixelSize(18);
     version->setTextStyle(ElaTextType::Subtitle);
     lay->addWidget(version);
@@ -911,7 +952,7 @@ void MainPage::createAboutPage() {
         infoLayout->addLayout(row);
     };
 
-    addInfo(QString::fromUtf8("软件版本："), "v3.4.13");
+    addInfo(QString::fromUtf8("软件版本："), "v3.4.14");
     addInfo(QString::fromUtf8("发布日期："), QString::fromUtf8("2026 年 7 月"));
     addInfo(QString::fromUtf8("开发者："),   "Cossiant");
     addInfo(QString::fromUtf8("开发环境："), "Qt 5.15 + MinGW");

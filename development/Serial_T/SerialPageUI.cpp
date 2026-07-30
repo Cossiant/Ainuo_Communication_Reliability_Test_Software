@@ -194,7 +194,7 @@ void SerialPageUI::createSettingsPage() {
     ElaText* productLabel = new ElaText("产品系列:");
     productLabel->setTextPixelSize(15);
     m_page->m_serialProductComboBox = new ElaComboBox();
-    m_page->m_serialProductComboBox->addItems({"RGL系列 (交流源载)", "EVH系列 (直流电源)"});
+    m_page->m_serialProductComboBox->addItems({"RGL系列 (交流源载)", "EVT系列 (直流电源)", "EVH系列 (双向直流电源 v1.5)"});
     m_page->m_serialProductComboBox->setCurrentIndex(0);
     m_page->m_serialProductComboBox->setStyleSheet("ElaComboBox { font-size: 14px; }");
     grid->addWidget(productLabel,                    9, 0);

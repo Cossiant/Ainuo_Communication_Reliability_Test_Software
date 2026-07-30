@@ -135,8 +135,14 @@ void NetworkPageSignals::connectAllSignals()
     // 产品系列切换 → 更新 An30Layout
     connect(m_page->m_networkProductComboBox, QOverload<int>::of(&ElaComboBox::currentIndexChanged),
             m_page, [this](int index) {
-        An30Layout::instance().setProduct(
-            index == 0 ? An30Product::RGL : An30Product::EVH);
+                An30Product prod;
+                switch (index) {
+                    case 0: prod = An30Product::RGL; break;
+                    case 1: prod = An30Product::EVT; break;
+                    case 2: prod = An30Product::EVH; break;
+                    default: prod = An30Product::RGL; break;
+                }
+                An30Layout::instance().setProduct(prod);
     });
 
     // ── ⑤ 后缀选择变更 → 同步到工作线程 ──
