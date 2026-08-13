@@ -57,7 +57,7 @@ void MainPage::initNavigation() {
 // ═══════════════════════════════════════════════════════════════
 void MainPage::initWindowConfig() {
     m_mainWindow->resize(1200, 750);
-    m_mainWindow->setWindowTitle("Ainuo 通用通讯可靠性测试软件V3.4.14");
+    m_mainWindow->setWindowTitle("Ainuo 通用通讯可靠性测试软件V3.4.15");
 
     // 用户信息卡片
     m_mainWindow->setUserInfoCardTitle("Ainuo 通讯可靠性");
@@ -915,7 +915,7 @@ void MainPage::createAboutPage() {
     lay->addWidget(title);
 
     // ──── 版本 ────
-    ElaText *version = new ElaText(QString::fromUtf8("版本: v3.4.14"));
+    ElaText *version = new ElaText(QString::fromUtf8("版本: v3.4.15"));
     version->setTextPixelSize(18);
     version->setTextStyle(ElaTextType::Subtitle);
     lay->addWidget(version);
@@ -952,8 +952,8 @@ void MainPage::createAboutPage() {
         infoLayout->addLayout(row);
     };
 
-    addInfo(QString::fromUtf8("软件版本："), "v3.4.14");
-    addInfo(QString::fromUtf8("发布日期："), QString::fromUtf8("2026 年 7 月"));
+    addInfo(QString::fromUtf8("软件版本："), "v3.4.15");
+    addInfo(QString::fromUtf8("发布日期："), QString::fromUtf8("2026 年 8 月"));
     addInfo(QString::fromUtf8("开发者："),   "Cossiant");
     addInfo(QString::fromUtf8("开发环境："), "Qt 5.15 + MinGW");
     infoLayout->addSpacing(8);
@@ -998,23 +998,20 @@ void MainPage::createAboutPage() {
     lay->addWidget(featureGroup);
 
     // ──── 更新日志摘要 ────
-    QGroupBox *changelogGroup = new QGroupBox(QString::fromUtf8("V3.4.11 更新要点"));
+    QGroupBox *changelogGroup = new QGroupBox(QString::fromUtf8("V3.4.15 更新要点"));
     changelogGroup->setStyleSheet(infoGroup->styleSheet());
     QVBoxLayout *changelogLayout = new QVBoxLayout(changelogGroup);
     changelogLayout->setSpacing(4);
     changelogLayout->setContentsMargins(20, 20, 20, 20);
 
     QStringList changelog = {
-        QString::fromUtf8("AN3.0 HEX 区间判断：串口/网口/GPIB 设置页「HEX区间判断」全面启用"),
-        QString::fromUtf8("基于 An30Layout 命令码自动匹配字段布局，零配置使用"),
-        QString::fromUtf8("注册全部 22 条 AN3.0 查询命令（F0 A4 / A5 41 / F0 EB 等）"),
-        QString::fromUtf8("参考帧与实时帧同构解析后逐字段对比，误差 ±tolerance 判定"),
-        QString::fromUtf8("Excel B 列支持直接填入 HEX 捕获帧，自动识别命令码无需手动配置"),
-        QString::fromUtf8("新增 An30FieldExtractor / An30Layout 公共解析库"),
-        QString::fromUtf8("RangeComparer 新增 compareHexFrame() 公共方法"),
-        QString::fromUtf8("HEX 区间判断与 HEX 发送勾选框三级联动（HEX→区间→偏差值）"),
-        QString::fromUtf8("修复 HEX 区间模式重复记录错误统计的 Bug"),
-        QString::fromUtf8("帮助文档新增「AN3.0 HEX 区间判断」专题章节"),
+        QString::fromUtf8("命令间隔调度重构：串口/网口/GPIB 按「预投递 + 绝对截止时刻」在 worker 线程精确写入"),
+        QString::fromUtf8("响应超时改为从实际写入时刻开始计时，延时大于超时的配置不再误判"),
+        QString::fromUtf8("GPIB 读取超时与 Excel 行级超时对齐，避免阻塞读取与界面状态错位"),
+        QString::fromUtf8("修复启动时 ElaLineEdit 主动显示导致的瞬时弹窗闪烁"),
+        QString::fromUtf8("新增发送时间戳日志 [TxTiming]，可量化期望/实际写入误差"),
+        QString::fromUtf8("错误统计页新增「导出数据到excel」按钮，一键导出独立 .xlsx"),
+        QString::fromUtf8("单条发送页新增日志暂停按钮与状态 LED，独立控制收发日志"),
     };
 
     for (const QString &log : changelog) {

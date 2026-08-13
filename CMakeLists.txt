@@ -85,6 +85,8 @@ add_executable(untitled WIN32
         development/Other_T/RangeComparer.h
         development/Other_T/StickySplitter.cpp
         development/Other_T/StickySplitter.h
+        development/Other_T/ErrorLogExporter.cpp
+        development/Other_T/ErrorLogExporter.h
         development/Network_T/NetworkPageUI.cpp
         development/Network_T/NetworkPageUI.h
         development/Network_T/NetworkPageSignals.cpp

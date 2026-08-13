@@ -116,6 +116,9 @@ private:
     QListWidget*   m_singleSendLog     = nullptr;
     QListWidget*   m_singleRecvLog     = nullptr;
     ElaPushButton* m_singleSendClearBtn = nullptr;
+    ElaPushButton* m_singleLogPauseBtn  = nullptr;   // ★ 单条发送日志暂停按钮
+    QLabel*        m_singleLogLED       = nullptr;   // ★ 单条发送日志状态 LED
+    bool           m_singleLogPaused    = false;
 
     // ═════════════ Excel 表格发送控件 ═════════
     ElaPushButton* m_excelOpenBtn        = nullptr;
@@ -149,6 +152,7 @@ private:
     StatCard*        m_errorContentCard = nullptr;
     QTableWidget*    m_errorTable       = nullptr;
     ElaPushButton*   m_errorClearBtn    = nullptr;
+    ElaPushButton*   m_errorExportBtn   = nullptr;   // ★ 导出错误统计到 Excel
     ElaToggleSwitch* m_errorAutoScroll  = nullptr;
 
     // ═════════════ 初始化方法 ═════════
@@ -159,6 +163,7 @@ private:
     void addTimeoutError(const QString &command, const QByteArray &expected);
     void addContentError(const QString &command, const QByteArray &expected, const QByteArray &actual);
     void clearErrors();
+    void exportErrorsToExcel();   // ★ 导出错误统计
     void clearSingleSendLog();
     void clearExcelSendLog();
 };

@@ -221,8 +221,17 @@ void GPIBPageUI::createSendPage() {
     m_page->m_singleSendClearBtn = new ElaPushButton("清空发送日志");
     m_page->m_singleSendClearBtn->setFixedSize(120, 38);
 
+    m_page->m_singleLogPauseBtn = new ElaPushButton("暂停日志");
+    m_page->m_singleLogPauseBtn->setFixedSize(120, 38);
+
+    m_page->m_singleLogLED = new QLabel();
+    m_page->m_singleLogLED->setFixedSize(14, 14);
+    LED::setLED(m_page->m_singleLogLED, 2, 14);
+
     btnRow->addWidget(m_page->m_singleSendBtn);
     btnRow->addWidget(m_page->m_singleSendClearBtn);
+    btnRow->addWidget(m_page->m_singleLogPauseBtn);
+    btnRow->addWidget(m_page->m_singleLogLED);
     btnRow->addStretch();
 
     inputLayout->addWidget(m_page->m_singleSendInput);
@@ -501,10 +510,23 @@ void GPIBPageUI::createErrorLogPage() {
     statsLayout->addWidget(m_page->m_errorTimeoutCard);
     statsLayout->addWidget(m_page->m_errorContentCard);
     statsLayout->addStretch();
+
+    QWidget* buttonColumn = new QWidget(statsCard);
+    QVBoxLayout* buttonColumnLayout = new QVBoxLayout(buttonColumn);
+    buttonColumnLayout->setContentsMargins(0, 0, 0, 0);
+    buttonColumnLayout->setSpacing(8);
+
     m_page->m_errorClearBtn = new ElaPushButton("清空记录");
-    m_page->m_errorClearBtn->setFixedWidth(120);
+    m_page->m_errorClearBtn->setFixedWidth(150);
     m_page->m_errorClearBtn->setMinimumHeight(36);
-    statsLayout->addWidget(m_page->m_errorClearBtn);
+    buttonColumnLayout->addWidget(m_page->m_errorClearBtn);
+
+    m_page->m_errorExportBtn = new ElaPushButton("导出数据到excel");
+    m_page->m_errorExportBtn->setFixedWidth(150);
+    m_page->m_errorExportBtn->setMinimumHeight(36);
+    buttonColumnLayout->addWidget(m_page->m_errorExportBtn);
+
+    statsLayout->addWidget(buttonColumn, 0, Qt::AlignVCenter);
     root->addWidget(statsCard);
 
     QWidget* tableCard = createCard(m_page->_GpibErrorLogPage);
@@ -549,4 +571,6 @@ void GPIBPageUI::createErrorLogPage() {
 
     connect(m_page->m_errorClearBtn, &ElaPushButton::clicked,
             m_page, &GPIBPage::clearErrors);
+    connect(m_page->m_errorExportBtn, &ElaPushButton::clicked,
+            m_page, &GPIBPage::exportErrorsToExcel);
 }

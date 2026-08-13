@@ -35,6 +35,7 @@ GPIBExcel::GPIBExcel(GPIBPage* page, QObject *parent)
 
     connect(m_work, &GPIBWork::responseReceived, this, &GPIBExcel::onResponseReceived);
     connect(m_work, &GPIBWork::interCmdDelayFinished, this, &GPIBExcel::onInterCmdDelayFinished);
+    connect(m_work, &GPIBWork::commandWritten, this, &GPIBExcel::onCommandWritten);
 }
 
 GPIBExcel::~GPIBExcel()
@@ -167,6 +168,9 @@ void GPIBExcel::onStopSend()
     m_waiting = false;
     m_isCaptureMode = false;
 
+    // ★ 阶段二：丢弃 worker 中尚未写入的预投递命令
+    QMetaObject::invokeMethod(m_work, "cancelPendingCommands",
+                              Qt::QueuedConnection);
     QMetaObject::invokeMethod(m_work, "setExpectedResponse",
                               Qt::QueuedConnection,
                               Q_ARG(QByteArray, QByteArray()));
@@ -249,15 +253,15 @@ void GPIBExcel::onTrySendNext()
                               Q_ARG(QByteArray, m_expectData),
                               Q_ARG(int, delayMs),
                               Q_ARG(bool, m_isCaptureMode),
+                              Q_ARG(int, globalTimeout),
                               Q_ARG(int, myGen));                // ★ 新增
 
     m_totalSent++;
     m_page->m_logSentCountCard->setValue(QString::number(m_totalSent));
 
+    m_currentTimeoutMs = globalTimeout;
     m_waiting    = true;
     m_gotReply   = false;
-    m_minDelayOk = false;
-    m_timeoutTimer->start(globalTimeout);
 }
 
 // ═══════════════════════════════════════════════ 收到回复 ═══
@@ -283,7 +287,8 @@ void GPIBExcel::onResponseReceived(QByteArray data)
     if (!tryRangeCompare(cmpData, m_expectData, hexMode))
         m_page->addContentError(m_lastCmd, m_expectData, cmpData);
 
-    if (m_minDelayOk) finalizeAndNext();
+    // ★ 阶段二：回复到达即可预投递下一条，worker 会按住到精确截止时刻
+    finalizeAndNext();
 }
 
 // ═══════════════════════════════════════════════ 延时到期 ═══
@@ -299,8 +304,21 @@ void GPIBExcel::onInterCmdDelayFinished(int generation)
         return;
     }
 
-    m_minDelayOk = true;
     if (m_gotReply) finalizeAndNext();
+}
+
+// ═══════════════════════════════════════════════ 实际写入 ═══
+void GPIBExcel::onCommandWritten(int generation)
+{
+    if (!m_waiting) return;
+
+    if (generation != m_cmdGeneration) {
+        qDebug() << "GPIBExcel: [忽略过期写入信号] gen=" << generation
+                 << "当前gen=" << m_cmdGeneration;
+        return;
+    }
+
+    m_timeoutTimer->start(m_currentTimeoutMs);
 }
 
 // ═══════════════════════════════════════════════ 全局超时 ═══

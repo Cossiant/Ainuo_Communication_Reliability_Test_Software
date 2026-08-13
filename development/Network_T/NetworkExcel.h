@@ -27,6 +27,7 @@ private slots:
     void onTrySendNext();
     void onResponseReceived(QByteArray data);
     void onInterCmdDelayFinished(int generation);       // ★ 修改：接收代际
+    void onCommandWritten(int generation);              // ★ 阶段二：实际 write 后启动响应超时
     void onGlobalTimeout();
 
 private:
@@ -58,7 +59,7 @@ private:
     QByteArray m_lastRecvData;
     QString    m_lastCmd;
     QByteArray m_expectData;
-    bool      m_minDelayOk  = false;
+    int       m_currentTimeoutMs = 500;   // ★ 阶段二：本条命令的全局响应超时
 
     QQueue<QByteArray> m_stickyQueue;
     QByteArray stickyDelimiter() const;

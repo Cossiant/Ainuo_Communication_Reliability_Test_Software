@@ -10,6 +10,7 @@
 #include "GPIBExcel.h"
 #include "ElaWindow.h"
 #include "ElaIcon.h"
+#include "../Other_T/ErrorLogExporter.h"
 
 GPIBPage::GPIBPage(ElaWindow *mainWindow, QObject *parent)
     : QObject(parent), m_mainWindow(mainWindow)
@@ -98,6 +99,17 @@ void GPIBPage::addContentError(const QString &command,
 
 void GPIBPage::clearErrors()
     { m_errors->clearErrors(); }
+
+// ★ 导出错误统计到独立 Excel 文件
+void GPIBPage::exportErrorsToExcel()
+{
+    const QString defaultFileName = QStringLiteral("GPIB错误统计_%1.xlsx")
+            .arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_HHmmss")));
+    ErrorLogExporter::exportToExcel(m_mainWindow,
+                                    QStringLiteral("导出GPIB错误统计"),
+                                    defaultFileName,
+                                    m_errorTable);
+}
 
 void GPIBPage::clearSingleSendLog()
 {
