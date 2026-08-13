@@ -4,9 +4,99 @@
 #include <cmath>
 #include <QStringList>
 
+namespace {
+
+// 解析 [±]mantissa[.fraction][E[±]exponent]，支持 +1.000000E+00、3.0E+01 等格式。
+// 成功返回 true，并通过 value 输出数值；尾随非法字符则解析失败。
+bool parseNumericText(const QByteArray &raw, double &value)
+{
+    QByteArray s = raw.trimmed();
+    s.replace('\r', "").replace('\n', "").replace(' ', "");
+    if (s.isEmpty()) {
+        return false;
+    }
+
+    int i = 0;
+    bool negative = false;
+    if (s.at(0) == '+' || s.at(0) == '-') {
+        negative = (s.at(0) == '-');
+        i = 1;
+    }
+
+    bool sawDot = false;
+    bool anyDigit = false;
+    double mantissa = 0.0;
+    double fracScale = 0.1;
+
+    while (i < s.size()) {
+        const char c = s.at(i);
+        if (c >= '0' && c <= '9') {
+            anyDigit = true;
+            if (!sawDot) {
+                mantissa = mantissa * 10.0 + (c - '0');
+            } else {
+                mantissa += (c - '0') * fracScale;
+                fracScale *= 0.1;
+            }
+            ++i;
+        } else if (c == '.' && !sawDot) {
+            sawDot = true;
+            ++i;
+        } else {
+            break;
+        }
+    }
+
+    if (!anyDigit) {
+        return false;
+    }
+
+    long long exponent = 0;
+    if (i < s.size() && (s.at(i) == 'e' || s.at(i) == 'E')) {
+        ++i;
+        bool expNegative = false;
+        if (i < s.size() && (s.at(i) == '+' || s.at(i) == '-')) {
+            expNegative = (s.at(i) == '-');
+            ++i;
+        }
+
+        const int expStart = i;
+        while (i < s.size() && s.at(i) >= '0' && s.at(i) <= '9') {
+            exponent = exponent * 10 + (s.at(i) - '0');
+            if (exponent > 308) {
+                return false;   // 超出 double 可表示范围
+            }
+            ++i;
+        }
+        if (i == expStart) {
+            return false;       // E 后没有指数数字
+        }
+        if (expNegative) {
+            exponent = -exponent;
+        }
+    }
+
+    if (i != s.size()) {
+        return false;           // 存在无法识别的尾随字符
+    }
+
+    if (negative) {
+        mantissa = -mantissa;
+    }
+    if (exponent != 0) {
+        mantissa *= std::pow(10.0, static_cast<double>(exponent));
+    }
+
+    value = mantissa;
+    return true;
+}
+
+} // namespace
+
 bool RangeComparer::compareAscii(const QByteArray &received,
                                   const QByteArray &expected,
-                                  double tolerance)
+                                  double tolerance,
+                                  bool parseScientific)
 {
     QByteArray recvClean = received;
     QByteArray expectClean = expected;
@@ -16,11 +106,37 @@ bool RangeComparer::compareAscii(const QByteArray &received,
     if (recvClean.isEmpty() || expectClean.isEmpty()) return false;
 
     bool ok1 = false, ok2 = false;
-    double recvVal   = recvClean.toDouble(&ok1);
-    double expectVal = expectClean.toDouble(&ok2);
+    double recvVal   = 0.0;
+    double expectVal = 0.0;
+
+    if (parseScientific) {
+        ok1 = parseNumericText(recvClean, recvVal);
+        ok2 = parseNumericText(expectClean, expectVal);
+    } else {
+        recvVal   = recvClean.toDouble(&ok1);
+        expectVal = expectClean.toDouble(&ok2);
+    }
 
     if (!ok1 || !ok2) return false;
     return qAbs(recvVal - expectVal) <= tolerance;
+}
+
+bool RangeComparer::isNumericText(const QByteArray &text, bool allowScientific)
+{
+    QByteArray clean = text;
+    clean.replace("\r", "").replace("\n", "").replace(" ", "");
+    if (clean.isEmpty()) {
+        return false;
+    }
+
+    if (allowScientific) {
+        double value = 0.0;
+        return parseNumericText(clean, value);
+    }
+
+    bool ok = false;
+    clean.toDouble(&ok);
+    return ok;
 }
 
 

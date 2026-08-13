@@ -117,12 +117,17 @@ void NetworkPageUI::createSettingsPage() {
     grid->addWidget(asciiRangeLabel,           6, 2);
     grid->addWidget(m_page->m_networkAsciiRangeEdit,    6, 3);
 
-    // ★ 第 7 行：HEX 区间判断（AN3.0 自动解析命令码）
+    // ★ 第 7 行：科学计数法解析
+    m_page->m_networkSciNotationCheckBox = new ElaCheckBox("解析科学计数法（如 +1.000000E+00 → 1.0）");
+    m_page->m_networkSciNotationCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
+    grid->addWidget(m_page->m_networkSciNotationCheckBox, 7, 0, 1, 4);
+
+    // ★ 第 8 行：HEX 区间判断（AN3.0 自动解析命令码）
     m_page->m_networkHexRangeCheckBox = new ElaCheckBox("启用HEX区间判断（AN3.0自动解析）");
     m_page->m_networkHexRangeCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
     // ★ 不在此处禁用，由 HEX 发送勾选框联动控制
     m_page->m_networkHexRangeCheckBox->setEnabled(false);   // 初始禁用，等勾选HEX发送后启用
-    grid->addWidget(m_page->m_networkHexRangeCheckBox, 7, 0, 1, 2);
+    grid->addWidget(m_page->m_networkHexRangeCheckBox, 8, 0, 1, 2);
 
     ElaText* hexRangeLabel = new ElaText("HEX区间值:");
     hexRangeLabel->setTextPixelSize(15);
@@ -130,18 +135,18 @@ void NetworkPageUI::createSettingsPage() {
     m_page->m_networkHexRangeEdit->setText("0.5");
     m_page->m_networkHexRangeEdit->setPlaceholderText("如 0.5 表示 ±0.5");
     m_page->m_networkHexRangeEdit->setEnabled(false);       // 初始禁用，勾选区间判断后启用
-    grid->addWidget(hexRangeLabel,             7, 2);
-    grid->addWidget(m_page->m_networkHexRangeEdit,      7, 3);
+    grid->addWidget(hexRangeLabel,             8, 2);
+    grid->addWidget(m_page->m_networkHexRangeEdit,      8, 3);
 
-    // ★ 第 8行：AN3.0 产品系列选择
+    // ★ 第 9 行：AN3.0 产品系列选择
     ElaText* productLabel = new ElaText("产品系列:");
     productLabel->setTextPixelSize(15);
     m_page->m_networkProductComboBox = new ElaComboBox();
     m_page->m_networkProductComboBox->addItems({"RGL系列 (交流源载)", "EVT系列 (直流电源)", "EVH系列 (双向直流电源 v1.5)"});
     m_page->m_networkProductComboBox->setCurrentIndex(0);
     m_page->m_networkProductComboBox->setStyleSheet("ElaComboBox { font-size: 14px; }");
-    grid->addWidget(productLabel,                    8, 0);
-    grid->addWidget(m_page->m_networkProductComboBox, 8, 2, 1, 2);
+    grid->addWidget(productLabel,                    9, 0);
+    grid->addWidget(m_page->m_networkProductComboBox, 9, 2, 1, 2);
 
     // 连接按钮
     m_page->m_openNetworkButton = new ElaPushButton("连接网络");
@@ -149,8 +154,8 @@ void NetworkPageUI::createSettingsPage() {
     m_page->m_closeNetworkButton = new ElaPushButton("断开网络");
     m_page->m_closeNetworkButton->setFixedHeight(35);
     m_page->m_closeNetworkButton->setEnabled(false);
-    grid->addWidget(m_page->m_openNetworkButton,       9, 1);
-    grid->addWidget(m_page->m_closeNetworkButton,      9, 3);
+    grid->addWidget(m_page->m_openNetworkButton,       10, 1);
+    grid->addWidget(m_page->m_closeNetworkButton,      10, 3);
 
     _NetworkSettingLayout1->addWidget(_NetworkSettingGroup);
     _NetworkSettingLayout1->addStretch();

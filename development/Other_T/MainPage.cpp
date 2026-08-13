@@ -57,7 +57,7 @@ void MainPage::initNavigation() {
 // ═══════════════════════════════════════════════════════════════
 void MainPage::initWindowConfig() {
     m_mainWindow->resize(1200, 750);
-    m_mainWindow->setWindowTitle("Ainuo 通用通讯可靠性测试软件V3.4.15");
+    m_mainWindow->setWindowTitle("Ainuo 通用通讯可靠性测试软件V3.4.16");
 
     // 用户信息卡片
     m_mainWindow->setUserInfoCardTitle("Ainuo 通讯可靠性");
@@ -915,7 +915,7 @@ void MainPage::createAboutPage() {
     lay->addWidget(title);
 
     // ──── 版本 ────
-    ElaText *version = new ElaText(QString::fromUtf8("版本: v3.4.15"));
+    ElaText *version = new ElaText(QString::fromUtf8("版本: v3.4.16"));
     version->setTextPixelSize(18);
     version->setTextStyle(ElaTextType::Subtitle);
     lay->addWidget(version);
@@ -952,7 +952,7 @@ void MainPage::createAboutPage() {
         infoLayout->addLayout(row);
     };
 
-    addInfo(QString::fromUtf8("软件版本："), "v3.4.15");
+    addInfo(QString::fromUtf8("软件版本："), "v3.4.16");
     addInfo(QString::fromUtf8("发布日期："), QString::fromUtf8("2026 年 8 月"));
     addInfo(QString::fromUtf8("开发者："),   "Cossiant");
     addInfo(QString::fromUtf8("开发环境："), "Qt 5.15 + MinGW");
@@ -998,20 +998,16 @@ void MainPage::createAboutPage() {
     lay->addWidget(featureGroup);
 
     // ──── 更新日志摘要 ────
-    QGroupBox *changelogGroup = new QGroupBox(QString::fromUtf8("V3.4.15 更新要点"));
+    QGroupBox *changelogGroup = new QGroupBox(QString::fromUtf8("V3.4.16 更新要点"));
     changelogGroup->setStyleSheet(infoGroup->styleSheet());
     QVBoxLayout *changelogLayout = new QVBoxLayout(changelogGroup);
     changelogLayout->setSpacing(4);
     changelogLayout->setContentsMargins(20, 20, 20, 20);
 
     QStringList changelog = {
-        QString::fromUtf8("命令间隔调度重构：串口/网口/GPIB 按「预投递 + 绝对截止时刻」在 worker 线程精确写入"),
-        QString::fromUtf8("响应超时改为从实际写入时刻开始计时，延时大于超时的配置不再误判"),
-        QString::fromUtf8("GPIB 读取超时与 Excel 行级超时对齐，避免阻塞读取与界面状态错位"),
-        QString::fromUtf8("修复启动时 ElaLineEdit 主动显示导致的瞬时弹窗闪烁"),
-        QString::fromUtf8("新增发送时间戳日志 [TxTiming]，可量化期望/实际写入误差"),
-        QString::fromUtf8("错误统计页新增「导出数据到excel」按钮，一键导出独立 .xlsx"),
-        QString::fromUtf8("单条发送页新增日志暂停按钮与状态 LED，独立控制收发日志"),
+        QString::fromUtf8("ASCII 区间判断新增科学计数法解析，支持 +1.000000E+00、+3.000000E+01 等格式"),
+        QString::fromUtf8("数值/字符串自动分流：期望值为纯数值才走区间判断，字符串返回自动精确比对"),
+        QString::fromUtf8("科学计数法解析在串口/网口/GPIB 设置页通过勾选框启用"),
     };
 
     for (const QString &log : changelog) {
