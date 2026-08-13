@@ -143,11 +143,16 @@ void GPIBPageUI::createSettingsPage() {
     grid->addWidget(asciiRangeLabel,      6, 2);
     grid->addWidget(m_page->m_gpibAsciiRangeEdit,  6, 3);
 
-    // ★ 第 7 行：HEX 区间判断（AN3.0 自动解析命令码）
+    // ★ 第 7 行：科学计数法解析
+    m_page->m_gpibSciNotationCheckBox = new ElaCheckBox("解析科学计数法（如 +1.000000E+00 → 1.0）");
+    m_page->m_gpibSciNotationCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
+    grid->addWidget(m_page->m_gpibSciNotationCheckBox, 7, 0, 1, 4);
+
+    // ★ 第 8 行：HEX 区间判断（AN3.0 自动解析命令码）
     m_page->m_gpibHexRangeCheckBox = new ElaCheckBox("启用HEX区间判断（AN3.0自动解析）");
     m_page->m_gpibHexRangeCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
     m_page->m_gpibHexRangeCheckBox->setEnabled(false);   // 初始禁用，等勾选HEX发送后启用
-    grid->addWidget(m_page->m_gpibHexRangeCheckBox, 7, 0, 1, 2);
+    grid->addWidget(m_page->m_gpibHexRangeCheckBox, 8, 0, 1, 2);
 
     ElaText* hexRangeLabel = new ElaText("HEX区间值:");
     hexRangeLabel->setTextPixelSize(15);
@@ -155,27 +160,27 @@ void GPIBPageUI::createSettingsPage() {
     m_page->m_gpibHexRangeEdit->setText("0.5");
     m_page->m_gpibHexRangeEdit->setPlaceholderText("如 0.5 表示 ±0.5");
     m_page->m_gpibHexRangeEdit->setEnabled(false);       // 初始禁用，勾选区间判断后启用
-    grid->addWidget(hexRangeLabel,        7, 2);
-    grid->addWidget(m_page->m_gpibHexRangeEdit,   7, 3);
+    grid->addWidget(hexRangeLabel,        8, 2);
+    grid->addWidget(m_page->m_gpibHexRangeEdit,   8, 3);
 
-    // ★ 第 8行：AN3.0 产品系列选择
+    // ★ 第 9 行：AN3.0 产品系列选择
     ElaText* productLabel = new ElaText("产品系列:");
     productLabel->setTextPixelSize(15);
     m_page->m_gpibProductComboBox = new ElaComboBox();
     m_page->m_gpibProductComboBox->addItems({"RGL系列 (交流源载)", "EVT系列 (直流电源)", "EVH系列 (双向直流电源 v1.5)"});
     m_page->m_gpibProductComboBox->setCurrentIndex(0);
     m_page->m_gpibProductComboBox->setStyleSheet("ElaComboBox { font-size: 14px; }");
-    grid->addWidget(productLabel,                    8, 0);
-    grid->addWidget(m_page->m_gpibProductComboBox, 8, 2, 1, 2);
+    grid->addWidget(productLabel,                    9, 0);
+    grid->addWidget(m_page->m_gpibProductComboBox, 9, 2, 1, 2);
 
-    // ──── 第 8 行：打开/关闭按钮 ────
+    // ──── 第 10 行：打开/关闭按钮 ────
     m_page->m_openGpibButton = new ElaPushButton("打开 GPIB");
     m_page->m_openGpibButton->setFixedHeight(35);
     m_page->m_closeGpibButton = new ElaPushButton("关闭 GPIB");
     m_page->m_closeGpibButton->setFixedHeight(35);
     m_page->m_closeGpibButton->setEnabled(false);
-    grid->addWidget(m_page->m_openGpibButton,   9, 1);
-    grid->addWidget(m_page->m_closeGpibButton,  9, 3);
+    grid->addWidget(m_page->m_openGpibButton,   10, 1);
+    grid->addWidget(m_page->m_closeGpibButton,  10, 3);
 
     _GpibSettingLayout->addWidget(group);
     _GpibSettingLayout->addStretch();

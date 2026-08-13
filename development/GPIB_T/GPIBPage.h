@@ -98,6 +98,7 @@ private:
 
     // 区间判断控件
     ElaCheckBox*   m_gpibAsciiRangeCheckBox = nullptr;
+    ElaCheckBox*   m_gpibSciNotationCheckBox = nullptr;   // ★ 解析科学计数法
     ElaCheckBox*   m_gpibHexRangeCheckBox   = nullptr;
     ElaLineEdit*   m_gpibAsciiRangeEdit     = nullptr;
     ElaLineEdit*   m_gpibHexRangeEdit       = nullptr;

@@ -98,6 +98,7 @@ private:
 
     // 区间判断控件
     ElaCheckBox*   m_networkAsciiRangeCheckBox = nullptr;
+    ElaCheckBox*   m_networkSciNotationCheckBox = nullptr;   // ★ 解析科学计数法
     ElaCheckBox*   m_networkHexRangeCheckBox   = nullptr;
     ElaLineEdit*   m_networkAsciiRangeEdit     = nullptr;
     ElaLineEdit*   m_networkHexRangeEdit       = nullptr;

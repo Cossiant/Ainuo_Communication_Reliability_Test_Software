@@ -103,6 +103,7 @@ private:
 
     // 区间判断控件
     ElaCheckBox*  m_serialAsciiRangeCheckBox = nullptr;
+    ElaCheckBox*  m_serialSciNotationCheckBox = nullptr;   // ★ 解析科学计数法
     ElaCheckBox*  m_serialHexRangeCheckBox   = nullptr;
     ElaLineEdit*  m_serialAsciiRangeEdit     = nullptr;
     ElaLineEdit*  m_serialHexRangeEdit       = nullptr;

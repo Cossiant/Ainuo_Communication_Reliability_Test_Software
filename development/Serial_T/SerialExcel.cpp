@@ -67,7 +67,14 @@ bool SerialExcel::tryRangeCompare(const QByteArray &received,
         double tolerance = m_page->m_serialAsciiRangeEdit
                            ? m_page->m_serialAsciiRangeEdit->text().toDouble()
                            : 0.5;
-        return RangeComparer::compareAscii(received, expected, tolerance);
+        bool parseScientific = m_page->m_serialSciNotationCheckBox
+                               && m_page->m_serialSciNotationCheckBox->isChecked();
+
+        // ★ 仅当期望值是纯数值时才启用区间判断；字符串期望值回退到精确比对
+        if (RangeComparer::isNumericText(expected, parseScientific)) {
+            return RangeComparer::compareAscii(received, expected, tolerance, parseScientific);
+        }
+        return (received == expected);
     }
 
     // ── AN3.0 HEX 区间模式（自动识别命令码，两侧同构解析后逐字段对比）──
