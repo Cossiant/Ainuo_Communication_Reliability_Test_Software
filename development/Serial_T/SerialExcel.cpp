@@ -1,5 +1,6 @@
 // SerialExcel.cpp
 // ★ 重构：使用公共 RangeComparer / StickySplitter
+// ★ 新增：代际标记防止信号串扰
 
 #include "SerialExcel.h"
 #include "SerialPage.h"
@@ -33,6 +34,7 @@ SerialExcel::SerialExcel(SerialPage *page, QObject *parent)
 
     connect(m_work, &SerialWork::responseReceived, this, &SerialExcel::onResponseReceived);
     connect(m_work, &SerialWork::interCmdDelayFinished, this, &SerialExcel::onInterCmdDelayFinished);
+    connect(m_work, &SerialWork::commandWritten, this, &SerialExcel::onCommandWritten);
 }
 
 SerialExcel::~SerialExcel() {
@@ -112,8 +114,15 @@ void SerialExcel::onCapture() {
     m_totalSent = 0;
     m_pendingStop = false;
 
+    // ★ 重置代际计数器
+    m_cmdGeneration = 0;
+
     m_page->clearExcelSendLog();
     m_page->m_logStartTimeCard->setValue(QDateTime::currentDateTime().toString("HH:mm:ss"));
+
+    // ★ 重置工作线程的误差补偿
+    QMetaObject::invokeMethod(m_work, "resetTimingCompensation",
+                              Qt::QueuedConnection);
 
     onTrySendNext();
 }
@@ -134,8 +143,15 @@ void SerialExcel::onStartSend() {
     m_totalSent = 0;
     m_pendingStop = false;
 
+    // ★ 重置代际计数器
+    m_cmdGeneration = 0;
+
     m_page->clearExcelSendLog();
     m_page->m_logStartTimeCard->setValue(QDateTime::currentDateTime().toString("HH:mm:ss"));
+
+    // ★ 重置工作线程的误差补偿
+    QMetaObject::invokeMethod(m_work, "resetTimingCompensation",
+                              Qt::QueuedConnection);
 
     onTrySendNext();
 }
@@ -147,6 +163,9 @@ void SerialExcel::onStopSend() {
     m_isCaptureMode = false;
     m_stickyQueue.clear();
 
+    // ★ 阶段二：丢弃 worker 中尚未写入的预投递命令
+    QMetaObject::invokeMethod(m_work, "cancelPendingCommands",
+                              Qt::QueuedConnection);
     QMetaObject::invokeMethod(m_work, "setExpectedResponse",
                               Qt::QueuedConnection,
                               Q_ARG(QByteArray, QByteArray()));
@@ -199,6 +218,9 @@ void SerialExcel::onTrySendNext() {
 
     if (cmdText.isEmpty()) { onTrySendNext(); return; }
 
+    // ★ 递增代际标记（在每次实际发送前）
+    int myGen = ++m_cmdGeneration;
+
     // ★ 粘包队列消费（使用公共工具）
     if (m_page->m_serialSplitStickyCheckBox
         && m_page->m_serialSplitStickyCheckBox->isChecked()
@@ -209,9 +231,7 @@ void SerialExcel::onTrySendNext() {
 
         m_waiting = true;
         m_gotReply = true;
-        m_minDelayOk = false;
         m_lastRecvData = queuedData;
-        m_timeoutTimer->start(globalTimeout);
 
         if (m_isCaptureMode) fillCaptureResult(queuedData);
 
@@ -225,14 +245,12 @@ void SerialExcel::onTrySendNext() {
         if (!tryRangeCompare(cmpData, m_expectData, hexMode))
             m_page->addContentError(m_lastCmd, m_expectData, cmpData);
 
-        if (delayMs > 0) {
-            QTimer::singleShot(delayMs, this, [this]() {
-                if (m_waiting) { m_minDelayOk = true; finalizeAndNext(); }
-            });
-        } else {
-            m_minDelayOk = true;
-            finalizeAndNext();
-        }
+        // ★ 粘包分支统一走 worker 的精确延时入口：即使 delayMs == 0，
+        //    worker 也会更新发送锚点，保证下一条真实命令的间隔计算正确。
+        QMetaObject::invokeMethod(m_work, "startDelayOnly",
+                                  Qt::QueuedConnection,
+                                  Q_ARG(int, delayMs),
+                                  Q_ARG(int, myGen));
         return;
     }
 
@@ -254,21 +272,22 @@ void SerialExcel::onTrySendNext() {
         m_expectData.replace("\n", "");
     }
 
+    // ★ 传入代际标记 myGen
     QMetaObject::invokeMethod(m_work, "sendStringWithDelay",
                               Qt::QueuedConnection,
                               Q_ARG(QString, cmdText),
                               Q_ARG(bool, hexMode),
                               Q_ARG(QByteArray, m_expectData),
                               Q_ARG(int, delayMs),
-                              Q_ARG(bool, m_isCaptureMode));
+                              Q_ARG(bool, m_isCaptureMode),
+                              Q_ARG(int, myGen));                // ★ 新增
 
     m_totalSent++;
     m_page->m_logSentCountCard->setValue(QString::number(m_totalSent));
 
+    m_currentTimeoutMs = globalTimeout;
     m_waiting = true;
     m_gotReply = false;
-    m_minDelayOk = false;
-    m_timeoutTimer->start(globalTimeout);
 }
 
 // ═══════════════════════════════════════════════ 收到回复 ═══
@@ -304,14 +323,37 @@ void SerialExcel::onResponseReceived(QByteArray data) {
     if (!tryRangeCompare(cmpData, m_expectData, hexMode))
         m_page->addContentError(m_lastCmd, m_expectData, cmpData);
 
-    if (m_minDelayOk) finalizeAndNext();
+    // ★ 阶段二：回复到达即可预投递下一条，worker 会按住到精确截止时刻
+    finalizeAndNext();
 }
 
 // ═══════════════════════════════════════════════ 延时到期 ═══
-void SerialExcel::onInterCmdDelayFinished() {
+// ★ 修改：校验代际标记，拒绝旧命令的残留信号
+void SerialExcel::onInterCmdDelayFinished(int generation) {
     if (!m_waiting) return;
-    m_minDelayOk = true;
+
+    // ★★★ 核心校验：代际不匹配说明这是上一条命令的残留信号，直接丢弃 ★★★
+    if (generation != m_cmdGeneration) {
+        qDebug() << "SerialExcel: [丢弃过期延迟信号] gen=" << generation
+                 << "当前gen=" << m_cmdGeneration;
+        return;
+    }
+
     if (m_gotReply) finalizeAndNext();
+}
+
+// ═══════════════════════════════════════════════ 实际写入 ═══
+// ★ 阶段二：worker 在截止时刻真正写串口后，才启动本条命令的全局响应超时
+void SerialExcel::onCommandWritten(int generation) {
+    if (!m_waiting) return;
+
+    if (generation != m_cmdGeneration) {
+        qDebug() << "SerialExcel: [忽略过期写入信号] gen=" << generation
+                 << "当前gen=" << m_cmdGeneration;
+        return;
+    }
+
+    m_timeoutTimer->start(m_currentTimeoutMs);
 }
 
 // ═══════════════════════════════════════════════ 全局超时 ═══

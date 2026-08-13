@@ -2,6 +2,7 @@
 // 精确延时：1ms QTimer轮询 + QElapsedTimer + 微秒忙等 + EMA补偿
 // ★ 对齐 GPIBWork：计时起点移到 write 之前 + forceRead 判断
 // ★ 新增：发送后缀功能
+// ★ 新增：代际标记防止信号串扰
 
 #include "NetworkWork.h"
 #include <QDebug>
@@ -28,6 +29,18 @@ NetworkWork::NetworkWork(QObject *parent)
     connect(m_interCmdTimer, &QTimer::timeout,
             this, &NetworkWork::onInterCmdDelay);
 
+    // ★ 阶段二：预投递命令的截止等待定时器
+    m_holdTimer = new QTimer(this);
+    m_holdTimer->setTimerType(Qt::PreciseTimer);
+    m_holdTimer->setInterval(1);
+    m_holdTimer->setSingleShot(false);
+    connect(m_holdTimer, &QTimer::timeout,
+            this, &NetworkWork::onHoldTick);
+
+    // ★ 发送时间戳时间轴（阶段一：误差测量日志）
+    m_txClock.start();
+    m_txClockWallAnchorMs = QDateTime::currentMSecsSinceEpoch();
+
     qDebug() << "NetworkWork: 初始化完成"
              << "(线程:" << QThread::currentThreadId() << ")"
              << "| 精确延时: 1ms轮询+忙等自旋+EMA补偿";
@@ -36,6 +49,7 @@ NetworkWork::NetworkWork(QObject *parent)
 NetworkWork::~NetworkWork()
 {
     m_interCmdTimer->stop();
+    m_holdTimer->stop();
     disconnectFromHost();
     qDebug() << "NetworkWork: 已销毁";
 }
@@ -80,6 +94,14 @@ void NetworkWork::setSuffixMode(int mode)
     m_suffixMode = mode;
     qDebug() << "NetworkWork: 后缀模式 =" << mode
              << (mode == 0 ? "None" : mode == 1 ? "CR" : mode == 2 ? "LF" : "CRLF");
+}
+
+// ★ 新增：重置误差补偿（每次批量发送开始时调用）
+void NetworkWork::resetTimingCompensation()
+{
+    m_timingCompensationMs = 0;
+    m_prevTxAnchorElapsedMs = -1;   // ★ 新批次重新锚定第一条命令的发送时刻
+    qDebug() << "NetworkWork: 误差补偿已重置";
 }
 
 // ★ 新增：统一构建发送数据（对齐 GPIBWork::buildSendData）
@@ -161,6 +183,8 @@ void NetworkWork::connectToHost(const QString &ipAddress,
 void NetworkWork::onConnected()
 {
     m_opened.storeRelaxed(1);
+    m_lastWriteElapsedMs = -1;   // 新会话重新锚定“两次 write 间隔”日志
+    m_prevTxAnchorElapsedMs = -1;   // 新会话重置绝对发送锚点
     emit networkConnected();
 
     qDebug() << "NetworkWork: TCP 已连接"
@@ -177,7 +201,7 @@ void NetworkWork::disconnectFromHost()
         return;
     }
 
-    m_interCmdTimer->stop();
+    cancelPendingCommands();   // ★ 停止间隔/截止定时器并丢弃预投递命令
 
     if (m_tcpSocket) {
         QTcpSocket* sock = m_tcpSocket;
@@ -212,7 +236,7 @@ void NetworkWork::onDisconnected()
     if (m_disconnecting.loadRelaxed() != 0)
         return;
 
-    m_interCmdTimer->stop();
+    cancelPendingCommands();
     m_opened.storeRelaxed(0);
     emit networkDisconnected();
 
@@ -258,51 +282,79 @@ void NetworkWork::sendString(const QString &text, bool hexMode)
 // ═══════════════════════════════════════════════════════════════
 //  ★★★ 核心：发送 + 1ms轮询精确延时 + 微秒忙等 + EMA补偿 ★★★
 //  ★ 对齐 GPIBWork：计时起点在 write 之前 + forceRead 控制读取
+//  ★ generation：代际标记，到期时原样传回供 NetworkExcel 校验
 // ═══════════════════════════════════════════════════════════════
 void NetworkWork::sendStringWithDelay(const QString &text, bool hexMode,
                                       const QByteArray &expectedResponse,
                                       int delayMs,
-                                      bool forceRead)
+                                      bool forceRead,
+                                      int generation)
 {
     if (!isOpen() || text.isEmpty() || !m_tcpSocket)
         return;
 
-    m_expectedResponse = expectedResponse;
+    // ★ 阶段二：预投递 + 按住到“上一条 write + 本条延时”的绝对截止时刻
+    m_pendingSend.text       = text;
+    m_pendingSend.hexMode    = hexMode;
+    m_pendingSend.expected   = expectedResponse;
+    m_pendingSend.delayMs    = delayMs;
+    m_pendingSend.forceRead  = forceRead;
+    m_pendingSend.generation = generation;
+    m_hasPendingSend = true;
 
-    // ── 构建数据（★ 使用统一构建方法）──
-    QByteArray data = buildSendData(text, hexMode);
+    qint64 arrivalElapsedMs = m_txClock.elapsed();
+    m_holdTargetMs = (m_prevTxAnchorElapsedMs >= 0)
+            ? m_prevTxAnchorElapsedMs + delayMs
+            : arrivalElapsedMs;
+    m_expectedWriteElapsedMs = m_holdTargetMs;
 
-    // ★ 对齐 GPIB：在 write 之前启动高精度计时
-    //    delayMs > 0 时才启动，delayMs == 0 时跳过整个延时逻辑
-    if (delayMs > 0) {
-        m_originalDelayMs = delayMs;
-        m_preciseDelayTimer.start();
+    if (m_holdTargetMs <= arrivalElapsedMs) {
+        writePendingAtDeadline();
+    } else {
+        m_holdTimer->start();
     }
+}
 
-    // ── 发送 ──
-    qint64 written = m_tcpSocket->write(data);
-    if (written == -1) {
-        emit errorOccurred(QString("发送失败: %1").arg(m_tcpSocket->errorString()));
-
-        // ★ 发送失败但照样启动延时（保持与 GPIB 行为一致）
-        if (delayMs > 0) {
-            int compensatedMs = delayMs + m_timingCompensationMs;
-            if (compensatedMs < 0) compensatedMs = 0;
-
-            const int MAX_COMPENSATION = 100;
-            m_timingCompensationMs = qBound(-MAX_COMPENSATION,
-                                             m_timingCompensationMs,
-                                             MAX_COMPENSATION);
-
-            m_targetDelayMs   = compensatedMs;
-            m_interCmdTimer->start();
-        } else {
-            emit interCmdDelayFinished();
-        }
+void NetworkWork::onHoldTick()
+{
+    if (!m_hasPendingSend) {
+        m_holdTimer->stop();
         return;
     }
 
-    // ★ 等待数据刷新到 TCP 栈，消除发送侧的随机延迟
+    qint64 elapsedMs = m_txClock.elapsed();
+    if (elapsedMs < m_holdTargetMs - 1)
+        return;
+
+    while (m_txClock.elapsed() < m_holdTargetMs) {
+        // 最后 1ms 忙等自旋，精准命中截止时刻
+    }
+
+    writePendingAtDeadline();
+}
+
+void NetworkWork::writePendingAtDeadline()
+{
+    if (!m_hasPendingSend || !isOpen() || !m_tcpSocket)
+        return;
+
+    PendingSend s = m_pendingSend;
+    m_hasPendingSend = false;
+    m_holdTimer->stop();
+
+    m_expectedResponse = s.expected;
+    m_currentGeneration = s.generation;
+
+    QByteArray data = buildSendData(s.text, s.hexMode);
+
+    qint64 written = m_tcpSocket->write(data);
+    qint64 actualWriteElapsedMs = m_txClock.elapsed();
+    if (written == -1) {
+        emit errorOccurred(QString("发送失败: %1").arg(m_tcpSocket->errorString()));
+        emit commandWritten(s.generation);
+        return;
+    }
+
     if (m_tcpSocket->state() == QAbstractSocket::ConnectedState) {
         m_tcpSocket->waitForBytesWritten(1);
     }
@@ -311,42 +363,71 @@ void NetworkWork::sendStringWithDelay(const QString &text, bool hexMode,
     QString display = formatByteArray(data);
     emit sendLogLine(QString("[%1] TX → %2").arg(timeStr, display));
 
-    // ★ 对齐 GPIB：forceRead 控制是否需要等待设备回复
-    bool shouldRead = forceRead || !m_expectedResponse.isEmpty();
+    qint64 intervalMs = (m_lastWriteElapsedMs >= 0)
+            ? actualWriteElapsedMs - m_lastWriteElapsedMs
+            : -1;
+    qint64 writeErrorMs = actualWriteElapsedMs - m_expectedWriteElapsedMs;
+    m_lastWriteElapsedMs = actualWriteElapsedMs;
+    m_prevTxAnchorElapsedMs = actualWriteElapsedMs;
 
+    qDebug() << "[TxTiming][Network]"
+             << "gen=" << s.generation
+             << "delay=" << s.delayMs << "ms"
+             << "expectedSend="
+             << QDateTime::fromMSecsSinceEpoch(m_txClockWallAnchorMs + m_expectedWriteElapsedMs)
+                    .toString("HH:mm:ss.zzz")
+             << "actualWrite="
+             << QDateTime::fromMSecsSinceEpoch(m_txClockWallAnchorMs + actualWriteElapsedMs)
+                    .toString("HH:mm:ss.zzz")
+             << "writeError=" << writeErrorMs << "ms"
+             << "interval=" << intervalMs << "ms";
+
+    emit commandWritten(s.generation);
+
+    bool shouldRead = s.forceRead || !m_expectedResponse.isEmpty();
     if (!shouldRead) {
         emit responseReceived(QByteArray());
     }
+}
 
-    // ═══════════════════════════════════════════════════════════
-    //  精确延时（对齐 GPIB：计时起点在 write 之前）
-    // ═══════════════════════════════════════════════════════════
-    if (delayMs > 0) {
-        qint64 alreadyElapsed = m_preciseDelayTimer.elapsed();
-
-        if (alreadyElapsed >= delayMs) {
-            emit interCmdDelayFinished();
-        } else {
-            int remainingMs = static_cast<int>(delayMs - alreadyElapsed);
-            int compensatedMs = remainingMs + m_timingCompensationMs;
-            if (compensatedMs < 0) compensatedMs = 0;
-
-            const int MAX_COMPENSATION = 100;
-            m_timingCompensationMs = qBound(-MAX_COMPENSATION,
-                                             m_timingCompensationMs,
-                                             MAX_COMPENSATION);
-
-            m_targetDelayMs = static_cast<int>(alreadyElapsed + compensatedMs);
-            m_interCmdTimer->start();
-        }
-    } else {
-        emit interCmdDelayFinished();
-    }
+void NetworkWork::cancelPendingCommands()
+{
+    m_hasPendingSend = false;
+    m_holdTimer->stop();
+    m_interCmdTimer->stop();
+    m_expectedResponse.clear();
 }
 
 // ═══════════════════════════════════════════════════════════════
 //  1ms 轮询回调：检测是否到期 → 微秒忙等 → 误差补偿 → 发射信号
 // ═══════════════════════════════════════════════════════════════
+void NetworkWork::startDelayOnly(int delayMs, int generation)
+{
+    // 粘包分包分支复用：仅执行精确延时，到期原样传回代际
+    m_currentGeneration = generation;
+
+    if (delayMs <= 0) {
+        // ★ 粘包伪 write：把当前时刻作为下一条命令的发送锚点
+        m_prevTxAnchorElapsedMs = m_txClock.elapsed();
+        emit interCmdDelayFinished(m_currentGeneration);
+        return;
+    }
+
+    m_originalDelayMs = delayMs;
+    m_preciseDelayTimer.start();
+
+    int compensatedMs = delayMs + m_timingCompensationMs;
+    if (compensatedMs < 0) compensatedMs = 0;
+
+    const int MAX_COMPENSATION = 100;
+    m_timingCompensationMs = qBound(-MAX_COMPENSATION,
+                                     m_timingCompensationMs,
+                                     MAX_COMPENSATION);
+
+    m_targetDelayMs = compensatedMs;
+    m_interCmdTimer->start();
+}
+
 void NetworkWork::onInterCmdDelay()
 {
     qint64 elapsedMs = m_preciseDelayTimer.elapsed();
@@ -378,6 +459,7 @@ void NetworkWork::onInterCmdDelay()
     // ★ 诊断日志
     if (qAbs(errorMs) >= 1) {
         qDebug() << "NetworkWork:[精确延时]"
+                 << "gen" << m_currentGeneration
                  << "请求" << m_originalDelayMs << "ms"
                  << "→补偿后" << m_targetDelayMs << "ms"
                  << "→实际" << actualMs << "ms"
@@ -385,8 +467,9 @@ void NetworkWork::onInterCmdDelay()
                  << "|累积补偿" << m_timingCompensationMs << "ms";
     }
 
-    // ★ 通知主线程
-    emit interCmdDelayFinished();
+    // ★ 粘包“仅延时”结束：更新下一条命令的发送锚点，再通知主线程
+    m_prevTxAnchorElapsedMs = m_txClock.elapsed();
+    emit interCmdDelayFinished(m_currentGeneration);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -445,7 +528,7 @@ void NetworkWork::onSocketError(QAbstractSocket::SocketError error)
         QTcpSocket* sock = m_tcpSocket;
         m_tcpSocket = nullptr;
 
-        m_interCmdTimer->stop();
+        cancelPendingCommands();
 
         disconnect(sock, nullptr, this, nullptr);
 

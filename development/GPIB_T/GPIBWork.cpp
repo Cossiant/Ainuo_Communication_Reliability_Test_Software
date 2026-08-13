@@ -1,6 +1,7 @@
 // GPIBWork.cpp
 // GPIB Worker：NI-VISA 操作实现
 // 精确延时：1ms QTimer轮询 + QElapsedTimer + 微秒忙等 + EMA补偿
+// ★ 新增：代际标记防止信号串扰
 
 #include "GPIBWork.h"
 #include <QDebug>
@@ -19,13 +20,17 @@
 GPIBWork::GPIBWork(QObject *parent)
     : QObject(parent)
 {
-    // ★ 1ms 轮询定时器 — 配合 QElapsedTimer 实现高精度
-    m_interCmdTimer = new QTimer(this);
-    m_interCmdTimer->setTimerType(Qt::PreciseTimer);
-    m_interCmdTimer->setInterval(1);          // 每1ms触发
-    m_interCmdTimer->setSingleShot(false);     // 持续触发直到手动停止
-    connect(m_interCmdTimer, &QTimer::timeout,
-            this, &GPIBWork::onInterCmdDelay);
+    // ★ 阶段二：预投递命令的截止等待定时器
+    m_holdTimer = new QTimer(this);
+    m_holdTimer->setTimerType(Qt::PreciseTimer);
+    m_holdTimer->setInterval(1);
+    m_holdTimer->setSingleShot(false);
+    connect(m_holdTimer, &QTimer::timeout,
+            this, &GPIBWork::onHoldTick);
+
+    // ★ 发送时间戳时间轴（测量期望发送 / 实际 write / 两次 write 间隔）
+    m_txClock.start();
+    m_txClockWallAnchorMs = QDateTime::currentMSecsSinceEpoch();
 
     qDebug() << "GPIBWork: 初始化完成"
              << "(线程:" << QThread::currentThreadId() << ")"
@@ -34,7 +39,7 @@ GPIBWork::GPIBWork(QObject *parent)
 
 GPIBWork::~GPIBWork()
 {
-    m_interCmdTimer->stop();
+    m_holdTimer->stop();
     closeGPIBPort();
     qDebug() << "GPIBWork: 已销毁";
 }
@@ -78,6 +83,14 @@ void GPIBWork::setSuffixMode(int mode)
     m_suffixMode = static_cast<GPIBSuffix>(mode);
     qDebug() << "GPIBWork: 后缀模式 =" << mode
              << (mode == 0 ? "None" : mode == 1 ? "CR" : mode == 2 ? "LF" : "CRLF");
+}
+
+// ★ 新增：重置误差补偿（每次批量发送开始时调用）
+void GPIBWork::resetTimingCompensation()
+{
+    m_timingCompensationMs = 0;
+    m_prevTxAnchorElapsedMs = -1;   // ★ 新批次重新锚定第一条命令的发送时刻
+    qDebug() << "GPIBWork: 误差补偿已重置";
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -185,6 +198,8 @@ void GPIBWork::openGPIBPort(int boardIndex,
 
     // ★ 新连接重置误差补偿
     m_timingCompensationMs = 0;
+    m_prevTxAnchorElapsedMs = -1;   // 新会话重置绝对发送锚点
+    m_lastWriteElapsedMs = -1;      // 新会话重新锚定“两次 write 间隔”日志
 
     m_opened.storeRelaxed(1);
     emit gpibOpened();
@@ -199,7 +214,7 @@ void GPIBWork::openGPIBPort(int boardIndex,
 // ═══════════════════════════════════════════════════════════════
 void GPIBWork::closeGPIBPort()
 {
-    m_interCmdTimer->stop();   // ★ 停止命令间隔定时器
+    cancelPendingCommands();   // ★ 丢弃预投递命令并停止截止定时器
 
     if (m_instrument) {
         viClose(m_instrument);
@@ -240,140 +255,122 @@ void GPIBWork::sendString(const QString &text, bool hexMode)
 // ═══════════════════════════════════════════════════════════════
 //  ★★★ 核心：发送 + 条件读取 + 1ms轮询精确延时 ★★★
 //  forceRead: 捕获模式强制读取；否则仅在期望非空时读取
+//  generation：代际标记，到期时原样传回供 GPIBExcel 校验
 // ═══════════════════════════════════════════════════════════════
 void GPIBWork::sendStringWithDelay(const QString &text, bool hexMode,
                                     const QByteArray &expectedResponse,
                                     int delayMs,
-                                    bool forceRead)
+                                    bool forceRead,
+                                    int responseTimeoutMs,
+                                    int generation)
 {
     if (!isOpen() || text.isEmpty() || !m_instrument)
         return;
 
-    m_expectedResponse = expectedResponse;
+    // ★ 阶段二：预投递 + 按住到“上一条 viWrite + 本条延时”的绝对截止时刻。
+    //    viRead 在 write 之后同步执行；若 viRead 快于延时，下一条仍精确命中截止时刻；
+    //    若 viRead 本身超过延时，则按“回复完成后立即发下一条”的原有语义执行。
+    m_pendingSend.text       = text;
+    m_pendingSend.hexMode    = hexMode;
+    m_pendingSend.expected   = expectedResponse;
+    m_pendingSend.delayMs    = delayMs;
+    m_pendingSend.forceRead  = forceRead;
+    m_pendingSend.readTimeoutMs = responseTimeoutMs;
+    m_pendingSend.generation = generation;
+    m_hasPendingSend = true;
 
-    // ── 构建数据 ──
-    QByteArray data = buildSendData(text, hexMode);
+    qint64 arrivalElapsedMs = m_txClock.elapsed();
+    m_holdTargetMs = (m_prevTxAnchorElapsedMs >= 0)
+            ? m_prevTxAnchorElapsedMs + delayMs
+            : arrivalElapsedMs;
+    m_expectedWriteElapsedMs = m_holdTargetMs;
 
-    // ── 步骤1: viWrite 发送命令 ──
-    // ★ 在 viRead 之前启动计时，让延时包含 viRead 的阻塞时间
-    //   这样 TX→TX 间隔 = max(viRead, delayMs)，而不是 viRead + delayMs
-    if (delayMs > 0) {
-        m_originalDelayMs = delayMs;
-        m_preciseDelayTimer.start();
+    if (m_holdTargetMs <= arrivalElapsedMs) {
+        writePendingAtDeadline();
+    } else {
+        m_holdTimer->start();
     }
+}
 
-    // ── 步骤1: viWrite 发送命令 ──
-    if (!doVISAWrite(data)) {
-        // 发送失败但照样启动延时（保持与 Serial/Network 行为一致）
-        if (delayMs > 0) {
-            int compensatedMs = delayMs + m_timingCompensationMs;
-            if (compensatedMs < 0) compensatedMs = 0;
-
-            const int MAX_COMPENSATION = 100;
-            m_timingCompensationMs = qBound(-MAX_COMPENSATION,
-                                             m_timingCompensationMs,
-                                             MAX_COMPENSATION);
-
-            m_targetDelayMs   = compensatedMs;
-            m_interCmdTimer->start();
-        } else {
-            emit interCmdDelayFinished();
-        }
+void GPIBWork::onHoldTick()
+{
+    if (!m_hasPendingSend) {
+        m_holdTimer->stop();
         return;
     }
 
-    // ── 步骤2: viRead 读取响应 ──
-    // ★ 关键优化：
-    //    forceRead=true（捕获模式）→ 总是读取仪器响应
-    //    forceRead=false 且期望非空 → 读取响应用于校验
-    //    forceRead=false 且期望为空 → 跳过 viRead（设置命令无需等待）
-    bool shouldRead = forceRead || !m_expectedResponse.isEmpty();
+    qint64 elapsedMs = m_txClock.elapsed();
+    if (elapsedMs < m_holdTargetMs - 1)
+        return;
 
+    while (m_txClock.elapsed() < m_holdTargetMs) {
+        // 最后 1ms 忙等自旋，精准命中截止时刻
+    }
+
+    writePendingAtDeadline();
+}
+
+void GPIBWork::writePendingAtDeadline()
+{
+    if (!m_hasPendingSend || !isOpen() || !m_instrument)
+        return;
+
+    PendingSend s = m_pendingSend;
+    m_hasPendingSend = false;
+    m_holdTimer->stop();
+
+    m_expectedResponse = s.expected;
+    m_currentGeneration = s.generation;
+
+    QByteArray data = buildSendData(s.text, s.hexMode);
+
+    if (!doVISAWrite(data)) {
+        emit commandWritten(s.generation);   // 让 GUI 走超时/下一步流程
+        return;
+    }
+    qint64 actualWriteElapsedMs = m_txClock.elapsed();
+
+    qint64 intervalMs = (m_lastWriteElapsedMs >= 0)
+            ? actualWriteElapsedMs - m_lastWriteElapsedMs
+            : -1;
+    qint64 writeErrorMs = actualWriteElapsedMs - m_expectedWriteElapsedMs;
+    m_lastWriteElapsedMs = actualWriteElapsedMs;
+    m_prevTxAnchorElapsedMs = actualWriteElapsedMs;
+
+    qDebug() << "[TxTiming][GPIB]"
+             << "gen=" << s.generation
+             << "delay=" << s.delayMs << "ms"
+             << "expectedSend="
+             << QDateTime::fromMSecsSinceEpoch(m_txClockWallAnchorMs + m_expectedWriteElapsedMs)
+                    .toString("HH:mm:ss.zzz")
+             << "actualWrite="
+             << QDateTime::fromMSecsSinceEpoch(m_txClockWallAnchorMs + actualWriteElapsedMs)
+                    .toString("HH:mm:ss.zzz")
+             << "writeError=" << writeErrorMs << "ms"
+             << "interval=" << intervalMs << "ms";
+
+    // ★ 先通知 GUI“本条已实际写入”，让响应超时从 viWrite 后开始计时
+    emit commandWritten(s.generation);
+
+    bool shouldRead = s.forceRead || !m_expectedResponse.isEmpty();
     if (shouldRead) {
-        QByteArray response = doVISARead(m_timeoutMs);
+        // ★ 让 viRead 遵守 Excel 行级的全局响应超时，并以上层仪器超时封顶
+        int readTimeoutMs = qMin(s.readTimeoutMs, m_timeoutMs);
+        if (readTimeoutMs < 1) readTimeoutMs = 1;
+        QByteArray response = doVISARead(readTimeoutMs);
         if (!response.isEmpty()) {
             emitData(response);
         }
     } else {
-        // ★ 无期望响应也不强制读取 → 发出空响应信号让流程继续
         emit responseReceived(QByteArray());
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    //  步骤3: 精确延时（计时起点在 viRead 之前）
-    // ═══════════════════════════════════════════════════════════
-    if (delayMs > 0) {
-        qint64 alreadyElapsed = m_preciseDelayTimer.elapsed();
-
-        if (alreadyElapsed >= delayMs) {
-            // viRead 已经消耗了所有延时，立即通知主线程
-            emit interCmdDelayFinished();
-        } else {
-            // 计算剩余需要等待的时间
-            int remainingMs = static_cast<int>(delayMs - alreadyElapsed);
-
-            // EMA 补偿
-            int compensatedMs = remainingMs + m_timingCompensationMs;
-            if (compensatedMs < 0) compensatedMs = 0;
-
-            const int MAX_COMPENSATION = 100;
-            m_timingCompensationMs = qBound(-MAX_COMPENSATION,
-                                             m_timingCompensationMs,
-                                             MAX_COMPENSATION);
-
-            // m_targetDelayMs = 从计时起点算起的绝对目标时间
-            m_targetDelayMs = static_cast<int>(alreadyElapsed + compensatedMs);
-            m_interCmdTimer->start();  // 每1ms触发 onInterCmdDelay()
-        }
-    } else {
-        emit interCmdDelayFinished();
     }
 }
 
-
-// ═══════════════════════════════════════════════════════════════
-//  1ms 轮询回调：检测是否到期 → 微秒忙等 → 误差补偿 → 发射信号
-// ═══════════════════════════════════════════════════════════════
-void GPIBWork::onInterCmdDelay()
+void GPIBWork::cancelPendingCommands()
 {
-    qint64 elapsedMs = m_preciseDelayTimer.elapsed();
-
-    // ★ 还没到目标时间，继续等（定时器下次再触发）
-    if (elapsedMs < m_targetDelayMs - 1) {
-        return;
-    }
-
-    // ★ 距离目标 ≤1ms：进入忙等自旋，精准命中
-    while (m_preciseDelayTimer.elapsed() < m_targetDelayMs) {
-        // 自旋等待
-    }
-
-    // ★ 停止轮询
-    m_interCmdTimer->stop();
-
-    // ★ 测量实际耗时，计算误差
-    qint64 actualMs = m_preciseDelayTimer.elapsed();
-    int    errorMs  = static_cast<int>(actualMs - m_targetDelayMs);
-
-    // ★ EMA 平滑更新补偿值 (alpha = 0.5)
-    const int MAX_COMPENSATION = 100;
-    m_timingCompensationMs -= errorMs / 2;
-    m_timingCompensationMs  = qBound(-MAX_COMPENSATION,
-                                      m_timingCompensationMs,
-                                      MAX_COMPENSATION);
-
-    // ★ 诊断日志
-    if (qAbs(errorMs) >= 1) {
-        qDebug() << "GPIBWork:[精确延时]"
-                 << "请求" << m_originalDelayMs << "ms"
-                 << "→补偿后" << m_targetDelayMs << "ms"
-                 << "→实际" << actualMs << "ms"
-                 << "|误差" << errorMs << "ms"
-                 << "|累积补偿" << m_timingCompensationMs << "ms";
-    }
-
-    // ★ 通知主线程
-    emit interCmdDelayFinished();
+    m_hasPendingSend = false;
+    m_holdTimer->stop();
+    m_expectedResponse.clear();
 }
 
 // ═══════════════════════════════════════════════════════════════

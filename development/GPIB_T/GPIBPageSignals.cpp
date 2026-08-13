@@ -150,8 +150,14 @@ void GPIBPageSignals::connectAllSignals()
     // 产品系列切换 → 更新 An30Layout
     connect(m_page->m_gpibProductComboBox, QOverload<int>::of(&ElaComboBox::currentIndexChanged),
             m_page, [this](int index) {
-        An30Layout::instance().setProduct(
-            index == 0 ? An30Product::RGL : An30Product::EVH);
+        An30Product prod;
+        switch (index) {
+            case 0: prod = An30Product::RGL; break;
+            case 1: prod = An30Product::EVT; break;   // ★ 新增
+            case 2: prod = An30Product::EVH; break;
+            default: prod = An30Product::RGL; break;
+        }
+        An30Layout::instance().setProduct(prod);
     });
 
 
@@ -231,13 +237,12 @@ void GPIBPageSignals::connectAllSignals()
 
     // ── ⑨ 发送日志行 ──
     connect(m_page->m_gpibWork, &GPIBWork::sendLogLine, m_page, [this](const QString &line) {
-        if (m_page->m_logPaused) return;
-        if (m_page->m_singleSendLog) {
+        if (!m_page->m_singleLogPaused && m_page->m_singleSendLog) {
             m_page->m_singleSendLog->addItem(line);
             while (m_page->m_singleSendLog->count() > 200)
                 delete m_page->m_singleSendLog->takeItem(0);
         }
-        if (m_page->m_logSendList) {
+        if (!m_page->m_logPaused && m_page->m_logSendList) {
             m_page->m_logSendList->addItem(line);
             while (m_page->m_logSendList->count() > 200)
                 delete m_page->m_logSendList->takeItem(0);
@@ -246,13 +251,12 @@ void GPIBPageSignals::connectAllSignals()
 
     // ── ⑩ 接收日志行 ──
     connect(m_page->m_gpibWork, &GPIBWork::recvLogLine, m_page, [this](const QString &line) {
-        if (m_page->m_logPaused) return;
-        if (m_page->m_singleRecvLog) {
+        if (!m_page->m_singleLogPaused && m_page->m_singleRecvLog) {
             m_page->m_singleRecvLog->addItem(line);
             while (m_page->m_singleRecvLog->count() > 200)
                 delete m_page->m_singleRecvLog->takeItem(0);
         }
-        if (m_page->m_logRecvList) {
+        if (!m_page->m_logPaused && m_page->m_logRecvList) {
             m_page->m_logRecvList->addItem(line);
             while (m_page->m_logRecvList->count() > 200)
                 delete m_page->m_logRecvList->takeItem(0);
@@ -286,6 +290,20 @@ void GPIBPageSignals::connectAllSignals()
             m_page->m_logPauseBtn->setText("暂停日志");
             LED::setLED(m_page->m_logLED, 2, 14);
             qDebug() << "GPIBPage: 日志更新已恢复";
+        }
+    });
+
+    // ── ⑭ 单条发送日志暂停/恢复 ──
+    connect(m_page->m_singleLogPauseBtn, &ElaPushButton::clicked, m_page, [this]() {
+        m_page->m_singleLogPaused = !m_page->m_singleLogPaused;
+        if (m_page->m_singleLogPaused) {
+            m_page->m_singleLogPauseBtn->setText("恢复日志");
+            LED::setLED(m_page->m_singleLogLED, 0, 14);
+            qDebug() << "GPIBPage: 单条发送日志已暂停";
+        } else {
+            m_page->m_singleLogPauseBtn->setText("暂停日志");
+            LED::setLED(m_page->m_singleLogLED, 2, 14);
+            qDebug() << "GPIBPage: 单条发送日志已恢复";
         }
     });
 }

@@ -8,6 +8,7 @@
 #include "NetworkWork.h"
 #include "NetworkExcel.h"
 #include "ElaWindow.h"
+#include "../Other_T/ErrorLogExporter.h"
 
 NetworkPage::NetworkPage(ElaWindow *mainWindow, QObject *parent)
     : QObject(parent), m_mainWindow(mainWindow)
@@ -94,6 +95,17 @@ void NetworkPage::addContentError(const QString &command,
 
 void NetworkPage::clearErrors()
     { m_errors->clearErrors(); }
+
+// ★ 导出错误统计到独立 Excel 文件
+void NetworkPage::exportErrorsToExcel()
+{
+    const QString defaultFileName = QStringLiteral("网口错误统计_%1.xlsx")
+            .arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_HHmmss")));
+    ErrorLogExporter::exportToExcel(m_mainWindow,
+                                    QStringLiteral("导出网口错误统计"),
+                                    defaultFileName,
+                                    m_errorTable);
+}
 
 void NetworkPage::clearSingleSendLog()
 {

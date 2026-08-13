@@ -1,5 +1,6 @@
 // SerialExcel.h
 // ★ 重构：使用公共 RangeComparer / StickySplitter
+// ★ 新增：代际标记防止信号串扰
 
 #pragma once
 
@@ -25,7 +26,8 @@ private slots:
     void onStopSend();
     void onTrySendNext();
     void onResponseReceived(QByteArray data);
-    void onInterCmdDelayFinished();
+    void onInterCmdDelayFinished(int generation);   // ★ 修改：接收代际
+    void onCommandWritten(int generation);          // ★ 阶段二：实际 write 后启动响应超时
     void onGlobalTimeout();
 
 private:
@@ -57,10 +59,13 @@ private:
     QByteArray m_lastRecvData;
     QString    m_lastCmd;
     QByteArray m_expectData;
-    bool       m_minDelayOk  = false;
+    int        m_currentTimeoutMs = 500;   // ★ 阶段二：本条命令的全局响应超时
 
     QQueue<QByteArray> m_stickyQueue;
     QByteArray stickyDelimiter() const;
 
     QTimer* m_timeoutTimer = nullptr;
+
+    // ★ 代际标记：每发送一条命令自增，用于校验延迟信号是否属于当前命令
+    int        m_cmdGeneration = 0;
 };

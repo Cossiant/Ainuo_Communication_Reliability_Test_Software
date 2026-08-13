@@ -1,5 +1,6 @@
 // NetworkExcel.cpp
 // ★ 重构：使用公共 RangeComparer / StickySplitter
+// ★ 新增：代际标记防止信号串扰
 
 #include "NetworkExcel.h"
 #include "NetworkPage.h"
@@ -33,6 +34,7 @@ NetworkExcel::NetworkExcel(NetworkPage *page, QObject *parent)
 
     connect(m_work, &NetworkWork::responseReceived, this, &NetworkExcel::onResponseReceived);
     connect(m_work, &NetworkWork::interCmdDelayFinished, this, &NetworkExcel::onInterCmdDelayFinished);
+    connect(m_work, &NetworkWork::commandWritten, this, &NetworkExcel::onCommandWritten);
 }
 
 NetworkExcel::~NetworkExcel() {
@@ -110,8 +112,15 @@ void NetworkExcel::onCapture() {
     m_totalSent = 0;
     m_pendingStop = false;
 
+    // ★ 重置代际计数器
+    m_cmdGeneration = 0;
+
     m_page->clearExcelSendLog();
     m_page->m_logStartTimeCard->setValue(QDateTime::currentDateTime().toString("HH:mm:ss"));
+
+    // ★ 重置工作线程的误差补偿
+    QMetaObject::invokeMethod(m_work, "resetTimingCompensation",
+                              Qt::QueuedConnection);
 
     onTrySendNext();
 }
@@ -132,8 +141,15 @@ void NetworkExcel::onStartSend() {
     m_totalSent = 0;
     m_pendingStop = false;
 
+    // ★ 重置代际计数器
+    m_cmdGeneration = 0;
+
     m_page->clearExcelSendLog();
     m_page->m_logStartTimeCard->setValue(QDateTime::currentDateTime().toString("HH:mm:ss"));
+
+    // ★ 重置工作线程的误差补偿
+    QMetaObject::invokeMethod(m_work, "resetTimingCompensation",
+                              Qt::QueuedConnection);
 
     onTrySendNext();
 }
@@ -145,6 +161,9 @@ void NetworkExcel::onStopSend() {
     m_isCaptureMode = false;
     m_stickyQueue.clear();
 
+    // ★ 阶段二：丢弃 worker 中尚未写入的预投递命令
+    QMetaObject::invokeMethod(m_work, "cancelPendingCommands",
+                              Qt::QueuedConnection);
     QMetaObject::invokeMethod(m_work, "setExpectedResponse",
                               Qt::QueuedConnection,
                               Q_ARG(QByteArray, QByteArray()));
@@ -197,6 +216,9 @@ void NetworkExcel::onTrySendNext() {
 
     if (cmdText.isEmpty()) { onTrySendNext(); return; }
 
+    // ★ 递增代际标记（在每次实际发送前）
+    int myGen = ++m_cmdGeneration;
+
     // ★ 粘包队列消费（使用 StickySplitter）
     if (m_page->m_networkSplitStickyCheckBox
         && m_page->m_networkSplitStickyCheckBox->isChecked()
@@ -207,9 +229,7 @@ void NetworkExcel::onTrySendNext() {
 
         m_waiting = true;
         m_gotReply = true;
-        m_minDelayOk = false;
         m_lastRecvData = queuedData;
-        m_timeoutTimer->start(globalTimeout);
 
         if (m_isCaptureMode) fillCaptureResult(queuedData);
 
@@ -223,14 +243,11 @@ void NetworkExcel::onTrySendNext() {
         if (!tryRangeCompare(cmpData, m_expectData, hexMode))
             m_page->addContentError(m_lastCmd, m_expectData, cmpData);
 
-        if (delayMs > 0) {
-            QTimer::singleShot(delayMs, this, [this]() {
-                if (m_waiting) { m_minDelayOk = true; finalizeAndNext(); }
-            });
-        } else {
-            m_minDelayOk = true;
-            finalizeAndNext();
-        }
+        // ★ 粘包分支统一走 worker 的精确延时入口：delayMs == 0 也更新发送锚点
+        QMetaObject::invokeMethod(m_work, "startDelayOnly",
+                                  Qt::QueuedConnection,
+                                  Q_ARG(int, delayMs),
+                                  Q_ARG(int, myGen));
         return;
     }
 
@@ -252,21 +269,22 @@ void NetworkExcel::onTrySendNext() {
         m_expectData.replace("\n", "");
     }
 
+    // ★ 传入代际标记 myGen
     QMetaObject::invokeMethod(m_work, "sendStringWithDelay",
                               Qt::QueuedConnection,
                               Q_ARG(QString, cmdText),
                               Q_ARG(bool, hexMode),
                               Q_ARG(QByteArray, m_expectData),
                               Q_ARG(int, delayMs),
-                              Q_ARG(bool, m_isCaptureMode));
+                              Q_ARG(bool, m_isCaptureMode),
+                              Q_ARG(int, myGen));                // ★ 新增
 
     m_totalSent++;
     m_page->m_logSentCountCard->setValue(QString::number(m_totalSent));
 
+    m_currentTimeoutMs = globalTimeout;
     m_waiting = true;
     m_gotReply = false;
-    m_minDelayOk = false;
-    m_timeoutTimer->start(globalTimeout);
 }
 
 // ═══════════════════════════════════════════════ 收到回复 ═══
@@ -302,14 +320,36 @@ void NetworkExcel::onResponseReceived(QByteArray data) {
     if (!tryRangeCompare(cmpData, m_expectData, hexMode))
         m_page->addContentError(m_lastCmd, m_expectData, cmpData);
 
-    if (m_minDelayOk) finalizeAndNext();
+    // ★ 阶段二：回复到达即可预投递下一条，worker 会按住到精确截止时刻
+    finalizeAndNext();
 }
 
 // ═══════════════════════════════════════════════ 延时到期 ═══
-void NetworkExcel::onInterCmdDelayFinished() {
+// ★ 修改：校验代际标记，拒绝旧命令的残留信号
+void NetworkExcel::onInterCmdDelayFinished(int generation) {
     if (!m_waiting) return;
-    m_minDelayOk = true;
+
+    // ★★★ 核心校验：代际不匹配说明这是上一条命令的残留信号，直接丢弃 ★★★
+    if (generation != m_cmdGeneration) {
+        qDebug() << "NetworkExcel: [丢弃过期延迟信号] gen=" << generation
+                 << "当前gen=" << m_cmdGeneration;
+        return;
+    }
+
     if (m_gotReply) finalizeAndNext();
+}
+
+// ═══════════════════════════════════════════════ 实际写入 ═══
+void NetworkExcel::onCommandWritten(int generation) {
+    if (!m_waiting) return;
+
+    if (generation != m_cmdGeneration) {
+        qDebug() << "NetworkExcel: [忽略过期写入信号] gen=" << generation
+                 << "当前gen=" << m_cmdGeneration;
+        return;
+    }
+
+    m_timeoutTimer->start(m_currentTimeoutMs);
 }
 
 // ═══════════════════════════════════════════════ 全局超时 ═══

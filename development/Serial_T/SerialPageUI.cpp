@@ -134,12 +134,12 @@ void SerialPageUI::createSettingsPage() {
 
     grid->addWidget(m_page->m_serialBufferCheckBox,   3, 0);
     grid->addWidget(timeoutContainer,                 3, 2,1,2);
-    grid->addWidget(m_page->m_serialHexSendCheckBox,  4, 2, 1, 2);
+    grid->addWidget(m_page->m_serialHexSendCheckBox,  4, 0, 1, 2);
 
     // ──── 第 4 行：去除 \r\n 勾选框 ────
     m_page->m_serialStripCRLFCheckBox = new ElaCheckBox("比对时去除返回值中的 \\r\\n");
     m_page->m_serialStripCRLFCheckBox->setStyleSheet("ElaCheckBox { font-size: 14px; }");
-    grid->addWidget(m_page->m_serialStripCRLFCheckBox, 4, 0, 1, 4);
+    grid->addWidget(m_page->m_serialStripCRLFCheckBox, 4, 2, 1, 4);
 
     // ──── 第 5 行：粘包分割 ────
     m_page->m_serialSplitStickyCheckBox = new ElaCheckBox("启用粘包分割（按分隔符拆分返回值）");
@@ -194,7 +194,7 @@ void SerialPageUI::createSettingsPage() {
     ElaText* productLabel = new ElaText("产品系列:");
     productLabel->setTextPixelSize(15);
     m_page->m_serialProductComboBox = new ElaComboBox();
-    m_page->m_serialProductComboBox->addItems({"RGL系列 (交流源载)", "EVH系列 (直流电源)"});
+    m_page->m_serialProductComboBox->addItems({"RGL系列 (交流源载)", "EVT系列 (直流电源)", "EVH系列 (双向直流电源 v1.5)"});
     m_page->m_serialProductComboBox->setCurrentIndex(0);
     m_page->m_serialProductComboBox->setStyleSheet("ElaComboBox { font-size: 14px; }");
     grid->addWidget(productLabel,                    9, 0);
@@ -252,8 +252,17 @@ void SerialPageUI::createSendPage() {
     m_page->m_singleSendClearBtn = new ElaPushButton("清空发送日志");
     m_page->m_singleSendClearBtn->setFixedSize(120, 38);
 
+    m_page->m_singleLogPauseBtn = new ElaPushButton("暂停日志");
+    m_page->m_singleLogPauseBtn->setFixedSize(120, 38);
+
+    m_page->m_singleLogLED = new QLabel();
+    m_page->m_singleLogLED->setFixedSize(14, 14);
+    LED::setLED(m_page->m_singleLogLED, 2, 14);
+
     btnRow->addWidget(m_page->m_singleSendBtn);
     btnRow->addWidget(m_page->m_singleSendClearBtn);
+    btnRow->addWidget(m_page->m_singleLogPauseBtn);
+    btnRow->addWidget(m_page->m_singleLogLED);
     btnRow->addStretch();
     inputLayout->addWidget(m_page->m_singleSendInput);
     inputLayout->addLayout(btnRow);
@@ -537,10 +546,23 @@ void SerialPageUI::createErrorLogPage()
     statsLayout->addWidget(m_page->m_errorTimeoutCard);
     statsLayout->addWidget(m_page->m_errorContentCard);
     statsLayout->addStretch();
+
+    QWidget* buttonColumn = new QWidget(statsCard);
+    QVBoxLayout* buttonColumnLayout = new QVBoxLayout(buttonColumn);
+    buttonColumnLayout->setContentsMargins(0, 0, 0, 0);
+    buttonColumnLayout->setSpacing(8);
+
     m_page->m_errorClearBtn = new ElaPushButton("清空记录");
-    m_page->m_errorClearBtn->setFixedWidth(120);
+    m_page->m_errorClearBtn->setFixedWidth(150);
     m_page->m_errorClearBtn->setMinimumHeight(36);
-    statsLayout->addWidget(m_page->m_errorClearBtn);
+    buttonColumnLayout->addWidget(m_page->m_errorClearBtn);
+
+    m_page->m_errorExportBtn = new ElaPushButton("导出数据到excel");
+    m_page->m_errorExportBtn->setFixedWidth(150);
+    m_page->m_errorExportBtn->setMinimumHeight(36);
+    buttonColumnLayout->addWidget(m_page->m_errorExportBtn);
+
+    statsLayout->addWidget(buttonColumn, 0, Qt::AlignVCenter);
     root->addWidget(statsCard);
 
     QWidget* tableCard = createCard(m_page->_SerialErrorLogPage);
@@ -585,4 +607,6 @@ void SerialPageUI::createErrorLogPage()
 
     connect(m_page->m_errorClearBtn, &ElaPushButton::clicked,
             m_page, &SerialPage::clearErrors);
+    connect(m_page->m_errorExportBtn, &ElaPushButton::clicked,
+            m_page, &SerialPage::exportErrorsToExcel);
 }

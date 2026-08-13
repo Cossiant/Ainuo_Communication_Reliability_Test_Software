@@ -37,7 +37,11 @@ ElaLineEdit::ElaLineEdit(QWidget* parent)
     setStyleSheet("#ElaLineEdit{background-color:transparent;padding-left: 10px;}");
     d->onThemeChanged(eTheme->getThemeMode());
     connect(eTheme, &ElaTheme::themeModeChanged, d, &ElaLineEditPrivate::onThemeChanged);
-    setVisible(true);
+    // 仅在已有可见父控件时保持原行为；无父控件或父控件尚未显示时不要主动 show，
+    // 否则构造期间会生成瞬时的顶层原生窗口（启动时子页面依次闪窗）。
+    if (parent && parent->isVisible()) {
+        setVisible(true);
+    }
 }
 
 ElaLineEdit::~ElaLineEdit()

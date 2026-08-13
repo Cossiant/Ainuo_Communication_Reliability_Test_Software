@@ -10,6 +10,7 @@
 #include "SerialWork.h"
 #include "SerialExcel.h"
 #include "ElaWindow.h"
+#include "../Other_T/ErrorLogExporter.h"
 
 SerialPage::SerialPage(ElaWindow *mainWindow, QObject *parent)
     : QObject(parent), m_mainWindow(mainWindow)
@@ -92,6 +93,17 @@ void SerialPage::addContentError(const QString &command,
 
 void SerialPage::clearErrors()
     { m_errors->clearErrors(); }
+
+// ★ 导出错误统计到独立 Excel 文件
+void SerialPage::exportErrorsToExcel()
+{
+    const QString defaultFileName = QStringLiteral("串口错误统计_%1.xlsx")
+            .arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_HHmmss")));
+    ErrorLogExporter::exportToExcel(m_mainWindow,
+                                    QStringLiteral("导出串口错误统计"),
+                                    defaultFileName,
+                                    m_errorTable);
+}
 
 void SerialPage::clearSingleSendLog()
 {
