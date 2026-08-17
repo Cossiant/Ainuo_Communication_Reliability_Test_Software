@@ -33,6 +33,8 @@ find_package(Qt5 COMPONENTS
 
 # ===== 添加 NI-VISA 头文件搜索路径 =====
 include_directories(${VISA_INCLUDE_DIR})
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/development/CAN_T/CommIOModule/include")
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/development/CAN_T/CAN_lib/zlgcan_x64")
 
 # 这里需要在编译的时候加上WIN32，如果是debug需要去掉，否则不显示qdebug内容！
 add_executable(untitled WIN32
@@ -62,6 +64,33 @@ add_executable(untitled WIN32
         development/Network_T/NetworkPage.h
         development/CAN_T/CANPage.cpp
         development/CAN_T/CANPage.h
+        development/CAN_T/CANFrameUtils.cpp
+        development/CAN_T/CANFrameUtils.h
+        development/CAN_T/CANWork.cpp
+        development/CAN_T/CANWork.h
+        development/CAN_T/CANExcel.cpp
+        development/CAN_T/CANExcel.h
+        development/CAN_T/CANPageUI.cpp
+        development/CAN_T/CANPageUI.h
+        development/CAN_T/CANPageSignals.cpp
+        development/CAN_T/CANPageSignals.h
+        development/CAN_T/CANErrorHandler.cpp
+        development/CAN_T/CANErrorHandler.h
+        development/CAN_T/CommIOModule/src/CANChannel.cpp
+        development/CAN_T/CommIOModule/src/CANWorker.cpp
+        development/CAN_T/CommIOModule/src/CANReadThread.cpp
+        development/CAN_T/CommIOModule/src/CommTypes.cpp
+        development/CAN_T/CommIOModule/src/PerfClock.cpp
+        development/CAN_T/CommIOModule/src/ICommChannel.cpp
+        development/CAN_T/CommIOModule/src/ZLGCanLoader.cpp
+        development/CAN_T/CommIOModule/include/CommIOModule/ZLGCanLoader.h
+        development/CAN_T/CommIOModule/include/CommIOModule/ICommChannel.h
+        development/CAN_T/CommIOModule/include/CommIOModule/CANChannel.h
+        development/CAN_T/CommIOModule/include/CommIOModule/CANWorker.h
+        development/CAN_T/CommIOModule/include/CommIOModule/CANReadThread.h
+        development/CAN_T/CommIOModule/include/CommIOModule/CommTypes.h
+        development/CAN_T/CommIOModule/include/CommIOModule/CommConfig.h
+        development/CAN_T/CommIOModule/include/CommIOModule/PerfClock.h
         development/GPIB_T/GPIBPage.cpp
         development/GPIB_T/GPIBPage.h
         development/USER_T/USERPage.cpp
@@ -116,9 +145,9 @@ target_link_libraries(untitled
         Qt5::SerialPort
         Qt5::Network
         Qt5::AxContainer
-        QXlsx::QXlsx
-        ElaWidgetTools
-        ${VISA_LIB_DIR}/visa64.lib
+         QXlsx::QXlsx
+         ElaWidgetTools
+         ${VISA_LIB_DIR}/visa64.lib
 )
 
 # ① 复制 ElaWidgetTools DLL
@@ -135,4 +164,15 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         --debug --no-translations
         "$<TARGET_FILE:${PROJECT_NAME}>"
         COMMENT "Running windeployqt..."
+)
+
+# 拷贝周立功 ZLGCAN x64 动态库及 kerneldlls
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/development/CAN_T/CAN_lib/zlgcan_x64/zlgcan.dll"
+        "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/development/CAN_T/CAN_lib/zlgcan_x64/kerneldlls"
+        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/kerneldlls"
+        COMMENT "Copying ZLGCAN DLL..."
 )

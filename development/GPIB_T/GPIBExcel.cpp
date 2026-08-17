@@ -62,6 +62,9 @@ bool GPIBExcel::tryRangeCompare(const QByteArray &received,
 {
     if (expected.isEmpty()) return true;
 
+    // ★ 完全相同直接通过：避免字符串返回（如 *IDN?）被 ASCII 区间解析误判
+    if (received == expected) return true;
+
     // ── ASCII 区间模式 ──
     if (!hexMode
         && m_page->m_gpibAsciiRangeCheckBox
