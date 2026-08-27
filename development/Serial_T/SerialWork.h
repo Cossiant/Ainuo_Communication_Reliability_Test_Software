@@ -1,5 +1,5 @@
 // SerialWork.h
-// ★ 对齐 GPIBWork：sendStringWithDelay 添加 forceRead 参数
+// ★ sendStringWithDelay 添加 forceRead 参数
 // ★ 新增：发送后缀功能
 // ★ 新增：可配置缓冲区超时时间
 // ★ 新增：代际标记防止信号串扰
@@ -110,7 +110,7 @@ private:
     QAtomicInt m_opened{0};
 
     // ═══════════════════════════════════════════════
-    //  精确延时 + 误差补偿（对齐 GPIBWork / NetworkWork）
+    //  精确延时 + 误差补偿（对齐 NetworkWork 等模块）
     // ═══════════════════════════════════════════════
     QElapsedTimer m_preciseDelayTimer;                // 高精度计时
     int           m_targetDelayMs        = 0;         // 本次补偿后目标（ms）

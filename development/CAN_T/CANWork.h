@@ -11,7 +11,7 @@ class CANChannel;
 }
 
 // CAN 工作对象：运行在独立线程，负责 ZLGCAN 打开/关闭、发送、接收，
-// 以及与 SerialWork / NetworkWork / GPIBWork 对齐的精确延时调度。
+// 以及与 SerialWork / NetworkWork 等模块对齐的精确延时调度。
 class CANWork : public QObject
 {
     Q_OBJECT

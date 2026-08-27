@@ -1,6 +1,6 @@
 // NetWorkWork.h
 // 精确延时：1ms QTimer轮询 + QElapsedTimer + 微秒忙等 + EMA补偿
-// ★ 对齐 GPIBWork：sendStringWithDelay 添加 forceRead 参数
+// ★ sendStringWithDelay 添加 forceRead 参数
 // ★ 新增：发送后缀功能
 // ★ 新增：代际标记防止信号串扰
 

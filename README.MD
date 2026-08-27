@@ -18,7 +18,7 @@
 |------|------|
 | 🔌 **串口通讯** | RS-232 / RS-485，波特率/数据位/停止位/校验位可配置，支持 HEX/ASCII 模式、发送后缀(无/CR/LF/CRLF)、**可配置缓冲区合并超时(1~500ms)** |
 | 🌐 **网口通讯** | TCP 客户端，支持 Nagle 算法禁用（低延迟），静默超时断开，发送后缀(无/CR/LF/CRLF) |
-| 🔬 **GPIB 通讯** | 基于 NI-VISA，支持板卡号/主副地址配置、发送后缀(无/CR/LF/CRLF)、EOI 信号、结束字符控制、连接超时保护 |
+| 🔬 **GPIB 通讯** | 本版本不支持 GPIB，界面保留提示入口；如需要支持请使用专用版本 |
 | 🚗 **CAN 通讯** | 预留接口，后续版本完善 |
 | 📊 **Excel 批量发送** | 读取 .xlsx 命令表，自动逐条发送、校验响应、标记超时/内容错误 |
 | 📝 **单条命令调试** | 独立发送页，实时查看收发日志（毫秒级时间戳） |
@@ -49,7 +49,7 @@
 - **构建系统:** CMake 3.10+
 - **UI 组件:** [ElaWidgetTools](https://github.com/Liniyous/ElaWidgetTools)（Fluent Design 风格）
 - **Excel 引擎:** [QXlsx](https://github.com/QtExcel/QXlsx)（跨平台 .xlsx 读写）
-- **GPIB 驱动:** NI-VISA（NI-488.2 或独立运行时）
+- **GPIB 驱动:** 本版本不包含 GPIB / NI-VISA 支持
 
 ---
 
@@ -74,13 +74,13 @@ ExcelSCPISender/
 │   │   ├── NetworkErrorHandler.h/.cpp
 │   │   ├── NetworkWork.h/.cpp
 │   │   └── NetworkExcel.h/.cpp
-│   ├── GPIB_T/                      # GPIB 通讯模块
-│   │   ├── GPIBPage.h/.cpp
-│   │   ├── GPIBPageUI.h/.cpp
-│   │   ├── GPIBPageSignals.h/.cpp
-│   │   ├── GPIBErrorHandler.h/.cpp
-│   │   ├── GPIBWork.h/.cpp
-│   │   └── GPIBExcel.h/.cpp
+│   ├── GPIB_T/                      # GPIB 入口（无 GPIB 版本仅显示提示）
+│   │   └── GPIBUnsupportedPage.h/.cpp
+
+
+
+
+
 │   ├── CAN_T/                       # CAN 通讯模块（预留）
 │   ├── USER_T/
 │   ├── Other_T/                     # 核心 / 公共组件
@@ -111,7 +111,7 @@ ExcelSCPISender/
 | Qt | 5.15.2 | 需包含 `SerialPort`, `Network`, `AxContainer` 模块 |
 | CMake | ≥ 3.10 | 构建系统 |
 | MinGW | 8.1 (64-bit) | 编译器 |
-| NI-VISA | 最新版 | **仅 GPIB 模块需要**，[免费下载](https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html) |
+| NI-VISA | 不需要 | 本版本已移除 GPIB / NI-VISA 依赖 |
 
 ### 克隆项目
 
@@ -127,11 +127,11 @@ cd ExcelSCPISender
 **方式一：CLion（推荐）**
 
 1. 用 CLion 打开项目根目录
-2. 在 `CMakeLists.txt` 中确认 Qt 和 NI-VISA 路径正确：
+2. 在 `CMakeLists.txt` 中确认 Qt 路径正确（本版本无需配置 NI-VISA）：
    ```cmake
    set(CMAKE_PREFIX_PATH "D:/Apps/Work/Qt/5.15.2/mingw81_64")
-   set(VISA_INCLUDE_DIR "C:/Program Files (x86)/IVI Foundation/VISA/WinNT/include")
-   set(VISA_LIB_DIR "C:/Program Files (x86)/IVI Foundation/VISA/WinNT/lib_x64/msc")
+   
+   
    ```
 3. 选择 `Release-MinGW` 工具链 → 构建
 
@@ -156,7 +156,7 @@ cmake --build . --target untitled -j 14
 
 - **串口:** 设置 → 选择端口号 / 波特率 → 打开串口
 - **网口:** 设置 → 输入 IP / 端口 → 连接网络
-- **GPIB:** 设置 → 输入板卡号 / 仪器地址 → 选择发送后缀 → 打开 GPIB
+- **GPIB:** 本版本不支持，界面会显示提示；如需要请使用支持 GPIB 的版本
 
 > 连接成功后对应 LED 指示灯变为**绿色**。
 
@@ -209,11 +209,11 @@ cmake --build . --target untitled -j 14
 
 ### 7. 发送后缀说明
 
-**串口、网口、GPIB** 三个模块的设置页中均提供「发送后缀」下拉框，支持以下选项：
+**串口、网口** 两个模块的设置页中均提供「发送后缀」下拉框，支持以下选项：
 
 | 后缀选项 | 实际追加字节 | 适用场景 |
 |---------|-------------|---------|
-| 无 (None) | 不追加任何字节 | GPIB 仪器仅靠 EOI 硬件信号识别命令结束；部分串口/网口设备无需终止符 |
+| 无 (None) | 不追加任何字节 | 部分串口/网口设备无需终止符 |
 | CR (`\r`) | 0x0D | 少数仪器使用回车符作为命令终止符 |
 | LF (`\n`) | 0x0A | **大多数 SCPI 仪器**使用换行符终止命令 |
 | CRLF (`\r\n`) | 0x0D 0x0A | 部分仪器要求回车+换行双字符终止（如某些 PLC 设备） |
@@ -327,7 +327,7 @@ Step 3: 加后缀 — 根据下拉框选择追加 None / 0x0D / 0x0A / 0x0D+0x0A
 |---|------|------|
 | **ElaWidgetTools** | 现代化 Fluent Design UI 组件库 | [GitHub](https://github.com/Liniyous/ElaWidgetTools) |
 | **QXlsx** | 高性能跨平台 Excel 读写库 | [GitHub](https://github.com/QtExcel/QXlsx) |
-| **NI-VISA** | GPIB / 仪器控制驱动 | [NI 官网](https://www.ni.com/en/support/downloads/drivers/download.ni-visa.html) |
+| **NI-VISA** | 本版本不依赖（GPIB 功能已移除） | - |
 
 ---
 

@@ -2,7 +2,7 @@
 #include "CommIOModule/ICommChannel.h"
 #include "CommIOModule/SerialPortChannel.h"
 #include "CommIOModule/TCPChannel.h"
-#include "CommIOModule/GPIBChannel.h"
+
 #include "CommIOModule/CANChannel.h"
 
 namespace CommIO {
@@ -14,8 +14,8 @@ ICommChannel* CommChannelFactory::createChannel(ChannelType type, QObject* paren
         return new SerialPortChannel(parent);
     case ChannelType::TCP:
         return new TCPChannel(parent);
-    case ChannelType::GPIB:
-        return new GPIBChannel(parent);
+
+
     case ChannelType::CAN:
         return new CANChannel(parent);
     default:

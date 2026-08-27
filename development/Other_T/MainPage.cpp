@@ -98,7 +98,7 @@ void MainPage::createHomePage() {
 
     // ──── 简介 ────
     ElaText *desc = new ElaText(
-        "本软件支持串口、网口、CAN、GPIB 四种通讯方式，\n"
+        "本软件支持串口、网口、CAN 三种通讯方式，\n"
         "可通过 Excel 表格批量导入指令并自动发送、校验响应。\n\n"
         "请从左侧导航栏选择通讯方式开始使用。"
     );
@@ -642,14 +642,14 @@ void MainPage::createHelpPage() {
             QString::fromUtf8("软件通过 Excel 表格定义测试指令集，自动逐条发送命令并校验设备返回值，"),
             QString::fromUtf8("统计发送成功率、超时和内容错误，帮助快速定位通讯问题。"),
             QString(),
-            QString::fromUtf8("支持通讯方式：串口 (RS-232/485)  /  网口 (TCP 客户端)  /  CAN  /  GPIB")
+            QString::fromUtf8("支持通讯方式：串口 (RS-232/485)  /  网口 (TCP 客户端)  /  CAN（GPIB 本版本不支持）")
         }));
 
     // ════════════════ 2. 发送后缀（通用功能）════════════════
     lay->addWidget(createHelpSection(
-        QString::fromUtf8("2. 发送后缀（串口 / 网口 / GPIB 通用）"),
+        QString::fromUtf8("2. 发送后缀（串口 / 网口 通用）"),
         QStringList{
-            QString::fromUtf8("「发送后缀」是三个通讯模块共用的核心功能，位于各模块的「设置」页面中。"),
+            QString::fromUtf8("「发送后缀」是串口和网口两个通讯模块共用的核心功能，位于各模块的「设置」页面中。"),
             QString::fromUtf8("作用：发送命令时，自动在命令末尾追加指定的控制字符作为终止符。"),
             QString(),
             QString::fromUtf8("后缀选项与追加的实际字节："),
@@ -719,9 +719,9 @@ void MainPage::createHelpPage() {
 
     // ════════════════ 5. GPIB 通讯 ════════════════
     lay->addWidget(createHelpSection(
-        QString::fromUtf8("5. GPIB 通讯"),
+        QString::fromUtf8("5. GPIB 通讯（本版本不支持）"),
         QStringList{
-            QString::fromUtf8("5.1  配置 GPIB 参数"),
+            QString::fromUtf8("此版本不支持 GPIB，如需要支持 GPIB 的版本请联系开发人员。"),
             QString::fromUtf8("    在「GPIB设置」页中输入板卡号（通常为 0）、仪器主地址（0-30）。"),
             QString::fromUtf8("    如需使用副地址（某些多通道仪器），可填入副地址（0=不使用）。"),
             QString::fromUtf8("    设置超时时间（建议 3000ms，可根据仪器响应速度调整）。"),
@@ -732,7 +732,7 @@ void MainPage::createHelpPage() {
             QString::fromUtf8("    点击「打开 GPIB」建立连接，LED 指示灯变为绿色。"),
             QString(),
             QString::fromUtf8("5.2  前置条件"),
-            QString::fromUtf8("    a) 必须安装 NI-VISA 运行时驱动（NI-488.2 或 NI-VISA 独立包）。"),
+            QString::fromUtf8(""),
             QString::fromUtf8("    b) GPIB 控制器（如 NI GPIB-USB-HS）需正确插入并被系统识别。"),
             QString::fromUtf8("    c) 可在 NI-MAX（Measurement & Automation Explorer）中验证设备可见性。"),
             QString::fromUtf8("    d) 确认仪器 GPIB 地址与软件中填写的主地址一致。"),
@@ -755,7 +755,7 @@ void MainPage::createHelpPage() {
             QString::fromUtf8("    A: 检查板卡号和主地址是否正确，仪器是否上电，NI-MAX 中是否可见该设备。"),
             QString(),
             QString::fromUtf8("    Q: 打开 GPIB 时提示「未找到 VISA 运行库」？"),
-            QString::fromUtf8("    A: 请确认 NI-VISA 已正确安装。可从 NI 官网下载 NI-VISA 运行时（免费）。"),
+            QString::fromUtf8(""),
             QString(),
             QString::fromUtf8("    Q: GPIB 连接超时（5秒弹窗）？"),
             QString::fromUtf8("    A: 检查 GPIB 线缆连接是否牢固，仪器是否上电且处于远程控制模式。")
@@ -858,14 +858,14 @@ void MainPage::createHelpPage() {
             QString(),
             QString::fromUtf8("Q: 发送命令后未收到回复？"),
             QString::fromUtf8("A: 检查连接状态 LED 是否为绿色；检查命令格式是否正确；适当增大全局超时时间。"),
-            QString::fromUtf8("   ★ 如果是串口/网口/GPIB 仪器不响应，请优先检查「发送后缀」设置。"),
+            QString::fromUtf8("   ★ 如果是串口/网口仪器不响应，请优先检查「发送后缀」设置。"),
             QString::fromUtf8("      大多数 SCPI 仪器需要 LF (\\n) 作为命令终止符。"),
             QString(),
             QString::fromUtf8("Q: 发送后缀应该怎么选？"),
             QString::fromUtf8("A: 如果不确定，按以下顺序尝试："),
             QString::fromUtf8("   ① 先选 LF (\\n) — 绝大多数 SCPI 仪器的标准终止符"),
             QString::fromUtf8("   ② 如果仍无响应，尝试 CRLF (\\r\\n) — 部分 PLC / 工控设备需要"),
-            QString::fromUtf8("   ③ 对于 GPIB 仪器，可以先试「无 (None)」— 靠 EOI 硬件信号终止"),
+            QString::fromUtf8("   "),
             QString::fromUtf8("   ④ HEX 模式下不追加后缀，请直接在命令中编码所需的终止字节"),
             QString(),
             QString::fromUtf8("Q: Excel 文件读取失败？"),
@@ -878,11 +878,11 @@ void MainPage::createHelpPage() {
             QString::fromUtf8("Q: 命令中已包含 \\n，又选了后缀会重复吗？"),
             QString::fromUtf8("A: 不会。软件在追加后缀前会自动去除命令末尾已有的 \\r 和 \\n，确保不重复。"),
             QString(),
-            QString::fromUtf8("Q: GPIB 发送命令后仪器不响应？"),
-            QString::fromUtf8("A: 首先检查 GPIB 连接状态 LED 是否为绿色。若连接正常但仍无响应："),
-            QString::fromUtf8("   ① 在 GPIB 设置页中尝试切换「发送后缀」为 LF (\\n)；"),
-            QString::fromUtf8("   ② 适当增大超时时间（如 5000ms），部分老旧仪器响应较慢；"),
-            QString::fromUtf8("   ③ 确认仪器支持的命令格式无误（可先用 NI-MAX 手动测试）。")
+            QString::fromUtf8("Q: 本版本支持 GPIB 吗？"),
+            QString::fromUtf8("A: 不支持。此版本不包含 GPIB 功能，如需要支持 GPIB 的版本请联系开发人员。"),
+            QString::fromUtf8("   "),
+            QString::fromUtf8("   "),
+            QString::fromUtf8("   ")
         }));
 
     scrollArea->setWidget(scrollContent);
@@ -959,7 +959,7 @@ void MainPage::createAboutPage() {
     infoLayout->addSpacing(8);
     addInfo(QString::fromUtf8("UI 框架："),  "ElaWidgetTools（现代化 Fluent Design 组件库）");
     addInfo(QString::fromUtf8("Excel 引擎："), "QXlsx（高性能跨平台 Excel 读写库）");
-    addInfo(QString::fromUtf8("通讯协议："), "TCP/IP、RS-232/485 (Serial)、CAN、GPIB (NI-VISA)");
+    addInfo(QString::fromUtf8("通讯协议："), "TCP/IP、RS-232/485 (Serial)、CAN");
 
     lay->addWidget(infoGroup);
 
@@ -971,7 +971,7 @@ void MainPage::createAboutPage() {
     featureLayout->setContentsMargins(20, 20, 20, 20);
 
     QStringList features = {
-        QString::fromUtf8("支持串口 / 网口 / CAN / GPIB 四种通讯方式"),
+        QString::fromUtf8("支持串口 / 网口 / CAN 三种通讯方式"),
         QString::fromUtf8("Excel 表格批量导入命令，自动逐条发送"),
         QString::fromUtf8("自动校验返回值，统计超时和内容错误"),
         QString::fromUtf8("支持 HEX 和 ASCII 两种命令编码格式"),
@@ -981,7 +981,7 @@ void MainPage::createAboutPage() {
         QString::fromUtf8("实时收发日志，带毫秒级时间戳"),
         QString::fromUtf8("错误统计卡片 + 6列详细错误列表"),
         QString::fromUtf8("Nagle 算法可选禁用（网口低延迟模式）"),
-        QString::fromUtf8("GPIB 仪器地址配置 + EOI / 结束字符控制"),
+        QString::fromUtf8("本版本不包含 GPIB 功能（如需支持请使用专用版本）"),
         QString::fromUtf8("命令间隔精确延时控制（1ms 精度，EMA 补偿）"),
         QString::fromUtf8("多线程架构，收发与 UI 完全分离"),
         QString::fromUtf8("粘包分割（串口 / 网口），按分隔符拆分连续数据"),
@@ -1007,7 +1007,7 @@ void MainPage::createAboutPage() {
     QStringList changelog = {
         QString::fromUtf8("ASCII 区间判断新增科学计数法解析，支持 +1.000000E+00、+3.000000E+01 等格式"),
         QString::fromUtf8("数值/字符串自动分流：期望值为纯数值才走区间判断，字符串返回自动精确比对"),
-        QString::fromUtf8("科学计数法解析在串口/网口/GPIB 设置页通过勾选框启用"),
+        QString::fromUtf8("科学计数法解析在串口/网口设置页通过勾选框启用"),
     };
 
     for (const QString &log : changelog) {

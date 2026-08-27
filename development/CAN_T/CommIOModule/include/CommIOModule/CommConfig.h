@@ -22,6 +22,8 @@ struct SerialPortConfig {
     qint64 readBufferSize = 0;                                // 0 = 无限制
 };
 
+
+
 // GPIB 配置（NI-VISA）
 struct GPIBConfig {
     // 常规配置

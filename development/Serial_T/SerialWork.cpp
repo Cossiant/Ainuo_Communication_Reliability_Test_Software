@@ -122,7 +122,7 @@ void SerialWork::resetTimingCompensation()
     qDebug() << "SerialWork: 误差补偿已重置";
 }
 
-// 统一构建发送数据（对齐 GPIBWork::buildSendData）
+// 统一构建发送数据
 QByteArray SerialWork::buildSendData(const QString &text, bool hexMode) const
 {
     if (hexMode) {
@@ -274,7 +274,7 @@ void SerialWork::sendString(const QString &text, bool hexMode)
 
 // ═══════════════════════════════════════════════════════════════
 //  ★★★ 核心：发送 + 1ms轮询精确延时 + 微秒忙等 + EMA补偿 ★★★
-//  ★ 对齐 GPIBWork：计时起点在 write 之前 + forceRead 控制读取
+//  ★ 计时起点在 write 之前 + forceRead 控制读取
 //  ★ generation：代际标记，到期时原样传回供 SerialExcel 校验
 // ═══════════════════════════════════════════════════════════════
 void SerialWork::sendStringWithDelay(const QString &text, bool hexMode,

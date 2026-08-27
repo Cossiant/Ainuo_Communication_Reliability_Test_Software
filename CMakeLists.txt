@@ -8,9 +8,9 @@ set(CMAKE_AUTOUIC ON)
 
 set(CMAKE_PREFIX_PATH "D:/Apps/Work/Qt/5.15.2/mingw81_64")
 
-# NI-VISA 64位路径
-set(VISA_INCLUDE_DIR "C:/Program Files (x86)/IVI Foundation/VISA/WinNT/include")
-set(VISA_LIB_DIR "C:/Program Files (x86)/IVI Foundation/VISA/WinNT/lib_x64/msc")
+
+# 本版本不包含 GPIB / NI-VISA 支持，无需引用 VISA 头文件或库。
+
 
 add_subdirectory(./QXlsx/QXlsx)
 add_subdirectory(./ElaWidgetTools ${CMAKE_BINARY_DIR}/ElaWidgetTools)
@@ -31,8 +31,8 @@ find_package(Qt5 COMPONENTS
         REQUIRED
 )
 
-# ===== 添加 NI-VISA 头文件搜索路径 =====
-include_directories(${VISA_INCLUDE_DIR})
+# ===== 通讯模块头文件搜索路径 =====
+
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/development/CAN_T/CommIOModule/include")
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/development/CAN_T/CAN_lib/zlgcan_x64")
 
@@ -91,8 +91,8 @@ add_executable(untitled WIN32
         development/CAN_T/CommIOModule/include/CommIOModule/CommTypes.h
         development/CAN_T/CommIOModule/include/CommIOModule/CommConfig.h
         development/CAN_T/CommIOModule/include/CommIOModule/PerfClock.h
-        development/GPIB_T/GPIBPage.cpp
-        development/GPIB_T/GPIBPage.h
+        development/GPIB_T/GPIBUnsupportedPage.cpp
+        development/GPIB_T/GPIBUnsupportedPage.h
         development/USER_T/USERPage.cpp
         development/USER_T/USERPage.h
         development/Other_T/MainPage.cpp
@@ -106,10 +106,10 @@ add_executable(untitled WIN32
         development/Network_T/NetworkExcel.cpp
         development/Network_T/NetworkExcel.h
         development/ExcelSCPISender.qrc
-        development/GPIB_T/GPIBWork.cpp
-        development/GPIB_T/GPIBWork.h
-        development/GPIB_T/GPIBExcel.cpp
-        development/GPIB_T/GPIBExcel.h
+        
+        
+        
+        
         development/Other_T/RangeComparer.cpp
         development/Other_T/RangeComparer.h
         development/Other_T/StickySplitter.cpp
@@ -128,12 +128,12 @@ add_executable(untitled WIN32
         development/Serial_T/SerialPageSignals.h
         development/Serial_T/SerialErrorHandler.cpp
         development/Serial_T/SerialErrorHandler.h
-        development/GPIB_T/GPIBPageUI.cpp
-        development/GPIB_T/GPIBPageUI.h
-        development/GPIB_T/GPIBPageSignals.cpp
-        development/GPIB_T/GPIBPageSignals.h
-        development/GPIB_T/GPIBErrorHandler.cpp
-        development/GPIB_T/GPIBErrorHandler.h
+        
+        
+        
+        
+        
+        
         development/Other_T/An30Layout.cpp
         development/Other_T/An30Layout.h
 )
@@ -147,7 +147,7 @@ target_link_libraries(untitled
         Qt5::AxContainer
          QXlsx::QXlsx
          ElaWidgetTools
-         ${VISA_LIB_DIR}/visa64.lib
+
 )
 
 # ① 复制 ElaWidgetTools DLL

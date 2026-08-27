@@ -1,6 +1,6 @@
 // NetworkWork.cpp
 // 精确延时：1ms QTimer轮询 + QElapsedTimer + 微秒忙等 + EMA补偿
-// ★ 对齐 GPIBWork：计时起点移到 write 之前 + forceRead 判断
+// ★ 计时起点移到 write 之前 + forceRead 判断
 // ★ 新增：发送后缀功能
 // ★ 新增：代际标记防止信号串扰
 
@@ -104,7 +104,7 @@ void NetworkWork::resetTimingCompensation()
     qDebug() << "NetworkWork: 误差补偿已重置";
 }
 
-// ★ 新增：统一构建发送数据（对齐 GPIBWork::buildSendData）
+// ★ 新增：统一构建发送数据
 QByteArray NetworkWork::buildSendData(const QString &text, bool hexMode) const
 {
     if (hexMode) {
@@ -281,7 +281,7 @@ void NetworkWork::sendString(const QString &text, bool hexMode)
 
 // ═══════════════════════════════════════════════════════════════
 //  ★★★ 核心：发送 + 1ms轮询精确延时 + 微秒忙等 + EMA补偿 ★★★
-//  ★ 对齐 GPIBWork：计时起点在 write 之前 + forceRead 控制读取
+//  ★ 计时起点在 write 之前 + forceRead 控制读取
 //  ★ generation：代际标记，到期时原样传回供 NetworkExcel 校验
 // ═══════════════════════════════════════════════════════════════
 void NetworkWork::sendStringWithDelay(const QString &text, bool hexMode,

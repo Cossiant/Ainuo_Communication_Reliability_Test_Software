@@ -25,7 +25,7 @@ ElaWidgetToolsDemo::ElaWidgetToolsDemo(QWidget *parent)
     m_serialPage  = new SerialPage(this, this);
     m_networkPage = new NetworkPage(this, this);
     m_CANPage     = new CANPage(this, this);
-    m_GPIBPage    = new GPIBPage(this);
+    m_GPIBPage    = new GPIBUnsupportedPage(this);
     m_USERPage    = new USERPage(this, this);
 }
 
